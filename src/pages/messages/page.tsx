@@ -4,10 +4,12 @@ import ChatWindow from './components/ChatWindow';
 import ExploreModal from './components/ExploreModal';
 import CreateMenu from '../../components/CreateMenu';
 import CreatePostModal from '../home/components/CreatePostModal';
-import MobileNav from './components/MobileNav';
+import MobileNav from '../home/components/MobileNav';
 import NotificationsPanel from '../home/components/NotificationsPanel';
 import GamificationWidget from '../../components/GamificationWidget';
 import WalletWidget from '../../components/WalletWidget';
+import HeaderActions from '../../components/HeaderActions';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 
 export default function MessagesPage() {
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
@@ -15,6 +17,7 @@ export default function MessagesPage() {
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const { refreshCounts } = useUnreadCounts();
   const [showMenuDropdown, setShowMenuDropdown] = useState(false);
   const [showGamification, setShowGamification] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
@@ -47,7 +50,7 @@ export default function MessagesPage() {
       <header className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-40">
         <div className="px-3 sm:px-4 md:px-6 py-3">
           <div className="flex items-center justify-between">
-            <button 
+            <button
               onClick={() => window.REACT_APP_NAVIGATE('/')}
               className="hover:scale-110 transition-transform"
             >
@@ -55,32 +58,11 @@ export default function MessagesPage() {
                 Mensagens
               </h1>
             </button>
-            <div className="flex items-center gap-3 sm:gap-4">
-              <button 
-                onClick={() => setShowNotifications(true)}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-notification-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  3
-                </span>
-              </button>
-              <button 
-                onClick={() => window.REACT_APP_NAVIGATE('/messages')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-message-3-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  2
-                </span>
-              </button>
-              <button 
-                onClick={() => window.REACT_APP_NAVIGATE('/profile')}
-                className="hover:scale-110 transition-transform"
-              >
-                <i className="ri-user-line text-xl md:text-2xl text-gray-700"></i>
-              </button>
-            </div>
+            <HeaderActions
+              onShowNotifications={() => setShowNotifications(true)}
+              showMenu={true}
+              onShowMenu={() => setShowMenu(true)}
+            />
           </div>
         </div>
       </header>
@@ -88,7 +70,7 @@ export default function MessagesPage() {
       {/* Menu Lateral (Drawer) */}
       {showMenu && (
         <>
-          <div 
+          <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 animate-fadeIn"
             onClick={() => setShowMenu(false)}
           ></div>
@@ -129,7 +111,7 @@ export default function MessagesPage() {
                   className="w-full flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-gray-50 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 rounded-xl transition-all group"
                 >
                   <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-500 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <i className={`${item.icon} text-white text-base md:text-lg`}></i>
+                    <i className={`${item.icon} text - white text - base md: text - lg`}></i>
                   </div>
                   <span className="flex-1 text-left font-medium text-gray-700 group-hover:text-gray-900 text-sm md:text-base">
                     {item.label}
@@ -154,16 +136,16 @@ export default function MessagesPage() {
       <div className="pt-[57px] md:pt-[73px] pb-20 md:pb-6">
         <div className="h-[calc(100vh-57px)] md:h-[calc(100vh-73px)]">
           <div className="grid grid-cols-1 lg:grid-cols-3 h-full">
-            <div className={`${selectedChat !== null ? 'hidden lg:block' : 'block'} border-r border-gray-200 bg-white`}>
-              <ChatList 
-                selectedChat={selectedChat} 
-                onSelectChat={setSelectedChat} 
+            <div className={`${selectedChat !== null ? 'hidden lg:block' : 'block'} border - r border - gray - 200 bg - white`}>
+              <ChatList
+                selectedChat={selectedChat}
+                onSelectChat={setSelectedChat}
               />
             </div>
-            <div className={`${selectedChat !== null ? 'block' : 'hidden lg:block'} lg:col-span-2 bg-white`}>
-              <ChatWindow 
-                chatId={selectedChat} 
-                onBack={() => setSelectedChat(null)} 
+            <div className={`${selectedChat !== null ? 'block' : 'hidden lg:block'} lg: col - span - 2 bg - white`}>
+              <ChatWindow
+                chatId={selectedChat}
+                onBack={() => setSelectedChat(null)}
               />
             </div>
           </div>
@@ -213,7 +195,7 @@ export default function MessagesPage() {
             {/* Dropdown Menu */}
             {showMenuDropdown && (
               <>
-                <div 
+                <div
                   className="fixed inset-0 z-[70]"
                   onClick={() => setShowMenuDropdown(false)}
                 ></div>
@@ -249,7 +231,10 @@ export default function MessagesPage() {
 
       {/* Notifications Panel */}
       {showNotifications && (
-        <NotificationsPanel onClose={() => setShowNotifications(false)} />
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
+          onRefresh={refreshCounts}
+        />
       )}
 
       {/* Create Menu Modal */}

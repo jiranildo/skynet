@@ -10,6 +10,8 @@ import CellarIcon from '../../components/CellarIcon';
 import CreateMenu from '../../components/CreateMenu';
 import FloatingMenu from '../../components/FloatingMenu';
 import NotificationsPanel from '../home/components/NotificationsPanel';
+import HeaderActions from '../../components/HeaderActions';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 
 export default function CellarPage() {
   const navigate = useNavigate();
@@ -18,6 +20,8 @@ export default function CellarPage() {
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const { refreshCounts } = useUnreadCounts();
 
   const tabs = [
     { id: 'my-wines', label: 'Minha Adega', icon: 'custom' },
@@ -87,42 +91,21 @@ export default function CellarPage() {
               </div>
             </button>
 
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-notification-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">
-                  3
-                </span>
-              </button>
-              <button
-                onClick={() => navigate('/messages')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-message-3-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full text-white text-[10px] flex items-center justify-center font-medium">
-                  2
-                </span>
-              </button>
-              <button
-                onClick={() => navigate('/profile')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-user-line text-xl md:text-2xl text-gray-700"></i>
-              </button>
+            <HeaderActions
+              onShowNotifications={() => setShowNotifications(true)}
+              showMenu={true}
+              onShowMenu={() => setShowMenu(true)}
+            />
 
-              {activeTab === 'my-wines' && (
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg transition-all duration-300 text-sm font-medium whitespace-nowrap ml-2"
-                >
-                  <i className="ri-add-line text-lg"></i>
-                  Adicionar Vinho
-                </button>
-              )}
-            </div>
+            {activeTab === 'my-wines' && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg transition-all duration-300 text-sm font-medium whitespace-nowrap ml-2"
+              >
+                <i className="ri-add-line text-lg"></i>
+                Adicionar Vinho
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -238,7 +221,10 @@ export default function CellarPage() {
 
       {/* Notifications Panel */}
       {showNotifications && (
-        <NotificationsPanel onClose={() => setShowNotifications(false)} />
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
+          onRefresh={refreshCounts}
+        />
       )}
     </div>
   );

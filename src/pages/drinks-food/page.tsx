@@ -7,6 +7,10 @@ import CreateMenu from '../../components/CreateMenu';
 import CreatePostModal from '../home/components/CreatePostModal';
 import NotificationsPanel from '../home/components/NotificationsPanel';
 import AddExperienceModal from './components/AddExperienceModal';
+import MobileNav from '../home/components/MobileNav';
+import HeaderActions from '../../components/HeaderActions';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
+import { useAuth } from '../../context/AuthContext';
 
 type TabType = 'suggestions' | 'history' | 'goals' | 'stats';
 
@@ -20,6 +24,9 @@ export default function DrinksFoodPage() {
   const [showGamification, setShowGamification] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showAddExperience, setShowAddExperience] = useState(false);
+
+  const { refreshCounts } = useUnreadCounts();
+  const { user } = useAuth(); // Assuming useAuth is needed for MobileNav or other parts, keeping it as per snippet.
 
   const tabs = [
     { id: 'suggestions' as TabType, icon: 'ri-lightbulb-line', label: 'Sugestões' },
@@ -71,32 +78,11 @@ export default function DrinksFoodPage() {
                 Drinks & Food
               </h1>
             </button>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-notification-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">
-                  3
-                </span>
-              </button>
-              <button
-                onClick={() => window.REACT_APP_NAVIGATE('/messages')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-message-3-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full text-white text-[10px] flex items-center justify-center font-medium">
-                  2
-                </span>
-              </button>
-              <button
-                onClick={() => window.REACT_APP_NAVIGATE('/profile')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-user-line text-xl md:text-2xl text-gray-700"></i>
-              </button>
-            </div>
+            <HeaderActions
+              onShowNotifications={() => setShowNotifications(true)}
+              showMenu={true}
+              onShowMenu={() => setShowMenu(true)}
+            />
           </div>
         </div>
       </header>
@@ -283,7 +269,10 @@ export default function DrinksFoodPage() {
 
       {/* Notifications Panel */}
       {showNotifications && (
-        <NotificationsPanel onClose={() => setShowNotifications(false)} />
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
+          onRefresh={refreshCounts}
+        />
       )}
 
       {/* Create Menu Modal */}

@@ -1,29 +1,9 @@
 
 import { useState, useEffect } from 'react';
 import TripPlanningModal from './TripPlanningModal';
-
-interface Trip {
-  id: string;
-  name: string;
-  destination: string;
-  startDate: string;
-  endDate: string;
-  travelers: number;
-  tripType: string;
-  budget: string;
-  description: string;
-  createdAt: string;
-  status: string;
-  places?: any[];
-  coverImage?: string;
-  // Collaborative features
-  isShared?: boolean;
-  sharedWith?: SharedUser[];
-  owner?: string;
-  permissions?: 'view' | 'edit' | 'admin';
-  // Pending suggestions
-  pendingSuggestions?: Suggestion[];
-}
+import CreateTripForm from './CreateTripForm';
+import { useAuth } from '../../../context/AuthContext';
+import { getTrips, deleteTrip, updateTrip, Trip } from '../../../services/supabase';
 
 interface SharedUser {
   id: string;
@@ -78,7 +58,8 @@ interface YearlyRetrospective {
   isGenerating?: boolean;
 }
 
-export default function MyTripsTab() {
+export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void }) {
+  const { user } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [showTripDetail, setShowTripDetail] = useState(false);
@@ -90,23 +71,27 @@ export default function MyTripsTab() {
   const [shareLink, setShareLink] = useState('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
   const [commentText, setCommentText] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'history' | 'stats' | 'maps' | 'goals' | 'suggestions' | 'retrospectives'>('trips');
+  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'newtrip' | 'stats' | 'maps' | 'goals' | 'suggestions' | 'retrospectives'>('trips');
   const [retrospectives, setRetrospectives] = useState<YearlyRetrospective[]>([]);
   const [selectedRetrospective, setSelectedRetrospective] = useState<YearlyRetrospective | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPlanningModalOpen, setIsPlanningModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
   useEffect(() => {
-    loadTrips();
+    refreshTrips();
     loadRetrospectives();
-  }, []);
+  }, [user]);
 
-  const loadTrips = () => {
-    const savedTrips = localStorage.getItem('user-trips');
-    if (savedTrips) {
-      const parsedTrips = JSON.parse(savedTrips);
-      setTrips(parsedTrips);
+  const refreshTrips = async () => {
+    if (user) {
+      try {
+        const data = await getTrips(user.id);
+        setTrips(data);
+      } catch (error) {
+        console.error('Error fetching trips:', error);
+      }
     }
   };
 
@@ -194,7 +179,7 @@ export default function MyTripsTab() {
 
   const generateRetrospective = async (year: number) => {
     setIsGenerating(true);
-    
+
     // Simular geração pela IA
     setTimeout(() => {
       const newRetrospective: YearlyRetrospective = {
@@ -272,9 +257,30 @@ export default function MyTripsTab() {
     });
 
     setTrips(updatedTrips);
-    localStorage.setItem('user-trips', JSON.stringify(updatedTrips));
+    const updated = updatedTrips.find(t => t.id === selectedTrip?.id);
+    if (updated) {
+      const { id, user_id, created_at, ...updates } = updated;
+      updateTrip(id, updates).catch(err => console.error('Error sharing trip', err));
+    }
     alert(`✅ Convite enviado para ${shareEmail}!`);
     setShareEmail('');
+  };
+
+  const handleDeleteTrip = async (e: React.MouseEvent, trip: Trip) => {
+    e.stopPropagation();
+    if (!window.confirm(`Tem certeza que deseja excluir a viagem para "${trip.destination}"? Essa ação não pode ser desfeita.`)) return;
+
+    try {
+      await deleteTrip(trip.id);
+      refreshTrips();
+      if (selectedTrip?.id === trip.id) {
+        setIsPlanningModalOpen(false);
+        setSelectedTrip(null);
+      }
+    } catch (error) {
+      console.error('Error deleting trip:', error);
+      alert('Erro ao excluir viagem. Tente novamente.');
+    }
   };
 
   const handleCopyLink = () => {
@@ -298,9 +304,12 @@ export default function MyTripsTab() {
     });
 
     setTrips(updatedTrips);
-    localStorage.setItem('user-trips', JSON.stringify(updatedTrips));
     const updated = updatedTrips.find(t => t.id === selectedTrip.id);
-    if (updated) setSelectedTrip(updated);
+    if (updated) {
+      setSelectedTrip(updated);
+      const { id, user_id, created_at, ...updates } = updated;
+      updateTrip(id, updates);
+    }
   };
 
   const handleChangePermission = (collaboratorId: string, newPermission: 'view' | 'edit' | 'admin') => {
@@ -319,9 +328,12 @@ export default function MyTripsTab() {
     });
 
     setTrips(updatedTrips);
-    localStorage.setItem('user-trips', JSON.stringify(updatedTrips));
     const updated = updatedTrips.find(t => t.id === selectedTrip.id);
-    if (updated) setSelectedTrip(updated);
+    if (updated) {
+      setSelectedTrip(updated);
+      const { id, user_id, created_at, ...updates } = updated;
+      updateTrip(id, updates);
+    }
   };
 
   const handleViewSuggestions = (trip: Trip) => {
@@ -356,8 +368,8 @@ export default function MyTripsTab() {
               updatedTrip = { ...updatedTrip, ...suggestion.data };
               break;
             case 'change_date':
-              updatedTrip.startDate = suggestion.data.startDate || trip.startDate;
-              updatedTrip.endDate = suggestion.data.endDate || trip.endDate;
+              updatedTrip.start_date = suggestion.data.startDate || trip.start_date;
+              updatedTrip.end_date = suggestion.data.endDate || trip.end_date;
               break;
           }
 
@@ -372,9 +384,12 @@ export default function MyTripsTab() {
     });
 
     setTrips(updatedTrips);
-    localStorage.setItem('user-trips', JSON.stringify(updatedTrips));
     const updated = updatedTrips.find(t => t.id === selectedTrip.id);
-    if (updated) setSelectedTrip(updated);
+    if (updated) {
+      setSelectedTrip(updated);
+      const { id, user_id, created_at, ...updates } = updated;
+      updateTrip(id, updates);
+    }
     alert('✅ Sugestão aprovada e aplicada ao roteiro!');
   };
 
@@ -394,9 +409,12 @@ export default function MyTripsTab() {
     });
 
     setTrips(updatedTrips);
-    localStorage.setItem('user-trips', JSON.stringify(updatedTrips));
     const updated = updatedTrips.find(t => t.id === selectedTrip.id);
-    if (updated) setSelectedTrip(updated);
+    if (updated) {
+      setSelectedTrip(updated);
+      const { id, user_id, created_at, ...updates } = updated;
+      updateTrip(id, updates);
+    }
     alert('❌ Sugestão rejeitada.');
   };
 
@@ -428,9 +446,12 @@ export default function MyTripsTab() {
     });
 
     setTrips(updatedTrips);
-    localStorage.setItem('user-trips', JSON.stringify(updatedTrips));
     const updated = updatedTrips.find(t => t.id === selectedTrip.id);
-    if (updated) setSelectedTrip(updated);
+    if (updated) {
+      setSelectedTrip(updated);
+      const { id, user_id, created_at, ...updates } = updated;
+      updateTrip(id, updates);
+    }
     setCommentText('');
   };
 
@@ -458,7 +479,7 @@ export default function MyTripsTab() {
         type: 'change_date' as const,
         description: 'Estender viagem por mais 2 dias',
         data: {
-          endDate: new Date(new Date(trip.endDate).getTime() + 2 * 24 * 60 * 60 * 1000).toISOString()
+          endDate: new Date(new Date(trip.end_date).getTime() + 2 * 24 * 60 * 60 * 1000).toISOString()
         }
       }
     ];
@@ -491,7 +512,12 @@ export default function MyTripsTab() {
     });
 
     setTrips(updatedTrips);
-    localStorage.setItem('user-trips', JSON.stringify(updatedTrips));
+    // Find the updated trip 
+    const updated = updatedTrips.find(t => t.id === trip.id);
+    if (updated) {
+      const { id, user_id, created_at, ...updates } = updated;
+      updateTrip(id, updates);
+    }
     alert('✨ Nova sugestão simulada adicionada!');
   };
 
@@ -712,22 +738,23 @@ export default function MyTripsTab() {
     setIsPlanningModalOpen(true);
   };
 
-  const filteredTrips = filterStatus === 'all' 
-    ? trips 
+  const filteredTrips = filterStatus === 'all'
+    ? trips
     : trips.filter(trip => trip.status === filterStatus);
 
   const renderTripsContent = () => (
     <>
+
+
       {/* Filter Buttons Carousel */}
       <div className="mb-6 overflow-x-auto scrollbar-hide">
         <div className="flex gap-3 pb-2">
           <button
             onClick={() => setFilterStatus('all')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${
-              filterStatus === 'all'
-                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${filterStatus === 'all'
+              ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
           >
             <i className="ri-map-pin-line text-lg"></i>
             <span className="font-semibold">{trips.length}</span>
@@ -735,11 +762,10 @@ export default function MyTripsTab() {
 
           <button
             onClick={() => setFilterStatus('completed')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${
-              filterStatus === 'completed'
-                ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${filterStatus === 'completed'
+              ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
           >
             <i className="ri-checkbox-circle-line text-lg"></i>
             <span className="font-semibold">{trips.filter(t => t.status === 'completed').length}</span>
@@ -747,11 +773,10 @@ export default function MyTripsTab() {
 
           <button
             onClick={() => setFilterStatus('planning')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${
-              filterStatus === 'planning'
-                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg'
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${filterStatus === 'planning'
+              ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
           >
             <i className="ri-calendar-line text-lg"></i>
             <span className="font-semibold">{trips.filter(t => t.status === 'planning').length}</span>
@@ -759,11 +784,10 @@ export default function MyTripsTab() {
 
           <button
             onClick={() => setFilterStatus('shared')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${
-              filterStatus === 'shared'
-                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${filterStatus === 'shared'
+              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
           >
             <i className="ri-share-line text-lg"></i>
             <span className="font-semibold">{trips.filter(t => t.isShared).length}</span>
@@ -775,7 +799,7 @@ export default function MyTripsTab() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredTrips.map((trip) => {
           const statusBadge = getStatusBadge(trip.status);
-          const daysUntil = getDaysUntilTrip(trip.startDate);
+          const daysUntil = getDaysUntilTrip(trip.start_date);
           const pendingCount = getPendingSuggestionsCount(trip);
 
           return (
@@ -788,57 +812,62 @@ export default function MyTripsTab() {
               <div className="relative h-48 overflow-hidden">
                 <img
                   src={
-                    trip.coverImage ||
+                    trip.cover_image ||
                     `https://readdy.ai/api/search-image?query=${trip.destination}%20beautiful%20travel%20destination%20scenic%20view&width=400&height=300&seq=trip-${trip.id}&orientation=landscape`
                   }
-                  alt={trip.name}
+                  alt={trip.title}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
 
-                {/* Status Badge */}
-                <div className="absolute top-3 left-3">
-                  <span 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTripClick(trip);
-                    }}
-                    className={`px-3 py-1 ${statusBadge.bg} ${statusBadge.color} rounded-full text-xs font-medium cursor-pointer hover:scale-105 transition-transform`}
+                <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md border border-white/20 shadow-lg ${statusBadge.color} ${statusBadge.bg}`}
                   >
                     {statusBadge.text}
                   </span>
-                </div>
-
-                {/* Shared Badge */}
-                {trip.isShared && (
-                  <div className="absolute top-3 right-3">
-                    <div className="px-3 py-1 bg-purple-500 text-white rounded-full text-xs font-medium flex items-center gap-1">
+                  {trip.isShared && (
+                    <div className="px-3 py-1 bg-purple-500 text-white rounded-full text-xs font-medium flex items-center gap-1 shadow-lg border border-white/20">
                       <i className="ri-group-line"></i>
                       Compartilhada
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+
+                {/* Delete Button */}
+                <button
+                  onClick={(e) => handleDeleteTrip(e, trip)}
+                  className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-red-500/80 text-white hover:bg-red-600 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-lg translate-y-2 group-hover:translate-y-0"
+                  title="Excluir Viagem"
+                >
+                  <i className="ri-delete-bin-line"></i>
+                </button>
+
+
+
 
                 {/* Pending Suggestions Badge */}
-                {pendingCount > 0 && (
-                  <div className="absolute top-12 right-3">
-                    <div className="px-3 py-1 bg-yellow-500 text-white rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
-                      <i className="ri-notification-3-line"></i>
-                      {pendingCount} {pendingCount === 1 ? 'sugestão' : 'sugestões'}
+                {
+                  pendingCount > 0 && (
+                    <div className="absolute top-12 right-3">
+                      <div className="px-3 py-1 bg-yellow-500 text-white rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
+                        <i className="ri-notification-3-line"></i>
+                        {pendingCount} {pendingCount === 1 ? 'sugestão' : 'sugestões'}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )
+                }
 
                 {/* Trip Info Overlay */}
                 <div className="absolute bottom-3 left-3 right-3">
-                  <h3 
+                  <h3
                     onClick={(e) => {
                       e.stopPropagation();
                       handleTripClick(trip);
                     }}
                     className="text-white font-bold text-lg mb-1 cursor-pointer hover:underline"
                   >
-                    {trip.name}
+                    {trip.title}
                   </h3>
                   <div className="flex items-center gap-2 text-white/90 text-sm">
                     <i className="ri-map-pin-line"></i>
@@ -854,7 +883,7 @@ export default function MyTripsTab() {
                   <div className="flex items-center gap-2 text-gray-600 text-sm">
                     <i className="ri-calendar-line"></i>
                     <span>
-                      {formatDate(trip.startDate)} - {formatDate(trip.endDate)}
+                      {formatDate(trip.start_date)} - {formatDate(trip.end_date)}
                     </span>
                   </div>
                   {daysUntil > 0 && daysUntil < 30 && (
@@ -865,8 +894,8 @@ export default function MyTripsTab() {
                 {/* Trip Type & Travelers */}
                 <div className="flex items-center gap-3 mb-4">
                   <div className="flex items-center gap-1.5">
-                    <i className={`${getTripTypeIcon(trip.tripType)} ${getTripTypeColor(trip.tripType)}`}></i>
-                    <span className="text-xs text-gray-600 capitalize">{trip.tripType}</span>
+                    <i className={`${getTripTypeIcon(trip.trip_type)} ${getTripTypeColor(trip.trip_type)}`}></i>
+                    <span className="text-xs text-gray-600 capitalize">{trip.trip_type}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <i className="ri-group-line text-gray-400"></i>
@@ -886,19 +915,19 @@ export default function MyTripsTab() {
                     <div className="flex -space-x-2">
                       {trip.sharedWith.slice(0, 3).map((user, idx) => (
                         <img
-                            key={idx}
-                            src={user.avatar}
-                            alt={user.name}
-                            className="w-6 h-6 rounded-full border-2 border-white"
-                          />
-                        ))}
-                      </div>
-                      <span className="text-xs text-gray-600">
-                        {trip.sharedWith.length}{' '}
-                        {trip.sharedWith.length === 1 ? 'colaborador' : 'colaboradores'}
-                      </span>
+                          key={idx}
+                          src={user.avatar}
+                          alt={user.name}
+                          className="w-6 h-6 rounded-full border-2 border-white"
+                        />
+                      ))}
                     </div>
-                  )}
+                    <span className="text-xs text-gray-600">
+                      {trip.sharedWith.length}{' '}
+                      {trip.sharedWith.length === 1 ? 'colaborador' : 'colaboradores'}
+                    </span>
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex gap-2">
@@ -927,6 +956,17 @@ export default function MyTripsTab() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      setEditingTrip(trip);
+                      setActiveSubTab('newtrip');
+                    }}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+                    title="Editar Viagem"
+                  >
+                    <i className="ri-edit-line text-lg"></i>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setSelectedTrip(trip);
                       setShowCollaboratorsModal(true);
                     }}
@@ -949,68 +989,29 @@ export default function MyTripsTab() {
             </div>
           );
         })}
-      </div>
+      </div >
 
       {/* Trip Planning Modal */}
-      {selectedTrip && (
-        <TripPlanningModal
-          isOpen={isPlanningModalOpen}
-          onClose={() => {
-            setIsPlanningModalOpen(false);
-            setSelectedTrip(null);
-          }}
-          trip={{
-            id: selectedTrip.id,
-            destination: selectedTrip.destination,
-            startDate: selectedTrip.startDate,
-            endDate: selectedTrip.endDate,
-            image: selectedTrip.coverImage || `https://readdy.ai/api/search-image?query=${selectedTrip.destination}%20beautiful%20travel%20destination%20scenic%20view&width=800&height=400&seq=trip-modal-${selectedTrip.id}&orientation=landscape`
-          }}
-        />
-      )}
+      {
+        selectedTrip && (
+          <TripPlanningModal
+            isOpen={isPlanningModalOpen}
+            onClose={() => {
+              setIsPlanningModalOpen(false);
+              setSelectedTrip(null);
+            }}
+            trip={{
+              ...selectedTrip,
+              cover_image: selectedTrip.cover_image || `https://readdy.ai/api/search-image?query=${selectedTrip.destination}%20beautiful%20travel%20destination%20scenic%20view&width=800&height=400&seq=trip-modal-${selectedTrip.id}&orientation=landscape`
+            }}
+          />
+        )
+      }
+
     </>
   );
 
-  const renderHistoryContent = () => (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <i className="ri-history-line text-teal-500"></i>
-          Histórico de Viagens
-        </h3>
 
-        {trips.filter(t => t.status === 'completed').length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-teal-100 to-cyan-100 flex items-center justify-center">
-              <i className="ri-history-line text-4xl text-teal-500"></i>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Nenhuma viagem concluída</h3>
-            <p className="text-gray-600">Suas viagens concluídas aparecerão aqui</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {trips.filter(t => t.status === 'completed').map((trip) => (
-              <div key={trip.id} className="flex items-center gap-4 bg-white rounded-xl p-4 border-2 border-gray-200 hover:shadow-lg hover:scale-105 transition-all cursor-pointer">
-                <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
-                  <i className="ri-map-pin-fill text-white text-2xl"></i>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-gray-900 text-sm truncate">{trip.name}</h4>
-                  <p className="text-xs text-gray-600 truncate">{trip.destination}</p>
-                  <p className="text-xs text-gray-500 mt-1">{formatDate(trip.startDate)} - {formatDate(trip.endDate)}</p>
-                </div>
-                <div className="text-right">
-                  <span className="px-3 py-1 bg-green-100 text-green-600 rounded-full text-xs font-medium">
-                    Concluída
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   const renderStatsContent = () => (
     <div className="space-y-6">
@@ -1053,8 +1054,8 @@ export default function MyTripsTab() {
             <i className="ri-calendar-check-line text-3xl text-green-500"></i>
             <span className="text-3xl font-bold text-gray-900">
               {trips.reduce((acc, trip) => {
-                const start = new Date(trip.startDate);
-                const end = new Date(trip.endDate);
+                const start = new Date(trip.start_date);
+                const end = new Date(trip.end_date);
                 const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
                 return acc + days;
               }, 0)}
@@ -1173,7 +1174,7 @@ export default function MyTripsTab() {
           <div className="flex items-center justify-between mb-4">
             <i className="ri-ancient-gate-line text-3xl text-amber-500"></i>
             <span className="text-3xl font-bold text-gray-900">
-              {trips.filter(t => t.tripType === 'cultural').length}
+              {trips.filter(t => t.trip_type === 'cultural').length}
             </span>
           </div>
           <h4 className="font-semibold text-gray-900 mb-1">Culturas Exploradas</h4>
@@ -1185,7 +1186,7 @@ export default function MyTripsTab() {
           <div className="flex items-center justify-between mb-4">
             <i className="ri-mountain-line text-3xl text-emerald-500"></i>
             <span className="text-3xl font-bold text-gray-900">
-              {trips.filter(t => t.tripType === 'adventure').length}
+              {trips.filter(t => t.trip_type === 'adventure').length}
             </span>
           </div>
           <h4 className="font-semibold text-gray-900 mb-1">Aventuras</h4>
@@ -1197,7 +1198,7 @@ export default function MyTripsTab() {
           <div className="flex items-center justify-between mb-4">
             <i className="ri-sun-line text-3xl text-orange-400"></i>
             <span className="text-3xl font-bold text-gray-900">
-              {trips.filter(t => t.tripType === 'leisure').length * 3}
+              {trips.filter(t => t.trip_type === 'leisure').length * 3}
             </span>
           </div>
           <h4 className="font-semibold text-gray-900 mb-1">Praias Visitadas</h4>
@@ -1209,7 +1210,7 @@ export default function MyTripsTab() {
           <div className="flex items-center justify-between mb-4">
             <i className="ri-bank-line text-3xl text-slate-500"></i>
             <span className="text-3xl font-bold text-gray-900">
-              {trips.filter(t => t.tripType === 'cultural').length * 5}
+              {trips.filter(t => t.trip_type === 'cultural').length * 5}
             </span>
           </div>
           <h4 className="font-semibold text-gray-900 mb-1">Museus Visitados</h4>
@@ -1299,7 +1300,7 @@ export default function MyTripsTab() {
                 <span className="font-semibold text-gray-900">Lazer</span>
               </div>
               <span className="text-2xl font-bold text-orange-600">
-                {trips.filter(t => t.tripType === 'leisure').length}
+                {trips.filter(t => t.trip_type === 'leisure').length}
               </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
@@ -1308,7 +1309,7 @@ export default function MyTripsTab() {
                 <span className="font-semibold text-gray-900">Negócios</span>
               </div>
               <span className="text-2xl font-bold text-blue-600">
-                {trips.filter(t => t.tripType === 'business').length}
+                {trips.filter(t => t.trip_type === 'business').length}
               </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
@@ -1317,7 +1318,7 @@ export default function MyTripsTab() {
                 <span className="font-semibold text-gray-900">Aventura</span>
               </div>
               <span className="text-2xl font-bold text-green-600">
-                {trips.filter(t => t.tripType === 'adventure').length}
+                {trips.filter(t => t.trip_type === 'adventure').length}
               </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-pink-50 rounded-xl">
@@ -1326,7 +1327,7 @@ export default function MyTripsTab() {
                 <span className="font-semibold text-gray-900">Romântico</span>
               </div>
               <span className="text-2xl font-bold text-pink-600">
-                {trips.filter(t => t.tripType === 'romantic').length}
+                {trips.filter(t => t.trip_type === 'romantic').length}
               </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-purple-50 rounded-xl">
@@ -1335,7 +1336,7 @@ export default function MyTripsTab() {
                 <span className="font-semibold text-gray-900">Família</span>
               </div>
               <span className="text-2xl font-bold text-purple-600">
-                {trips.filter(t => t.tripType === 'family').length}
+                {trips.filter(t => t.trip_type === 'family').length}
               </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl">
@@ -1344,7 +1345,7 @@ export default function MyTripsTab() {
                 <span className="font-semibold text-gray-900">Cultural</span>
               </div>
               <span className="text-2xl font-bold text-amber-600">
-                {trips.filter(t => t.tripType === 'cultural').length}
+                {trips.filter(t => t.trip_type === 'cultural').length}
               </span>
             </div>
           </div>
@@ -1414,7 +1415,7 @@ export default function MyTripsTab() {
                     <div className="relative">
                       {/* Círculo de pulso animado */}
                       <div className="absolute inset-0 w-20 h-20 -translate-x-6 -translate-y-6 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full animate-ping opacity-60"></div>
-                      
+
                       {/* Pin principal - GRANDE E COLORIDO */}
                       <div className="relative w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full border-4 border-white shadow-2xl flex items-center justify-center hover:scale-125 transition-transform duration-300 animate-bounce">
                         <i className="ri-map-pin-fill text-white text-3xl"></i>
@@ -1450,7 +1451,7 @@ export default function MyTripsTab() {
                             </div>
                           </div>
                         </div>
-                        
+
                         {/* Seta do tooltip */}
                         <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
                           <div className="w-5 h-5 bg-white border-r-4 border-b-4 border-orange-200 transform rotate-45"></div>
@@ -1643,8 +1644,8 @@ export default function MyTripsTab() {
               <h4 className="font-bold text-gray-900">100 Dias Viajando</h4>
               <span className="text-sm font-semibold text-blue-600">
                 {trips.reduce((acc, trip) => {
-                  const start = new Date(trip.startDate);
-                  const end = new Date(trip.endDate);
+                  const start = new Date(trip.start_date);
+                  const end = new Date(trip.end_date);
                   const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
                   return acc + days;
                 }, 0)}/100
@@ -1653,12 +1654,14 @@ export default function MyTripsTab() {
             <div className="w-full bg-white rounded-full h-3 overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500"
-                style={{ width: `${(trips.reduce((acc, trip) => {
-                  const start = new Date(trip.startDate);
-                  const end = new Date(trip.endDate);
-                  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                  return acc + days;
-                }, 0) / 100) * 100}%` }}
+                style={{
+                  width: `${(trips.reduce((acc, trip) => {
+                    const start = new Date(trip.start_date);
+                    const end = new Date(trip.end_date);
+                    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                    return acc + days;
+                  }, 0) / 100) * 100}%`
+                }}
               ></div>
             </div>
           </div>
@@ -1837,7 +1840,7 @@ export default function MyTripsTab() {
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
-              
+
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1877,6 +1880,13 @@ export default function MyTripsTab() {
           <p className="text-gray-600 text-sm mt-1">Gerencie e compartilhe seus roteiros</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setActiveSubTab('newtrip')}
+            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl shadow-md flex items-center gap-2 text-sm font-medium whitespace-nowrap hover:shadow-lg transition-all"
+          >
+            <i className="ri-add-circle-line text-lg"></i>
+            Nova Viagem
+          </button>
           <button className="px-4 py-2 bg-white border border-gray-200 rounded-xl hover:border-orange-300 transition-all flex items-center gap-2 text-sm whitespace-nowrap">
             <i className="ri-filter-line"></i>
             Filtrar
@@ -1887,31 +1897,21 @@ export default function MyTripsTab() {
       {/* Sub Tabs */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-2">
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+
           <button
             onClick={() => setActiveSubTab('trips')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
-              activeSubTab === 'trips' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'trips' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <i className="ri-map-pin-line"></i>
             <span className="text-sm font-medium">Viagens</span>
           </button>
 
-          <button
-            onClick={() => setActiveSubTab('history')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
-              activeSubTab === 'history' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <i className="ri-history-line"></i>
-            <span className="text-sm font-medium">Histórico</span>
-          </button>
 
           <button
             onClick={() => setActiveSubTab('stats')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
-              activeSubTab === 'stats' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'stats' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <i className="ri-bar-chart-line"></i>
             <span className="text-sm font-medium">Estatísticas</span>
@@ -1919,9 +1919,8 @@ export default function MyTripsTab() {
 
           <button
             onClick={() => setActiveSubTab('maps')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
-              activeSubTab === 'maps' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'maps' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <i className="ri-map-2-line"></i>
             <span className="text-sm font-medium">Mapas</span>
@@ -1929,9 +1928,8 @@ export default function MyTripsTab() {
 
           <button
             onClick={() => setActiveSubTab('goals')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
-              activeSubTab === 'goals' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'goals' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <i className="ri-trophy-line"></i>
             <span className="text-sm font-medium">Metas</span>
@@ -1939,9 +1937,8 @@ export default function MyTripsTab() {
 
           <button
             onClick={() => setActiveSubTab('suggestions')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
-              activeSubTab === 'suggestions' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'suggestions' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <i className="ri-lightbulb-line"></i>
             <span className="text-sm font-medium">Sugestões</span>
@@ -1949,9 +1946,8 @@ export default function MyTripsTab() {
 
           <button
             onClick={() => setActiveSubTab('retrospectives')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
-              activeSubTab === 'retrospectives' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'retrospectives' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <i className="ri-movie-2-line"></i>
             <span className="text-sm font-medium">Retrospectivas</span>
@@ -1961,7 +1957,22 @@ export default function MyTripsTab() {
 
       {/* Content */}
       {activeSubTab === 'trips' && renderTripsContent()}
-      {activeSubTab === 'history' && renderHistoryContent()}
+      {activeSubTab === 'newtrip' && (
+        <CreateTripForm
+          onCancel={() => {
+            setActiveSubTab('trips');
+            setEditingTrip(null);
+          }}
+          onSuccess={() => {
+            // Refresh trips
+            refreshTrips();
+            setActiveSubTab('trips');
+            setEditingTrip(null);
+          }}
+          initialData={editingTrip}
+        />
+      )}
+
       {activeSubTab === 'stats' && renderStatsContent()}
       {activeSubTab === 'maps' && renderMapsContent()}
       {activeSubTab === 'goals' && renderGoalsContent()}
@@ -1980,7 +1991,7 @@ export default function MyTripsTab() {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold">Compartilhar Viagens</h2>
-                  <p className="text-white/90 text-sm">{selectedTrip.name}</p>
+                  <p className="text-white/90 text-sm">{selectedTrip.title}</p>
                 </div>
               </div>
               <button
@@ -2036,9 +2047,8 @@ export default function MyTripsTab() {
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => setSharePermission('view')}
-                      className={`p-4 rounded-xl border-2 transition-all text-left ${
-                        sharePermission === 'view' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      className={`p-4 rounded-xl border-2 transition-all text-left ${sharePermission === 'view' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
+                        }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <i className="ri-eye-line text-xl text-purple-500"></i>
@@ -2049,9 +2059,8 @@ export default function MyTripsTab() {
 
                     <button
                       onClick={() => setSharePermission('edit')}
-                      className={`p-4 rounded-xl border-2 transition-all text-left ${
-                        sharePermission === 'edit' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      className={`p-4 rounded-xl border-2 transition-all text-left ${sharePermission === 'edit' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
+                        }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <i className="ri-edit-line text-xl text-purple-500"></i>
@@ -2131,7 +2140,7 @@ export default function MyTripsTab() {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold">Gerenciar Colaboradores</h2>
-                  <p className="text-white/90 text-sm">{selectedTrip.name}</p>
+                  <p className="text-white/90 text-sm">{selectedTrip.title}</p>
                 </div>
               </div>
               <button
@@ -2215,7 +2224,7 @@ export default function MyTripsTab() {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold">Revisar Sugestões</h2>
-                  <p className="text-white/90 text-sm">{selectedTrip.name}</p>
+                  <p className="text-white/90 text-sm">{selectedTrip.title}</p>
                 </div>
               </div>
               <button
@@ -2285,7 +2294,7 @@ export default function MyTripsTab() {
                                     <h6 className="font-semibold text-gray-900 text-sm">{comment.userName}</h6>
                                     <p className="text-sm text-gray-700">{comment.text}</p>
                                   </div>
-                                  <p className="text-xs text-gray-500 mt-1">{getTimeAgo(comment.createdAt)}</p>
+                                  <p className="text-xs text-gray-500 mt-1">{getTimeAgo(comment.created_at)}</p>
                                 </div>
                               </div>
                             ))}
@@ -2375,7 +2384,7 @@ export default function MyTripsTab() {
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
-              
+
               <button
                 onClick={(e) => {
                   e.stopPropagation();

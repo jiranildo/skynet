@@ -1,18 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Feed from './components/Feed';
 import Stories from './components/Stories';
 import Suggestions from './components/Suggestions';
 import MobileNav from './components/MobileNav';
 import NotificationsPanel from './components/NotificationsPanel';
-import CreatePostModal from './components/CreatePostModal';
+import CreateReelModal from './components/CreateReelModal';
+import CreateStoryModal from './components/CreateStoryModal';
 import CreateMenu from '../../components/CreateMenu';
 import ReelsModal from './components/ReelsModal';
+import ReelsView from './components/ReelsView';
 import GamificationWidget from '../../components/GamificationWidget';
 import WalletWidget from '../../components/WalletWidget';
 import Sidebar from './components/Sidebar';
+import ExploreView from './components/ExploreView';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { getUnreadMessagesCount, getUnreadNotificationsCount } from '@/services/supabase';
+import HeaderActions from '../../components/HeaderActions';
+import { useUnreadCounts } from '@/hooks/useUnreadCounts';
 
 export default function HomePage() {
-  const [showCreatePost, setShowCreatePost] = useState(false);
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const { unreadMessages, unreadNotifications, refreshCounts } = useUnreadCounts();
+
   const [showReels, setShowReels] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMenuDropdown, setShowMenuDropdown] = useState(false);
@@ -20,22 +31,39 @@ export default function HomePage() {
   const [showWallet, setShowWallet] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState<'feed' | 'explore'>('feed');
-  const [showSearchModal, setShowSearchModal] = useState(false);
+  // Unified Modal State: We can use a single state object or just reuse showCreateStory
+  // Let's refactor to `createModalTab: 'POST' | 'STORY' | 'REEL' | 'TEMPLATES' | null`
+  const [createModalTab, setCreateModalTab] = useState<'POST' | 'STORY' | 'REEL' | 'TEMPLATES' | null>(null);
+  const [activeTab, setActiveTab] = useState<'feed' | 'explore' | 'reels'>('feed');
+  const [editingPost, setEditingPost] = useState<any | null>(null);
 
-  const menuItems = [
-    { icon: 'ri-wallet-line', label: 'Carteira', action: () => setShowWallet(true) },
-    { icon: 'ri-trophy-line', label: 'Conquistas', action: () => setShowGamification(true) },
-  ];
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/login');
+    }
+  }, [user, loading, navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   const handleCreateClick = () => {
     setShowCreateMenu(true);
   };
 
-  const handleCreateOption = (option: 'post' | 'travel' | 'cellar' | 'food') => {
-    if (option === 'post') {
-      setShowCreatePost(true);
-    } else if (option === 'travel') {
+  const handleCreateOption = (option: string) => {
+    if (option === 'post') setCreateModalTab('POST');
+    if (option === 'reel') setCreateModalTab('REEL');
+    if (option === 'story') setCreateModalTab('STORY');
+
+    // Legacy/Other options
+    if (option === 'travel') {
       window.REACT_APP_NAVIGATE('/travel');
     } else if (option === 'cellar') {
       setShowCreateMenu(false);
@@ -52,19 +80,19 @@ export default function HomePage() {
   };
 
   const handleExploreClick = () => {
-    setShowSearchModal(true);
+    setActiveTab('explore');
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Desktop Sidebar */}
       <div className="hidden md:block">
-        <Sidebar 
+        <Sidebar
           onExploreClick={handleExploreClick}
-          onReelsClick={() => setShowReels(true)}
+          onReelsClick={() => setActiveTab('reels')}
           onCreateClick={handleCreateClick}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={setActiveTab as any}
         />
       </div>
 
@@ -72,8 +100,8 @@ export default function HomePage() {
       <header className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-40">
         <div className="px-3 sm:px-4 md:px-6 py-3">
           <div className="flex items-center justify-between">
-            <button 
-              onClick={() => window.REACT_APP_NAVIGATE('/')}
+            <button
+              onClick={() => { setActiveTab('feed'); window.REACT_APP_NAVIGATE('/'); }}
               className="hover:scale-110 transition-transform"
             >
               <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 bg-clip-text text-transparent">
@@ -81,32 +109,9 @@ export default function HomePage() {
               </h1>
               <p className="text-[10px] text-gray-600 -mt-1">where travels come true</p>
             </button>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button 
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-notification-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">
-                  3
-                </span>
-              </button>
-              <button 
-                onClick={() => window.REACT_APP_NAVIGATE('/messages')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-message-3-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full text-white text-[10px] flex items-center justify-center font-medium">
-                  2
-                </span>
-              </button>
-              <button 
-                onClick={() => window.REACT_APP_NAVIGATE('/profile')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-user-line text-xl md:text-2xl text-gray-700"></i>
-              </button>
-            </div>
+            <HeaderActions
+              onShowNotifications={() => setShowNotifications(!showNotifications)}
+            />
           </div>
         </div>
       </header>
@@ -114,53 +119,30 @@ export default function HomePage() {
       {/* Content */}
       <div className="md:ml-64 pt-[57px] md:pt-0 pb-6 md:pb-20">
         <div className="px-3 sm:px-4 md:px-6 md:py-6">
-          <Stories />
-          <Feed />
+          {activeTab === 'feed' ? (
+            <>
+              <Stories />
+              <Feed onEdit={(post) => {
+                setEditingPost(post);
+                setCreateModalTab('POST');
+              }} />
+            </>
+          ) : activeTab === 'explore' ? (
+            <ExploreView />
+          ) : (
+            <div className="fixed inset-0 top-[57px] bottom-[65px] md:top-0 md:bottom-0 md:left-64 bg-black z-10 overflow-hidden">
+              <ReelsView onCreateReel={() => setCreateModalTab('REEL')} />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Search Modal */}
-      {showSearchModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowSearchModal(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Explorar</h2>
-                <button onClick={() => setShowSearchModal(false)} className="text-gray-400 hover:text-gray-600">
-                  <i className="ri-close-line text-2xl"></i>
-                </button>
-              </div>
-              
-              <div className="relative mb-6">
-                <input
-                  type="text"
-                  placeholder="Buscar pessoas, posts, hashtags..."
-                  className="w-full px-4 py-3 pl-12 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-                <i className="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl"></i>
-              </div>
-
-              <div className="space-y-4 max-h-[50vh] overflow-y-auto">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-500 mb-3">Trending</h3>
-                  <div className="space-y-2">
-                    {['#Viagens2024', '#FoodLovers', '#WineTime', '#TravelGoals'].map((tag, i) => (
-                      <button key={i} className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors">
-                        <p className="font-semibold text-gray-900">{tag}</p>
-                        <p className="text-sm text-gray-500">{Math.floor(Math.random() * 50 + 10)}k posts</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Notifications Panel */}
       {showNotifications && (
-        <NotificationsPanel onClose={() => setShowNotifications(false)} />
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
+          onRefresh={refreshCounts}
+        />
       )}
 
       {/* Gamification Modal */}
@@ -184,35 +166,44 @@ export default function HomePage() {
       {/* Create Menu Modal */}
       {showCreateMenu && (
         <CreateMenu
-          onClose={() => setShowCreateMenu(false)}
+          onClose={() => { setShowCreateMenu(false); }}
           onSelectOption={handleCreateOption}
         />
       )}
 
-      {/* Create Post Modal */}
-      {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
-
-      {/* Reels Modal */}
-      {showReels && (
-        <ReelsModal onClose={() => setShowReels(false)} />
+      {/* Unified Create Modal */}
+      {(createModalTab || editingPost) && (
+        <CreateStoryModal
+          onClose={() => {
+            setCreateModalTab(null);
+            setEditingPost(null);
+          }}
+          onSuccess={() => {
+            setCreateModalTab(null);
+            setEditingPost(null);
+            window.location.reload();
+          }}
+          initialTab={createModalTab || 'POST'}
+          editingPost={editingPost}
+        />
       )}
 
       {/* Mobile Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-40">
         <div className="flex items-center justify-around px-2 py-2 sm:py-3">
           <button
-            onClick={() => window.REACT_APP_NAVIGATE('/')}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-purple-600"
+            onClick={() => setActiveTab('feed')}
+            className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 ${activeTab === 'feed' ? 'text-purple-600' : 'text-gray-600'}`}
           >
-            <i className="ri-home-fill text-xl sm:text-2xl"></i>
+            <i className={`ri-home-${activeTab === 'feed' ? 'fill' : 'line'} text-xl sm:text-2xl`}></i>
             <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Início</span>
           </button>
 
-          <button 
+          <button
             onClick={handleExploreClick}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+            className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 ${activeTab === 'explore' ? 'text-purple-600' : 'text-gray-600'}`}
           >
-            <i className="ri-compass-line text-xl sm:text-2xl"></i>
+            <i className={`ri-compass-${activeTab === 'explore' ? 'fill' : 'line'} text-xl sm:text-2xl`}></i>
             <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Explorar</span>
           </button>
 
@@ -227,10 +218,10 @@ export default function HomePage() {
           </button>
 
           <button
-            onClick={() => setShowReels(true)}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+            onClick={() => setActiveTab('reels')}
+            className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 ${activeTab === 'reels' ? 'text-purple-600' : 'text-gray-600'}`}
           >
-            <i className="ri-movie-line text-xl sm:text-2xl"></i>
+            <i className={`ri-movie-${activeTab === 'reels' ? 'fill' : 'line'} text-xl sm:text-2xl`}></i>
             <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Reels</span>
           </button>
 
@@ -246,7 +237,7 @@ export default function HomePage() {
             {/* Dropdown Menu */}
             {showMenuDropdown && (
               <>
-                <div 
+                <div
                   className="fixed inset-0 z-[70]"
                   onClick={() => setShowMenuDropdown(false)}
                 ></div>

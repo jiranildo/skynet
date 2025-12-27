@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import SearchTab from './components/SearchTab';
+import CreateTripModal from './components/CreateTripModal';
 import FlightsTab from './components/FlightsTab';
 import HotelsTab from './components/HotelsTab';
 import PackagesTab from './components/PackagesTab';
@@ -19,11 +20,14 @@ import CreatePostModal from '../home/components/CreatePostModal';
 import NotificationsPanel from '../home/components/NotificationsPanel';
 import GamificationWidget from '../../components/GamificationWidget';
 import WalletWidget from '../../components/WalletWidget';
+import HeaderActions from '../../components/HeaderActions';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 
 type TabType = 'search' | 'flights' | 'hotels' | 'packages' | 'cars' | 'cruises' | 'tickets' | 'transfer' | 'insurance' | 'mytrips' | 'favorites' | 'offers' | 'marketplace' | 'blogs';
 
 export default function TravelPage() {
   const [activeTab, setActiveTab] = useState<TabType>('search');
+  const [showCreateTripModal, setShowCreateTripModal] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -31,9 +35,11 @@ export default function TravelPage() {
   const [showGamification, setShowGamification] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const { refreshCounts } = useUnreadCounts();
 
   const tabs = [
     { id: 'search', label: 'Buscar', icon: 'ri-search-line' },
+
     { id: 'mytrips', label: 'Minhas Viagens', icon: 'ri-map-pin-user-line' },
     { id: 'marketplace', label: 'Marketplace', icon: 'ri-store-line' },
     { id: 'flights', label: 'Voos', icon: 'ri-flight-takeoff-line' },
@@ -85,7 +91,7 @@ export default function TravelPage() {
       case 'tickets': return <TicketsTab />;
       case 'transfer': return <TransferTab />;
       case 'insurance': return <InsuranceTab />;
-      case 'mytrips': return <MyTripsTab />;
+      case 'mytrips': return <MyTripsTab onCreateTrip={() => setShowCreateTripModal(true)} />;
       case 'favorites': return <FavoritesTab />;
       case 'offers': return <OffersTab />;
       case 'marketplace': return <MarketplaceTab />;
@@ -111,32 +117,9 @@ export default function TravelPage() {
                 <p className="text-xs text-gray-500 italic">where travels come true.</p>
               </div>
             </button>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-notification-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">
-                  3
-                </span>
-              </button>
-              <button
-                onClick={() => window.REACT_APP_NAVIGATE('/messages')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-message-3-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full text-white text-[10px] flex items-center justify-center font-medium">
-                  2
-                </span>
-              </button>
-              <button
-                onClick={() => window.REACT_APP_NAVIGATE('/profile')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-user-line text-xl md:text-2xl text-gray-700"></i>
-              </button>
-            </div>
+            <HeaderActions
+              onShowNotifications={() => setShowNotifications(!showNotifications)}
+            />
           </div>
         </div>
       </header>
@@ -213,28 +196,30 @@ export default function TravelPage() {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabType)}
+                onClick={() => {
+                  setActiveTab(tab.id as TabType);
+                }}
                 className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-full whitespace-nowrap transition-all text-xs md:text-sm ${activeTab === tab.id
-                    ? 'bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 <i className={`${tab.icon} text-base md:text-lg ${activeTab === tab.id
-                    ? ''
-                    : tab.id === 'search' ? 'text-orange-500' :
-                      tab.id === 'mytrips' ? 'text-teal-500' :
-                        tab.id === 'blogs' ? 'text-purple-500' :
-                          tab.id === 'marketplace' ? 'text-emerald-500' :
-                            tab.id === 'flights' ? 'text-blue-500' :
-                              tab.id === 'hotels' ? 'text-pink-500' :
-                                tab.id === 'packages' ? 'text-purple-500' :
-                                  tab.id === 'cars' ? 'text-red-500' :
-                                    tab.id === 'cruises' ? 'text-cyan-500' :
-                                      tab.id === 'tickets' ? 'text-yellow-500' :
-                                        tab.id === 'transfer' ? 'text-green-500' :
-                                          tab.id === 'insurance' ? 'text-indigo-500' :
-                                            tab.id === 'favorites' ? 'text-rose-500' :
-                                              tab.id === 'offers' ? 'text-amber-500' : ''
+                  ? ''
+                  : tab.id === 'search' ? 'text-orange-500' :
+                    tab.id === 'mytrips' ? 'text-teal-500' :
+                      tab.id === 'blogs' ? 'text-purple-500' :
+                        tab.id === 'marketplace' ? 'text-emerald-500' :
+                          tab.id === 'flights' ? 'text-blue-500' :
+                            tab.id === 'hotels' ? 'text-pink-500' :
+                              tab.id === 'packages' ? 'text-purple-500' :
+                                tab.id === 'cars' ? 'text-red-500' :
+                                  tab.id === 'cruises' ? 'text-cyan-500' :
+                                    tab.id === 'tickets' ? 'text-yellow-500' :
+                                      tab.id === 'transfer' ? 'text-green-500' :
+                                        tab.id === 'insurance' ? 'text-indigo-500' :
+                                          tab.id === 'favorites' ? 'text-rose-500' :
+                                            tab.id === 'offers' ? 'text-amber-500' : ''
                   }`}></i>
                 <span className="font-medium">{tab.label}</span>
               </button>
@@ -249,6 +234,12 @@ export default function TravelPage() {
           {renderTabContent()}
         </div>
       </div>
+
+      <CreateTripModal
+        isOpen={showCreateTripModal}
+        onClose={() => setShowCreateTripModal(false)}
+      />
+
 
       {/* Mobile Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-40">
@@ -345,7 +336,10 @@ export default function TravelPage() {
 
       {/* Notifications Panel */}
       {showNotifications && (
-        <NotificationsPanel onClose={() => setShowNotifications(false)} />
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
+          onRefresh={refreshCounts}
+        />
       )}
 
       {/* Create Menu Modal */}

@@ -6,25 +6,28 @@ import CreatePostModal from '../home/components/CreatePostModal';
 import NotificationsPanel from '../home/components/NotificationsPanel';
 import GamificationWidget from '../../components/GamificationWidget';
 import WalletWidget from '../../components/WalletWidget';
+import EditProfileModal from './components/EditProfileModal';
+import HeaderActions from '../../components/HeaderActions'; // Added this import
+import { ensureUserProfile, getFeedPosts, FeedPost, User as UserType, getUser, savedPostService } from '../../services/supabase';
 
 type TabType = 'posts' | 'reels' | 'saved' | 'tagged';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('posts');
+  const [userProfile, setUserProfile] = useState<UserType | null>(null);
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [showEditProfile, setShowEditProfile] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!authLoading && !user) {
       navigate('/login');
     }
-  }, [user, loading, navigate]);
+  }, [user, authLoading, navigate]);
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
-
-  if (!user) return null;
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [, setShowReels] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -34,6 +37,70 @@ export default function ProfilePage() {
   const [showWallet, setShowWallet] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+
+  useEffect(() => {
+    const loadProfileAndPosts = async () => {
+      if (!user) return;
+      try {
+        setIsLoadingProfile(true);
+        // Using ensureUserProfile to create a profile if it doesn't exist
+        const profile = await ensureUserProfile();
+        if (profile) {
+          setUserProfile(profile);
+          const userPosts = await getFeedPosts(20, 0, user.id);
+          setPosts(userPosts);
+        }
+      } catch (error) {
+        console.error("Error loading profile data:", error);
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    };
+
+    if (user) {
+      loadProfileAndPosts();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (activeTab === 'saved' && user && savedPosts.length === 0) {
+      const loadSaved = async () => {
+        try {
+          const data = await savedPostService.getSavedPosts(user.id);
+          setSavedPosts(data);
+        } catch (error) {
+          console.error("Error loading saved posts:", error);
+        }
+      };
+      loadSaved();
+    }
+  }, [activeTab, user, savedPosts.length]);
+
+  if (authLoading || isLoadingProfile) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-500 font-medium">Carregando perfil...</p>
+      </div>
+    );
+  }
+
+  // Fallback if profile still null but not loading
+  const currentProfile = userProfile || {
+    id: user?.id || '',
+    username: user?.email?.split('@')[0] || 'user',
+    full_name: user?.user_metadata?.full_name || 'Usuário',
+    avatar_url: user?.user_metadata?.avatar_url,
+    bio: '',
+    website: '',
+    followers_count: 0,
+    following_count: 0,
+    posts_count: 0,
+    is_admin: false,
+    created_at: '',
+    updated_at: ''
+  } as UserType;
+
 
   const tabs = [
     { id: 'posts' as TabType, icon: 'ri-grid-line', label: 'Posts' },
@@ -45,6 +112,7 @@ export default function ProfilePage() {
   const menuItems = [
     { icon: 'ri-wallet-line', label: 'Carteira', action: () => setShowWallet(true) },
     { icon: 'ri-trophy-line', label: 'Conquistas', action: () => setShowGamification(true) },
+    { icon: 'ri-settings-3-line', label: 'Editar Perfil', action: () => setShowEditProfile(true) },
   ];
 
   const handleCreateClick = () => {
@@ -63,13 +131,6 @@ export default function ProfilePage() {
     }
   };
 
-  const posts = Array.from({ length: 12 }, (_, i) => ({
-    id: i + 1,
-    image: `https://readdy.ai/api/search-image?query=beautiful%20lifestyle%20photography%20modern%20aesthetic%20minimalist%20composition%20high%20quality%20professional%20shot&width=400&height=400&seq=profile-post-${i + 1}&orientation=squarish`,
-    likes: Math.floor(Math.random() * 5000) + 100,
-    comments: Math.floor(Math.random() * 500) + 10,
-  }));
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50">
       {/* Header */}
@@ -84,36 +145,16 @@ export default function ProfilePage() {
                 Perfil
               </h1>
             </button>
-            <div className="flex items-center gap-3 sm:gap-4">
-              <button
-                onClick={() => setShowNotifications(true)}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-notification-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  3
-                </span>
-              </button>
-              <button
-                onClick={() => window.REACT_APP_NAVIGATE('/messages')}
-                className="relative hover:scale-110 transition-transform"
-              >
-                <i className="ri-message-3-line text-xl md:text-2xl text-gray-700"></i>
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  2
-                </span>
-              </button>
-              <button
-                onClick={() => window.REACT_APP_NAVIGATE('/profile')}
-                className="hover:scale-110 transition-transform"
-              >
-                <i className="ri-user-line text-xl md:text-2xl text-gray-700"></i>
-              </button>
-            </div>
+            <HeaderActions
+              onShowNotifications={() => setShowNotifications(true)}
+              showMenu={true}
+              onShowMenu={() => setShowMenu(true)}
+            />
           </div>
         </div>
       </header>
 
+      {/* Profile Sections & UI unchanged except for using profile data */}
       {/* Menu Lateral (Drawer) */}
       {showMenu && (
         <>
@@ -136,13 +177,13 @@ export default function ProfilePage() {
 
               <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-xl p-3">
                 <img
-                  src="https://readdy.ai/api/search-image?query=professional%20portrait%20young%20person%20confident%20smile&width=60&height=60&seq=menu-user-profile&orientation=squarish"
+                  src={currentProfile.avatar_url || 'https://via.placeholder.com/150'}
                   alt="User"
                   className="w-12 h-12 rounded-full object-cover border-2 border-white"
                 />
                 <div>
-                  <h3 className="font-bold text-white text-sm md:text-base">{user.user_metadata?.full_name || 'Usuário'}</h3>
-                  <p className="text-white/90 text-xs md:text-sm">{user.email}</p>
+                  <h3 className="font-bold text-white text-sm md:text-base">{currentProfile.full_name || currentProfile.username}</h3>
+                  <p className="text-white/90 text-xs md:text-sm">@{currentProfile.username}</p>
                 </div>
               </div>
             </div>
@@ -158,7 +199,7 @@ export default function ProfilePage() {
                   className="w-full flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-gray-50 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 rounded-xl transition-all group"
                 >
                   <div className="w-10 h-10 bg-gradient-to-r from-gray-700 to-gray-900 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <i className={`${item.icon} text-white text-base md:text-lg`}></i>
+                    <i className={`${item.icon} text - white text - base md: text - lg`}></i>
                   </div>
                   <span className="flex-1 text-left font-medium text-gray-700 group-hover:text-gray-900 text-sm md:text-base">
                     {item.label}
@@ -166,14 +207,6 @@ export default function ProfilePage() {
                   <i className="ri-arrow-right-s-line text-gray-400 group-hover:text-gray-600"></i>
                 </button>
               ))}
-            </div>
-
-            <div className="p-4 border-t border-gray-200">
-              <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-4 text-center">
-                <i className="ri-user-line text-2xl md:text-3xl text-gray-700 mb-2"></i>
-                <p className="text-xs md:text-sm text-gray-700 mb-1">Perfil v1.0</p>
-                <p className="text-xs text-gray-500">Sua identidade social</p>
-              </div>
             </div>
           </div>
         </>
@@ -186,59 +219,71 @@ export default function ProfilePage() {
           <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-4">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 md:gap-6">
               <img
-                src="https://readdy.ai/api/search-image?query=professional%20portrait%20young%20person%20confident%20smile%20modern%20aesthetic&width=150&height=150&seq=profile-avatar&orientation=squarish"
+                src={currentProfile.avatar_url || 'https://via.placeholder.com/150'}
                 alt="Profile"
-                className="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover border-4 border-gray-100"
+                className="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover border-4 border-gray-100 shadow-sm"
               />
               <div className="flex-1 text-center sm:text-left">
                 <div className="flex flex-col sm:flex-row items-center gap-3 mb-3">
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">{user.user_metadata?.full_name || 'Usuário'}</h2>
+                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">{currentProfile.full_name || currentProfile.username}</h2>
+                  <p className="text-gray-500 text-sm">@{currentProfile.username}</p>
                   <div className="flex gap-2">
                     <button
+                      onClick={() => setShowEditProfile(true)}
+                      className="px-4 md:px-6 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-all whitespace-nowrap text-sm"
+                    >
+                      Editar Perfil
+                    </button>
+                    <button
                       onClick={() => setIsFollowing(!isFollowing)}
-                      className={`px-4 md:px-6 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${isFollowing
+                      className={`px - 4 md: px - 6 py - 2 rounded - lg font - medium transition - all whitespace - nowrap text - sm ${isFollowing
                         ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white hover:from-orange-600 hover:to-pink-600'
-                        }`}
+                        : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white hover:from-orange-600 hover:to-pink-600 font-bold'
+                        } `}
                     >
                       {isFollowing ? 'Seguindo' : 'Seguir'}
-                    </button>
-                    <button className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors whitespace-nowrap">
-                      Mensagem
                     </button>
                   </div>
                 </div>
 
                 <div className="flex justify-center sm:justify-start gap-6 mb-3">
                   <div className="text-center">
-                    <div className="text-lg md:text-xl font-bold text-gray-900">342</div>
+                    <div className="text-lg md:text-xl font-bold text-gray-900">{currentProfile.posts_count || posts.length}</div>
                     <div className="text-xs md:text-sm text-gray-600">Posts</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg md:text-xl font-bold text-gray-900">12.5k</div>
+                    <div className="text-lg md:text-xl font-bold text-gray-900">{currentProfile.followers_count || 0}</div>
                     <div className="text-xs md:text-sm text-gray-600">Seguidores</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg md:text-xl font-bold text-gray-900">1.2k</div>
+                    <div className="text-lg md:text-xl font-bold text-gray-900">{currentProfile.following_count || 0}</div>
                     <div className="text-xs md:text-sm text-gray-600">Seguindo</div>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-gray-900 mb-1 text-sm md:text-base">{user.email}</h3>
-                  <p className="text-gray-600 text-xs md:text-sm mb-2">
-                    Apaixonado por viagens, gastronomia e vinhos 🍷✈️🍽️
+                  <h3 className="font-bold text-gray-900 mb-1 text-sm md:text-base">{currentProfile.full_name}</h3>
+                  <p className="text-gray-600 text-xs md:text-sm mb-2 whitespace-pre-wrap">
+                    {currentProfile.bio || 'Sem biografia ainda.'}
                   </p>
-                  <a href="#" className="text-orange-500 hover:text-orange-600 font-medium text-xs md:text-sm">
-                    www.seusite.com
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
+                  {currentProfile.website && (
+                    <a
+                      href={currentProfile.website.startsWith('http') ? currentProfile.website : `https://${currentProfile.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 hover:text-blue-600 font-medium text-xs md:text-sm flex items-center gap-1 justify-center sm:justify-start"
+                    >
+                      <i className="ri-link"></i>
+                      {currentProfile.website.replace(/^https?:\/\//, '')}
+                    </a >
+                  )}
+                </div >
+              </div >
+            </div >
+          </div >
 
           {/* Tabs */}
-          <div className="bg-white rounded-xl shadow-sm mb-4">
+          < div className="bg-white rounded-xl shadow-sm mb-4" >
             <div className="flex border-b border-gray-200">
               {tabs.map((tab) => (
                 <button
@@ -254,149 +299,104 @@ export default function ProfilePage() {
                 </button>
               ))}
             </div>
-          </div>
+          </div >
 
           {/* Posts Grid */}
-          <div className="grid grid-cols-3 gap-1 sm:gap-2">
-            {posts.map((post) => (
-              <div
-                key={post.id}
-                className="relative aspect-square bg-gray-100 rounded-sm sm:rounded-lg overflow-hidden group cursor-pointer"
-              >
-                <img
-                  src={post.image}
-                  alt={`Post ${post.id}`}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                  <div className="flex items-center gap-1 text-white">
-                    <i className="ri-heart-fill text-base sm:text-xl"></i>
-                    <span className="font-bold text-xs sm:text-sm">{post.likes}</span>
+          {
+            (activeTab === 'posts' ? posts : activeTab === 'saved' ? savedPosts : []).length > 0 ? (
+              <div className="grid grid-cols-3 gap-1 sm:gap-2">
+                {(activeTab === 'posts' ? posts : activeTab === 'saved' ? savedPosts : []).map((post) => (
+                  <div
+                    key={post.id}
+                    className="relative aspect-square bg-gray-100 rounded-sm sm:rounded-lg overflow-hidden group cursor-pointer"
+                  >
+                    <img
+                      src={post.image}
+                      alt={`Post ${post.id}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                      <div className="flex items-center gap-1 text-white">
+                        <i className="ri-heart-fill text-base sm:text-xl"></i>
+                        <span className="font-bold text-xs sm:text-sm">{post.likes}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-white">
+                        <i className="ri-chat-3-fill text-base sm:text-xl"></i>
+                        <span className="font-bold text-xs sm:text-sm">{post.comments}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 text-white">
-                    <i className="ri-chat-3-fill text-base sm:text-xl"></i>
-                    <span className="font-bold text-xs sm:text-sm">{post.comments}</span>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
+            ) : (
+              <div className="bg-white rounded-xl p-12 text-center text-gray-500">
+                <i className="ri-camera-lens-line text-4xl mb-4 block opacity-20"></i>
+                <p>Nenhuma postagem ainda.</p>
+              </div>
+            )
+          }
+        </div >
+      </div >
 
       {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-40">
+      < nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-40" >
         <div className="flex items-center justify-around px-2 py-2 sm:py-3">
-          <button
-            onClick={() => window.REACT_APP_NAVIGATE('/')}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
-          >
+          <button onClick={() => window.REACT_APP_NAVIGATE('/')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
             <i className="ri-home-line text-xl sm:text-2xl"></i>
             <span className="text-[9px] sm:text-[10px] font-medium">Início</span>
           </button>
-
           <button className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
             <i className="ri-compass-line text-xl sm:text-2xl"></i>
             <span className="text-[9px] sm:text-[10px] font-medium">Explorar</span>
           </button>
-
-          <button
-            onClick={handleCreateClick}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
-          >
+          <button onClick={handleCreateClick} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
             <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg flex items-center justify-center">
               <i className="ri-add-line text-xl sm:text-2xl text-white"></i>
             </div>
             <span className="text-[9px] sm:text-[10px] font-medium">Criar</span>
           </button>
-
-          <button
-            onClick={() => setShowReels(true)}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
-          >
+          <button onClick={() => setShowReels(true)} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
             <i className="ri-movie-line text-xl sm:text-2xl"></i>
             <span className="text-[9px] sm:text-[10px] font-medium">Reels</span>
           </button>
-
-          <div className="relative">
-            <button
-              onClick={() => setShowMenuDropdown(!showMenuDropdown)}
-              className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
-            >
-              <i className="ri-menu-line text-xl sm:text-2xl"></i>
-              <span className="text-[9px] sm:text-[10px] font-medium">Menu</span>
-            </button>
-
-            {/* Dropdown Menu */}
-            {showMenuDropdown && (
-              <>
-                <div
-                  className="fixed inset-0 z-[70]"
-                  onClick={() => setShowMenuDropdown(false)}
-                ></div>
-                <div className="absolute bottom-full right-0 mb-2 w-auto bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[80] animate-slideUp">
-                  <div className="flex flex-col gap-2 p-3">
-                    <button
-                      onClick={() => {
-                        setShowWallet(true);
-                        setShowMenuDropdown(false);
-                      }}
-                      className="w-10 h-10 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-                      title="Carteira"
-                    >
-                      <i className="ri-wallet-3-fill text-white text-base"></i>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowGamification(true);
-                        setShowMenuDropdown(false);
-                      }}
-                      className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-                      title="Conquistas"
-                    >
-                      <i className="ri-trophy-fill text-white text-base"></i>
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          <button onClick={() => setShowMenu(true)} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
+            <i className="ri-menu-line text-xl sm:text-2xl"></i>
+            <span className="text-[9px] sm:text-[10px] font-medium">Menu</span>
+          </button>
         </div>
-      </nav>
+      </nav >
 
-      {/* Notifications Panel */}
-      {showNotifications && (
-        <NotificationsPanel onClose={() => setShowNotifications(false)} />
-      )}
-
-      {/* Create Menu Modal */}
-      {showCreateMenu && (
-        <CreateMenu
-          onClose={() => setShowCreateMenu(false)}
-          onSelectOption={handleCreateOption}
-        />
-      )}
-
-      {/* Create Post Modal */}
+      {/* Modals */}
+      {
+        showEditProfile && (
+          <EditProfileModal
+            userProfile={currentProfile}
+            onClose={() => setShowEditProfile(false)}
+            onUpdate={(updated) => setUserProfile(updated)}
+          />
+        )
+      }
+      {showNotifications && <NotificationsPanel onClose={() => setShowNotifications(false)} />}
+      {showCreateMenu && <CreateMenu onClose={() => setShowCreateMenu(false)} onSelectOption={handleCreateOption} />}
       {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
-
-      {/* Gamification Modal */}
-      {showGamification && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowGamification(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <GamificationWidget onClose={() => setShowGamification(false)} />
+      {
+        showGamification && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowGamification(false)}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <GamificationWidget onClose={() => setShowGamification(false)} />
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Wallet Modal */}
-      {showWallet && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowWallet(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <WalletWidget onClose={() => setShowWallet(false)} />
+        )
+      }
+      {
+        showWallet && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowWallet(false)}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <WalletWidget onClose={() => setShowWallet(false)} />
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

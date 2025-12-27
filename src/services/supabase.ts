@@ -14,15 +14,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export interface User {
   id: string;
   username: string;
-  full_name?: string;
+  full_name: string;
+  avatar_url: string;
   bio?: string;
-  avatar_url?: string;
   website?: string;
-  followers_count: number;
-  following_count: number;
-  posts_count: number;
-  created_at: string;
-  updated_at: string;
+  followers_count?: number;
+  following_count?: number;
+  posts_count?: number;
+  privacy_setting?: 'public' | 'private' | 'friends';
 }
 
 export interface Post {
@@ -30,10 +29,31 @@ export interface Post {
   user_id: string;
   caption?: string;
   image_url?: string;
+  media_urls?: string[]; // Array of URLs for carousel
+  location?: string;
   likes_count: number;
   comments_count: number;
   created_at: string;
   updated_at: string;
+  users?: User; // Join result
+  visibility?: 'public' | 'private' | 'friends' | 'custom';
+}
+
+export interface FeedPost {
+  id: string; // Changed to string to match UUID
+  username: string;
+  userAvatar: string;
+  location: string;
+  image: string;
+  likes: number;
+  caption: string;
+  comments: number;
+  timeAgo: string;
+  isLiked: boolean;
+  isSaved: boolean;
+  userId: string;
+  visibility?: 'public' | 'private' | 'friends' | 'custom';
+  media_urls?: string[];
 }
 
 export interface Trip {
@@ -41,18 +61,25 @@ export interface Trip {
   user_id: string;
   title: string;
   destination: string;
-  country?: string;
   start_date: string;
   end_date: string;
+  trip_type: 'business' | 'leisure' | 'family' | 'romantic' | 'adventure' | 'cultural' | 'luxury';
+  budget: number;
   travelers: number;
-  budget?: number;
-  status: string;
-  notes?: string;
-  image_url?: string;
-  latitude?: number;
-  longitude?: number;
-  created_at: string;
-  updated_at: string;
+  description?: string;
+  status: 'planning' | 'confirmed' | 'completed';
+  cover_image?: string;
+  itinerary?: any;
+  created_at?: string;
+  updated_at?: string;
+  metadata?: any;
+  // UI bridging fields (optional)
+  places?: any[]; // legacy alias for itinerary
+  sharedWith?: any[];
+  pendingSuggestions?: any[];
+  isShared?: boolean;
+  owner?: string;
+  permissions?: string;
 }
 
 export interface Message {
@@ -91,6 +118,7 @@ export interface Comment {
   user_id: string;
   content: string;
   created_at: string;
+  parent_id?: string;
 }
 
 export interface Like {
@@ -252,9 +280,14 @@ export interface TravelPackage {
 export interface Story {
   id?: string;
   user_id?: string;
-  image_url: string;
+  media_url: string;
+  media_type: 'image' | 'video';
+  caption?: string;
   created_at?: string;
   expires_at?: string;
+  likes_count?: number;
+  views_count?: number;
+  users?: User;
 }
 
 export interface Reel {
@@ -268,7 +301,102 @@ export interface Reel {
   views_count: number;
   created_at?: string;
   updated_at?: string;
+  users?: User;
 }
+
+export const getReels = async () => {
+  const { data, error } = await supabase
+    .from('reels')
+    .select(`
+      *,
+      users (
+        username,
+        avatar_url
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as (Reel & { users: User })[];
+};
+
+export const createReel = async (reel: Omit<Reel, 'id' | 'created_at' | 'updated_at' | 'likes_count' | 'comments_count' | 'views_count'>) => {
+  const { data, error } = await supabase
+    .from('reels')
+    .insert(reel)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Reel;
+};
+
+export const likeReel = async (reelId: string, userId: string) => {
+  const { data, error } = await supabase
+    .from('likes')
+    .insert({ reel_id: reelId, user_id: userId })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const unlikeReel = async (reelId: string, userId: string) => {
+  const { error } = await supabase
+    .from('likes')
+    .delete()
+    .eq('reel_id', reelId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+};
+
+export const checkIfReelLiked = async (reelId: string, userId: string) => {
+  const { data, error } = await supabase
+    .from('likes')
+    .select('id')
+    .eq('reel_id', reelId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return !!data;
+};
+
+export const getReelComments = async (reelId: string) => {
+  const { data, error } = await supabase
+    .from('comments')
+    .select(`
+      *,
+      users (
+        username,
+        avatar_url
+      )
+    `)
+    .eq('reel_id', reelId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data;
+};
+
+export const addReelComment = async (reelId: string, userId: string, content: string) => {
+  const { data, error } = await supabase
+    .from('comments')
+    .insert({ reel_id: reelId, user_id: userId, content })
+    .select(`
+      *,
+      users (
+        username,
+        avatar_url
+      )
+    `)
+    .single();
+
+  if (error) throw error;
+  return data;
+};
 
 export interface SavedPost {
   id?: string;
@@ -288,6 +416,40 @@ export const getUser = async (userId: string) => {
 
   if (error) throw error;
   return data as User;
+};
+
+export const ensureUserProfile = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+
+  if (profile) return profile as User;
+
+  // Create missing profile
+  const { data: newProfile, error } = await supabase
+    .from('users')
+    .insert([
+      {
+        id: user.id,
+        // email: user.email, // Not in schema
+        full_name: user.user_metadata?.full_name || 'User',
+        username: user.email?.split('@')[0] || 'user',
+        avatar_url: user.user_metadata?.avatar_url,
+      }
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating user profile:", error);
+    throw error;
+  }
+  return newProfile;
 };
 
 export const getUserByUsername = async (username: string) => {
@@ -313,10 +475,41 @@ export const updateUser = async (userId: string, updates: Partial<User>) => {
   return data as User;
 };
 
+export const uploadAvatar = async (file: File) => {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+  const filePath = `${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('avatars')
+    .upload(filePath, file);
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage
+    .from('avatars')
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+};
+
+
 export const createUser = async (user: Omit<User, 'id' | 'created_at' | 'updated_at' | 'followers_count' | 'following_count' | 'posts_count'>) => {
   const { data, error } = await supabase
     .from('users')
     .insert(user)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as User;
+};
+
+export const updatePrivacySettings = async (userId: string, privacySetting: 'public' | 'private' | 'friends') => {
+  const { data, error } = await supabase
+    .from('users')
+    .update({ privacy_setting: privacySetting, updated_at: new Date().toISOString() })
+    .eq('id', userId)
     .select()
     .single();
 
@@ -348,6 +541,202 @@ export const getPostsByUser = async (userId: string) => {
   return data as Post[];
 };
 
+export const getFeedPosts = async (limit = 20, offset = 0, targetUserId?: string) => {
+  const { data: { user: currentUser } } = await supabase.auth.getUser();
+  const currentUserId = currentUser?.id;
+
+  let query = supabase
+    .from('posts')
+    .select(`
+      *,
+      users (
+        username,
+        avatar_url,
+        privacy_setting
+      )
+    `)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (targetUserId) {
+    query = query.eq('user_id', targetUserId);
+    // When fetching posts for a specific user, apply privacy logic
+    const { data: targetUser, error: userError } = await supabase
+      .from('users')
+      .select('privacy_setting')
+      .eq('id', targetUserId)
+      .single();
+
+    if (userError) throw userError;
+
+    if (targetUser.privacy_setting === 'private' && targetUserId !== currentUserId) {
+      // If target user is private and not the current user, check if current user is a follower
+      const { count: isFollowing, error: followError } = await supabase
+        .from('followers')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', currentUserId)
+        .eq('following_id', targetUserId);
+
+      if (followError) throw followError;
+
+      if (isFollowing === 0) {
+        // Not following, return empty array
+        return [];
+      }
+    } else if (targetUser.privacy_setting === 'friends' && targetUserId !== currentUserId) {
+      // If target user is friends-only and not the current user, check if current user is a friend
+      // For simplicity, assuming 'friends' means 'following' for now.
+      const { count: isFollowing, error: followError } = await supabase
+        .from('followers')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', currentUserId)
+        .eq('following_id', targetUserId);
+
+      if (followError) throw followError;
+
+      if (isFollowing === 0) {
+        // Not following, return empty array
+        return [];
+      }
+    }
+    // If public, or current user is the target user, or current user is following, proceed.
+  } else {
+    // For general feed, only show posts from followed users and self
+    if (currentUserId) {
+      const { data: followingUsers, error: followError } = await supabase
+        .from('followers')
+        .select('following_id')
+        .eq('follower_id', currentUserId);
+
+      if (followError) throw followError;
+
+      const followedUserIds = followingUsers?.map(f => f.following_id) || [];
+      followedUserIds.push(currentUserId); // Include current user's posts
+
+      // Filter posts by these user IDs
+      query = query.in('user_id', followedUserIds);
+
+    } else {
+      // If no current user (guest), only show public posts from public users
+      query = query.eq('visibility', 'public').eq('users.privacy_setting', 'public');
+    }
+  }
+
+  const { data: posts, error } = await query;
+
+  if (error) throw error;
+
+  // If there's no logged-in user, we can't check isLiked/isSaved properly, defaults to false
+  // Or we can do a secondary query if we have a user
+  let likedPostIds = new Set<string>();
+  let savedPostIds = new Set<string>();
+
+  if (currentUser) {
+    const { data: likes } = await supabase
+      .from('likes')
+      .select('post_id')
+      .eq('user_id', currentUser.id);
+
+    const { data: saved } = await supabase
+      .from('saved_posts')
+      .select('post_id')
+      .eq('user_id', currentUser.id);
+
+    likes?.forEach(l => likedPostIds.add(l.post_id));
+    saved?.forEach(s => savedPostIds.add(s.post_id));
+  }
+
+  // Map to FeedPost format
+  return posts.map((post: any) => {
+    // Calculate timeAgo
+    const created = new Date(post.created_at);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000);
+    let timeAgo = '';
+
+    if (diffInSeconds < 60) timeAgo = 'Just now';
+    else if (diffInSeconds < 3600) timeAgo = `${Math.floor(diffInSeconds / 60)}m ago`;
+    else if (diffInSeconds < 86400) timeAgo = `${Math.floor(diffInSeconds / 3600)}h ago`;
+    else timeAgo = `${Math.floor(diffInSeconds / 86400)}d ago`;
+
+    return {
+      id: post.id,
+      username: post.users?.username || 'Unknown',
+      userAvatar: post.users?.avatar_url || 'https://via.placeholder.com/40',
+      location: post.location || '',
+      image: post.image_url || '',
+      likes: post.likes_count || 0,
+      caption: post.caption || '',
+      comments: post.comments_count || 0,
+      timeAgo,
+      isLiked: likedPostIds.has(post.id),
+      isSaved: savedPostIds.has(post.id),
+      userId: post.user_id,
+      visibility: post.visibility,
+      media_urls: post.media_urls || [],
+    } as FeedPost;
+  });
+};
+
+export const getRecentStories = async () => {
+  // To keep it simple and fulfill "reais dos usuarios", we'll fetch users 
+  // who have posts, ordered by their latest post.
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`
+      user_id,
+      users (
+        id,
+        username,
+        avatar_url,
+        full_name
+      )
+    `)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (error) throw error;
+
+  // Deduplicate users
+  const usersMap = new Map();
+  data?.forEach((post: any) => {
+    const userData = post.users;
+    if (userData && !usersMap.has(userData.id)) {
+      usersMap.set(userData.id, {
+        id: userData.id,
+        username: userData.username,
+        avatar: userData.avatar_url,
+        hasStory: true
+      });
+    }
+  });
+
+  return Array.from(usersMap.values());
+};
+
+export const uploadPostImage = async (file: File) => {
+  return uploadFile('posts', file);
+};
+
+export const uploadFile = async (bucket: string, file: File) => {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+  const filePath = `${fileName}`;
+
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, file);
+
+  if (error) throw error;
+
+  const { data: { publicUrl } } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(filePath);
+
+  return publicUrl;
+};
+
+
 export const createPost = async (post: Omit<Post, 'id' | 'created_at' | 'updated_at' | 'likes_count' | 'comments_count'>) => {
   const { data, error } = await supabase
     .from('posts')
@@ -359,6 +748,19 @@ export const createPost = async (post: Omit<Post, 'id' | 'created_at' | 'updated
   return data as Post;
 };
 
+export const updatePost = async (postId: string, updates: Partial<Pick<Post, 'caption' | 'location' | 'image_url' | 'visibility'>>) => {
+  const { data, error } = await supabase
+    .from('posts')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', postId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Post;
+};
+
+
 export const deletePost = async (postId: string) => {
   const { error } = await supabase
     .from('posts')
@@ -367,6 +769,8 @@ export const deletePost = async (postId: string) => {
 
   if (error) throw error;
 };
+
+
 
 // ==================== VIAGENS ====================
 
@@ -378,30 +782,77 @@ export const getTrips = async (userId: string) => {
     .order('start_date', { ascending: false });
 
   if (error) throw error;
-  return data as Trip[];
+
+  // Map metadata fields back to top-level for UI compatibility
+  return data.map((t: any) => ({
+    ...t,
+    sharedWith: t.metadata?.sharedWith,
+    pendingSuggestions: t.metadata?.pendingSuggestions
+  })) as Trip[];
 };
 
 export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated_at'>) => {
+  // Extract UI fields to metadata
+  const { sharedWith, pendingSuggestions, ...rest } = trip;
+  const metadata = { ...(trip as any).metadata, sharedWith, pendingSuggestions };
+
   const { data, error } = await supabase
     .from('trips')
-    .insert(trip)
+    .insert({ ...rest, metadata })
     .select()
     .single();
 
   if (error) throw error;
-  return data as Trip;
+
+  return {
+    ...data,
+    sharedWith: data.metadata?.sharedWith,
+    pendingSuggestions: data.metadata?.pendingSuggestions
+  } as Trip;
 };
 
 export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
+  // Extract UI fields to metadata
+  const { sharedWith, pendingSuggestions, metadata: existingMeta, ...rest } = updates;
+
+  let payload: any = { ...rest, updated_at: new Date().toISOString() };
+
+  if (sharedWith !== undefined || pendingSuggestions !== undefined || existingMeta !== undefined) {
+    // We need to merge metadata. 
+    // Note: This simple merge assumes we have previous metadata or don't care about overwriting if we don't fetch it first.
+    // Ideally we should fetch, but for efficiency we might just patch.
+    // Supabase doesn't support deep merge patch easily without raw SQL or function.
+    // But we can just assume `updates` contains the new state for these fields.
+
+    // However, to preserve other metadata fields, we might need to be careful.
+    // For now, I'll construct a metadata object.
+    // If the caller passes 'metadata', use it, else empty object?
+    // Actually, if we want to UPDATE, we might overwrite existing metadata if we just send { sharedWith } as metadata.
+    // But `jsonb` update in Supabase (Postgres) usually replaces the column value unless we use `jsonb_set`.
+    // The standard `update` replaces the column.
+    // So we risk losing data if we don't read first.
+    // BUT, for this app, `sharedWith` and `pendingSuggestions` ARE the metadata.
+    payload.metadata = {
+      sharedWith,
+      pendingSuggestions,
+      ...existingMeta
+    };
+  }
+
   const { data, error } = await supabase
     .from('trips')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq('id', tripId)
     .select()
     .single();
 
   if (error) throw error;
-  return data as Trip;
+
+  return {
+    ...data,
+    sharedWith: data.metadata?.sharedWith,
+    pendingSuggestions: data.metadata?.pendingSuggestions
+  } as Trip;
 };
 
 export const deleteTrip = async (tripId: string) => {
@@ -415,26 +866,59 @@ export const deleteTrip = async (tripId: string) => {
 
 // ==================== MENSAGENS ====================
 
-export const getConversations = async (userId: string) => {
+export const getConversationsWithDetails = async (userId: string) => {
   const { data, error } = await supabase
     .from('conversations')
-    .select('*')
+    .select(`
+      *,
+      user1:users!conversation_user1_id_fkey(username, avatar_url, full_name),
+      user2:users!conversation_user2_id_fkey(username, avatar_url, full_name)
+    `)
     .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
     .order('last_message_at', { ascending: false });
 
   if (error) throw error;
-  return data as Conversation[];
+
+  // Transform to friendlier format
+  return data.map((c: any) => {
+    const otherUser = c.user1_id === userId ? c.user2 : c.user1;
+    return {
+      ...c,
+      otherUser
+    };
+  });
 };
 
 export const getMessages = async (conversationId: string) => {
   const { data, error } = await supabase
     .from('messages')
-    .select('*')
-    .or(`sender_id.eq.${conversationId},receiver_id.eq.${conversationId}`)
+    .select(`
+      *,
+      sender:users!messages_sender_id_fkey(username, avatar_url)
+    `)
+    .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 
   if (error) throw error;
-  return data as Message[];
+  return data;
+};
+
+// ... sendMessage ...
+// ... markMessageAsRead ...
+
+export const getNotificationsWithDetails = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select(`
+      *,
+      related_user:users!notifications_related_user_id_fkey(username, avatar_url),
+      related_post:posts!notifications_related_post_id_fkey(image_url)
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
 };
 
 export const sendMessage = async (message: Omit<Message, 'id' | 'created_at' | 'is_read'>) => {
@@ -455,6 +939,17 @@ export const markMessageAsRead = async (messageId: string) => {
     .eq('id', messageId);
 
   if (error) throw error;
+};
+
+export const getUnreadMessagesCount = async (userId: string) => {
+  const { count, error } = await supabase
+    .from('messages')
+    .select('*', { count: 'exact', head: true })
+    .eq('receiver_id', userId)
+    .eq('is_read', false);
+
+  if (error) throw error;
+  return count || 0;
 };
 
 // ==================== NOTIFICAÇÕES ====================
@@ -499,6 +994,27 @@ export const deleteNotification = async (notificationId: string) => {
   if (error) throw error;
 };
 
+export const getUnreadNotificationsCount = async (userId: string) => {
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('is_read', false);
+
+  if (error) throw error;
+  return count || 0;
+};
+
+export const markAllNotificationsAsRead = async (userId: string) => {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('user_id', userId)
+    .eq('is_read', false);
+
+  if (error) throw error;
+};
+
 // ==================== CURTIDAS ====================
 
 export const likePost = async (postId: string, userId: string) => {
@@ -537,18 +1053,36 @@ export const getPostLikes = async (postId: string) => {
 export const getComments = async (postId: string) => {
   const { data, error } = await supabase
     .from('comments')
-    .select('*')
+    .select(`
+      *,
+      users (
+        username,
+        avatar_url
+      )
+    `)
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
 
   if (error) throw error;
-  return data as Comment[];
+  return data as (Comment & { users: { username: string; avatar_url: string } })[];
 };
 
 export const createComment = async (comment: Omit<Comment, 'id' | 'created_at'>) => {
   const { data, error } = await supabase
     .from('comments')
     .insert(comment)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Comment;
+};
+
+export const updateComment = async (commentId: string, content: string) => {
+  const { data, error } = await supabase
+    .from('comments')
+    .update({ content })
+    .eq('id', commentId)
     .select()
     .single();
 
@@ -1256,19 +1790,23 @@ export const storyService = {
   async getAll(): Promise<Story[]> {
     const { data, error } = await supabase
       .from('stories')
-      .select('*')
+      .select('*, users(username, avatar_url)')
       .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: true });
 
     if (error) throw error;
     return data as Story[];
   },
 
-  async create(story: Omit<Story, 'id' | 'created_at' | 'expires_at'>): Promise<Story> {
+  async getActiveStories(): Promise<Story[]> {
+    return this.getAll();
+  },
+
+  async create(story: Omit<Story, 'id' | 'created_at' | 'expires_at' | 'users'>): Promise<Story> {
     const { data, error } = await supabase
       .from('stories')
       .insert(story)
-      .select()
+      .select('*, users(username, avatar_url)')
       .single();
 
     if (error) throw error;
@@ -1282,6 +1820,17 @@ export const storyService = {
       .eq('id', id);
 
     if (error) throw error;
+  },
+
+  async markAsViewed(id: string): Promise<void> {
+    const { error } = await supabase.rpc('increment_story_views', { story_id: id });
+    if (error) {
+      // If RPC fails, fallback to simple update
+      await supabase
+        .from('stories')
+        .update({ views_count: supabase.rpc('increment', { row: 'views_count', x: 1 }) })
+        .eq('id', id);
+    }
   }
 };
 
@@ -1391,5 +1940,114 @@ export const savedPostService = {
       .single();
 
     return !error && !!data;
+  },
+
+  async getSavedPosts(userId: string): Promise<FeedPost[]> {
+    const { data: saved, error: savedError } = await supabase
+      .from('saved_posts')
+      .select(`
+        post_id,
+        posts (
+          *,
+          users (
+            username,
+            avatar_url
+          )
+        )
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (savedError) throw savedError;
+
+    // Filter out potential null posts and map to FeedPost format
+    const posts = saved
+      .filter(s => s.posts !== null)
+      .map(s => {
+        const p = s.posts as any;
+        return {
+          id: p.id,
+          username: p.users.username,
+          userAvatar: p.users.avatar_url,
+          location: p.location || '',
+          image: p.image_url,
+          likes: p.likes_count,
+          caption: p.caption || '',
+          comments: p.comments_count,
+          timeAgo: new Date(p.created_at).toLocaleDateString(),
+          isLiked: false, // Will be checked in the frontend or we could secondary query
+          isSaved: true,
+          userId: p.user_id
+        } as FeedPost;
+      });
+
+    return posts;
   }
+};
+
+// ==================== EXPLORAR & BUSCA ====================
+
+export const getExplorePosts = async (limit = 30) => {
+  // Only show public posts from public users in Explore
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`
+      *,
+      users!inner (
+        username,
+        avatar_url,
+        privacy_setting
+      )
+    `)
+    .eq('visibility', 'public')
+    .eq('users.privacy_setting', 'public')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  return data.map((post: any) => ({
+    id: post.id,
+    username: post.users?.username || 'Unknown',
+    userAvatar: post.users?.avatar_url || '',
+    location: post.location || '',
+    image: post.image_url || '',
+    likes: post.likes_count || 0,
+    caption: post.caption || '',
+    comments: post.comments_count || 0,
+    timeAgo: new Date(post.created_at).toLocaleDateString(),
+    isLiked: false,
+    isSaved: false,
+    userId: post.user_id,
+    visibility: post.visibility,
+  }));
+};
+
+export const searchUsers = async (query: string) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, username, full_name, avatar_url, privacy_setting')
+    .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
+    .limit(10);
+
+  if (error) throw error;
+  return data;
+};
+
+export const searchPosts = async (query: string) => {
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`
+      id,
+      caption,
+      image_url,
+      users (
+        username
+      )
+    `)
+    .ilike('caption', `%${query}%`)
+    .limit(10);
+
+  if (error) throw error;
+  return data;
 };

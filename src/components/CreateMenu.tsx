@@ -1,17 +1,17 @@
 interface CreateMenuProps {
   onClose: () => void;
-  onSelectOption: (option: 'post' | 'travel' | 'cellar' | 'food') => void;
+  onSelectOption: (option: 'post' | 'travel' | 'cellar' | 'food' | 'story') => void;
 }
 
 export default function CreateMenu({ onClose, onSelectOption }: CreateMenuProps) {
-  const handleSelect = (option: 'post' | 'travel' | 'cellar' | 'food') => {
+  const handleSelect = (option: 'post' | 'travel' | 'cellar' | 'food' | 'story') => {
     onSelectOption(option);
   };
 
   return (
     <>
       {/* Backdrop invisível para fechar ao clicar fora */}
-      <div 
+      <div
         className="fixed inset-0 z-40"
         onClick={onClose}
       />
@@ -24,45 +24,45 @@ export default function CreateMenu({ onClose, onSelectOption }: CreateMenuProps)
             {/* Post */}
             <button
               onClick={() => handleSelect('post')}
-              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gradient-to-br from-orange-50 to-pink-50 border border-orange-200 hover:border-orange-400 hover:shadow-md transition-all duration-200 group"
+              className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gradient-to-br from-orange-50 to-pink-50 border border-orange-200 hover:border-orange-400 hover:shadow-md transition-all duration-200 group"
             >
-              <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-pink-500 group-hover:scale-110 transition-transform">
-                <i className="ri-image-add-line text-2xl text-white"></i>
+              <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-pink-500 group-hover:scale-110 transition-transform">
+                <i className="ri-image-add-line text-xl text-white"></i>
               </div>
-              <span className="text-xs font-semibold text-gray-900">Post</span>
+              <span className="text-[10px] font-semibold text-gray-900">Postar</span>
             </button>
 
             {/* Travel */}
             <button
               onClick={() => handleSelect('travel')}
-              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all duration-200 group"
+              className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 hover:border-blue-400 hover:shadow-md transition-all duration-200 group"
             >
-              <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 group-hover:scale-110 transition-transform">
-                <i className="ri-flight-takeoff-line text-2xl text-white"></i>
+              <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 group-hover:scale-110 transition-transform">
+                <i className="ri-flight-takeoff-line text-xl text-white"></i>
               </div>
-              <span className="text-xs font-semibold text-gray-900">Viagens</span>
+              <span className="text-[10px] font-semibold text-gray-900">Viagem</span>
             </button>
 
             {/* Cellar */}
             <button
               onClick={() => handleSelect('cellar')}
-              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 hover:border-purple-400 hover:shadow-md transition-all duration-200 group"
+              className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 hover:border-indigo-400 hover:shadow-md transition-all duration-200 group"
             >
-              <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 group-hover:scale-110 transition-transform">
-                <i className="ri-goblet-line text-2xl text-white"></i>
+              <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 group-hover:scale-110 transition-transform">
+                <i className="ri-goblet-line text-xl text-white"></i>
               </div>
-              <span className="text-xs font-semibold text-gray-900">Adega</span>
+              <span className="text-[10px] font-semibold text-gray-900">Adega</span>
             </button>
 
             {/* Food & Drinks */}
             <button
               onClick={() => handleSelect('food')}
-              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 hover:border-amber-400 hover:shadow-md transition-all duration-200 group"
+              className="flex flex-col items-center gap-2 p-3 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 hover:border-amber-400 hover:shadow-md transition-all duration-200 group"
             >
-              <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 group-hover:scale-110 transition-transform">
-                <i className="ri-restaurant-line text-2xl text-white"></i>
+              <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 group-hover:scale-110 transition-transform">
+                <i className="ri-restaurant-line text-xl text-white"></i>
               </div>
-              <span className="text-xs font-semibold text-gray-900">Food & Drinks</span>
+              <span className="text-[10px] font-semibold text-gray-900">Gastronomia</span>
             </button>
           </div>
         </div>

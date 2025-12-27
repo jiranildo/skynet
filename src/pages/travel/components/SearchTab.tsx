@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import CreateTripModal from './CreateTripModal';
 
 export default function SearchTab() {
   const [searchType, setSearchType] = useState<'destination' | 'hotel' | 'activity'>('destination');
@@ -60,10 +61,10 @@ export default function SearchTab() {
     // Get existing favorites from localStorage
     const existingFavorites = localStorage.getItem('travel-favorites');
     const favoritesList = existingFavorites ? JSON.parse(existingFavorites) : [];
-    
+
     // Add or remove favorite
     const existingIndex = favoritesList.findIndex((fav: any) => fav.id === favoriteId);
-    
+
     if (existingIndex >= 0) {
       // Remove from favorites
       favoritesList.splice(existingIndex, 1);
@@ -74,10 +75,10 @@ export default function SearchTab() {
 
     // Save back to localStorage
     localStorage.setItem('travel-favorites', JSON.stringify(favoritesList));
-    
+
     // Dispatch event to notify other components
-    window.dispatchEvent(new CustomEvent('favoritesUpdated', { 
-      detail: { favorites: favoritesList } 
+    window.dispatchEvent(new CustomEvent('favoritesUpdated', {
+      detail: { favorites: favoritesList }
     }));
   };
 
@@ -1526,7 +1527,7 @@ export default function SearchTab() {
     const handleResize = () => {
       setItemsPerSlide(getItemsPerSlide());
     };
-    
+
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
@@ -1548,7 +1549,7 @@ export default function SearchTab() {
   const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDragging) return;
     e.preventDefault();
-    
+
     const pageX = 'touches' in e ? e.touches[0].pageX : e.pageX;
     const distance = pageX - startX;
     setDragDistance(distance);
@@ -1557,9 +1558,9 @@ export default function SearchTab() {
   const handleDragEnd = () => {
     if (!isDragging) return;
     setIsDragging(false);
-    
+
     const threshold = 50; // Minimum drag distance to change slide
-    
+
     if (Math.abs(dragDistance) > threshold) {
       if (dragDistance > 0 && carouselIndex > 0) {
         // Drag right - go to previous slide
@@ -1569,13 +1570,13 @@ export default function SearchTab() {
         setCarouselIndex(carouselIndex + 1);
       }
     }
-    
+
     setDragDistance(0);
   };
 
   const handleQuickAction = (label: string) => {
     setCurrentAction(label);
-    
+
     if (label === 'Locais Próximos') {
       setShowCategoryModal(true);
     } else if (categoryResults[label]) {
@@ -1592,13 +1593,13 @@ export default function SearchTab() {
 
   const toggleFavorite = (placeId: string, item: any, category: string = 'attraction') => {
     const newFavorites = new Set(favorites);
-    
+
     if (newFavorites.has(placeId)) {
       newFavorites.delete(placeId);
     } else {
       newFavorites.add(placeId);
     }
-    
+
     setFavorites(newFavorites);
     saveFavoritesToStorage(newFavorites);
     saveFavoriteItem(item, category, placeId);
@@ -1607,7 +1608,7 @@ export default function SearchTab() {
   const toggleDestinationFavorite = (destinationName: string) => {
     const favoriteId = `destination-${destinationName}`;
     const destination = popularDestinations.find(d => d.name === destinationName);
-    
+
     if (destination) {
       toggleFavorite(favoriteId, destination, 'attraction');
     }
@@ -1632,8 +1633,8 @@ export default function SearchTab() {
     if (selectedPlace) {
       // Get existing trip data from localStorage
       const trips = JSON.parse(localStorage.getItem('user-trips') || '[]');
-      const tripIndex = trips.findIndex((trip: any) => 
-        `${trip.name}` === tripName.split(',')[0] && 
+      const tripIndex = trips.findIndex((trip: any) =>
+        `${trip.name}` === tripName.split(',')[0] &&
         `${trip.startDate} - ${trip.endDate}` === tripDates
       );
 
@@ -1644,7 +1645,7 @@ export default function SearchTab() {
         }
 
         // Check if place already exists in trip
-        const placeExists = trips[tripIndex].places.some((place: any) => 
+        const placeExists = trips[tripIndex].places.some((place: any) =>
           place.name === selectedPlace.name
         );
 
@@ -1680,67 +1681,7 @@ export default function SearchTab() {
     setShowAllDestinationsModal(true);
   };
 
-  // Create Trip Form State
-  const [tripForm, setTripForm] = useState({
-    name: '',
-    destination: '',
-    startDate: '',
-    endDate: '',
-    travelers: 2,
-    tripType: 'leisure',
-    budget: 'medium',
-    description: ''
-  });
 
-  const tripTypes = [
-    { id: 'leisure', name: 'Lazer', icon: 'ri-sun-line', color: 'text-orange-500' },
-    { id: 'business', name: 'Negócios', icon: 'ri-briefcase-line', color: 'text-blue-500' },
-    { id: 'adventure', name: 'Aventura', icon: 'ri-mountain-line', color: 'text-green-500' },
-    { id: 'romantic', name: 'Romântica', icon: 'ri-heart-line', color: 'text-pink-500' },
-    { id: 'family', name: 'Família', icon: 'ri-group-line', color: 'text-purple-500' },
-    { id: 'cultural', name: 'Cultural', icon: 'ri-building-line', color: 'text-amber-500' }
-  ];
-
-  const budgetOptions = [
-    { id: 'low', name: 'Econômica', range: 'Até R$ 3.000', color: 'text-green-500' },
-    { id: 'medium', name: 'Moderada', range: 'R$ 3.000 - R$ 8.000', color: 'text-blue-500' },
-    { id: 'high', name: 'Luxo', range: 'Acima de R$ 8.000', color: 'text-purple-500' }
-  ];
-
-  const handleCreateTrip = () => {
-    // Validate form
-    if (!tripForm.name || !tripForm.destination || !tripForm.startDate || !tripForm.endDate) {
-      alert('Por favor, preencha todos os campos obrigatórios');
-      return;
-    }
-
-    // Save trip to localStorage
-    const trips = JSON.parse(localStorage.getItem('user-trips') || '[]');
-    const newTrip = {
-      id: Date.now().toString(),
-      ...tripForm,
-      createdAt: new Date().toISOString(),
-      status: 'planning'
-    };
-    trips.push(newTrip);
-    localStorage.setItem('user-trips', JSON.stringify(trips));
-
-    // Reset form and close modal
-    setTripForm({
-      name: '',
-      destination: '',
-      startDate: '',
-      endDate: '',
-      travelers: 2,
-      tripType: 'leisure',
-      budget: 'medium',
-      description: ''
-    });
-    setShowCreateTripModal(false);
-
-    // Show success message
-    alert('Viagens criada com sucesso! 🎉');
-  };
 
   const [showDestinationDetailModal, setShowDestinationDetailModal] = useState(false);
   const [selectedDestinationDetail, setSelectedDestinationDetail] = useState<any>(null);
@@ -1762,7 +1703,7 @@ export default function SearchTab() {
     }
 
     // Filter destinations based on search query
-    const filtered = popularDestinations.filter(dest => 
+    const filtered = popularDestinations.filter(dest =>
       dest.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       dest.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       dest.description.toLowerCase().includes(searchQuery.toLowerCase())
@@ -1778,8 +1719,8 @@ export default function SearchTab() {
     }
   };
 
-  const filteredDestinations = selectedDestination === 'all' 
-    ? popularDestinations 
+  const filteredDestinations = selectedDestination === 'all'
+    ? popularDestinations
     : popularDestinations.filter(dest => dest.type === selectedDestination);
 
   return (
@@ -1838,7 +1779,7 @@ export default function SearchTab() {
                 {showSuggestions && searchFocus && (
                   <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 z-10 overflow-hidden">
                     {searchSuggestions
-                      .filter(suggestion => 
+                      .filter(suggestion =>
                         suggestion.toLowerCase().includes(searchQuery.toLowerCase())
                       )
                       .map((suggestion, index) => (
@@ -1875,21 +1816,21 @@ export default function SearchTab() {
             {/* Gradient Fade Indicators */}
             <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none"></div>
             <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none"></div>
-            
+
             {/* Scroll Hint - Left Arrow */}
             <div className="absolute left-2 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
               <div className="w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center animate-pulse">
                 <i className="ri-arrow-left-s-line text-gray-600 text-xl"></i>
               </div>
             </div>
-            
+
             {/* Scroll Hint - Right Arrow */}
             <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
               <div className="w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center animate-pulse">
                 <i className="ri-arrow-right-s-line text-gray-600 text-xl"></i>
               </div>
             </div>
-            
+
             {/* Hint Text */}
             <div className="text-center mb-2">
               <p className="text-xs text-gray-500 flex items-center justify-center gap-2">
@@ -1898,7 +1839,7 @@ export default function SearchTab() {
                 <i className="ri-arrow-left-right-line"></i>
               </p>
             </div>
-            
+
             <div className="overflow-x-auto scrollbar-hide">
               <div className="flex gap-2 px-4 py-3 min-w-max">
                 {quickActions.map((action, index) => (
@@ -1934,7 +1875,7 @@ export default function SearchTab() {
             {nearbyResults.length > 0 ? selectedCategory : 'Destinos populares'}
           </h2>
           {nearbyResults.length > 0 ? (
-            <button 
+            <button
               onClick={() => {
                 setNearbyResults([]);
                 setSelectedCategory(null);
@@ -1946,7 +1887,7 @@ export default function SearchTab() {
               Voltar
             </button>
           ) : (
-            <button 
+            <button
               onClick={handleShowAllDestinations}
               className="text-xs sm:text-sm font-medium text-pink-500 hover:text-pink-600"
             >
@@ -1970,7 +1911,7 @@ export default function SearchTab() {
                       alt={result.name}
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                     />
-                    
+
                     {/* Action Icons - Responsive */}
                     <div className="absolute top-2 sm:top-3 right-2 sm:right-3 flex flex-col gap-1.5 sm:gap-2">
                       <button
@@ -1978,15 +1919,14 @@ export default function SearchTab() {
                           e.stopPropagation();
                           toggleFavorite(`${selectedCategory}-${index}`, result, selectedCategory || 'attraction');
                         }}
-                        className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300 ${
-                          favorites.has(`${selectedCategory}-${index}`)
+                        className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300 ${favorites.has(`${selectedCategory}-${index}`)
                             ? 'bg-red-500 text-white shadow-lg scale-110'
                             : 'bg-white/90 text-gray-700 hover:bg-white hover:scale-110'
-                        }`}
+                          }`}
                       >
                         <i className={`${favorites.has(`${selectedCategory}-${index}`) ? 'ri-heart-fill' : 'ri-heart-line'} text-xl sm:text-2xl`}></i>
                       </button>
-                      
+
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -2066,7 +2006,7 @@ export default function SearchTab() {
                           <div className="font-semibold text-pink-600 text-sm sm:text-base">{result.price}</div>
                         </div>
                       </div>
-                      <button 
+                      <button
                         onClick={() => handleNearbyDetailClick(result)}
                         className="px-4 sm:px-6 py-2 sm:py-2.5 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg sm:rounded-xl hover:shadow-lg transition-all font-medium text-xs sm:text-sm whitespace-nowrap"
                       >
@@ -2098,15 +2038,14 @@ export default function SearchTab() {
                         e.stopPropagation();
                         toggleDestinationFavorite(destination.name);
                       }}
-                      className={`w-7 h-7 sm:w-8 sm:h-10 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300 ${
-                        favorites.has(`destination-${destination.name}`)
+                      className={`w-7 h-7 sm:w-8 sm:h-10 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300 ${favorites.has(`destination-${destination.name}`)
                           ? 'bg-red-500 text-white shadow-lg scale-110'
                           : 'bg-white/90 text-gray-700 hover:bg-white hover:scale-110'
-                      }`}
+                        }`}
                     >
                       <i className={`${favorites.has(`destination-${destination.name}`) ? 'ri-heart-fill' : 'ri-heart-line'} text-xl sm:text-2xl`}></i>
                     </button>
-                    
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -2186,20 +2125,19 @@ export default function SearchTab() {
                         )}
                         <button
                           onClick={() => {
-                            const favoriteId = selectedDestinationDetail.category 
+                            const favoriteId = selectedDestinationDetail.category
                               ? `${selectedDestinationDetail.category}-${selectedDestinationDetail.name}`
                               : `destination-${selectedDestinationDetail.name}`;
                             toggleFavorite(favoriteId, selectedDestinationDetail, selectedDestinationDetail.category || 'attraction');
                           }}
-                          className={`w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300 ${
-                            favorites.has(selectedDestinationDetail.category 
-                              ? `${selectedDestinationDetail.category}-${selectedDestinationDetail.name}`
-                              : `destination-${selectedDestinationDetail.name}`)
+                          className={`w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300 ${favorites.has(selectedDestinationDetail.category
+                            ? `${selectedDestinationDetail.category}-${selectedDestinationDetail.name}`
+                            : `destination-${selectedDestinationDetail.name}`)
                               ? 'bg-red-500 text-white shadow-lg scale-110'
                               : 'bg-white/90 text-gray-700 hover:bg-white hover:scale-110'
-                          }`}
+                            }`}
                         >
-                          <i className={`${favorites.has(selectedDestinationDetail.category 
+                          <i className={`${favorites.has(selectedDestinationDetail.category
                             ? `${selectedDestinationDetail.category}-${selectedDestinationDetail.name}`
                             : `destination-${selectedDestinationDetail.name}`) ? 'ri-heart-fill' : 'ri-heart-line'} text-xl`}></i>
                         </button>
@@ -2449,11 +2387,10 @@ export default function SearchTab() {
                             e.stopPropagation();
                             toggleDestinationFavorite(destination.name);
                           }}
-                          className={`w-6 h-6 sm:w-8 sm:h-10 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300 ${
-                            favorites.has(`destination-${destination.name}`)
+                          className={`w-6 h-6 sm:w-8 sm:h-10 rounded-full flex items-center justify-center backdrop-blur-sm transition-all duration-300 ${favorites.has(`destination-${destination.name}`)
                               ? 'bg-red-500 text-white shadow-lg scale-110'
                               : 'bg-white/90 text-gray-700 hover:bg-white hover:scale-110'
-                          }`}
+                            }`}
                         >
                           <i className={`${favorites.has(`destination-${destination.name}`) ? 'ri-heart-fill' : 'ri-heart-line'} text-sm sm:text-base`}></i>
                         </button>
@@ -2471,7 +2408,7 @@ export default function SearchTab() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="p-2 sm:p-3">
                       <h3 className="font-bold text-gray-900 mb-1 text-xs sm:text-sm line-clamp-1">{destination.name}</h3>
                       <p className="text-pink-500 font-medium text-xs mb-1">{destination.price}</p>
@@ -2479,7 +2416,7 @@ export default function SearchTab() {
                         <i className="ri-chat-3-line text-xs"></i>
                         <span className="text-xs">{destination.reviews.toLocaleString()} avaliações</span>
                       </div>
-                      
+
                       {/* Quick highlights */}
                       <div className="mt-2 flex flex-wrap gap-1">
                         {destination.highlights.slice(0, 2).map((highlight, idx) => (
@@ -2509,7 +2446,7 @@ export default function SearchTab() {
           <div>
             <h3 className="font-bold text-base sm:text-lg mb-2">Dica de viagem</h3>
             <p className="text-white/90 text-xs sm:text-sm leading-relaxed">
-              Reserve seus voos e hotéis com antecedência para garantir os melhores preços. 
+              Reserve seus voos e hotéis com antecedência para garantir os melhores preços.
               A melhor época para viajar é durante a baixa temporada, quando os destinos estão menos lotados e mais acessíveis.
             </p>
           </div>
@@ -2560,11 +2497,11 @@ export default function SearchTab() {
 
       {/* Trip Modal - Responsive */}
       {showTripModal && selectedPlace && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center p-3 sm:p-4 z-50"
           onClick={() => setShowTripModal(false)}
         >
-          <div 
+          <div
             className="bg-white rounded-xl sm:rounded-2xl w-full max-w-sm sm:max-w-md p-4 sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
@@ -2595,8 +2532,8 @@ export default function SearchTab() {
             </div>
 
             <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
-              <button 
-                onClick={handleCreateNewTrip}
+              <button
+                onClick={() => setShowCreateTripModal(true)}
                 className="w-full p-3 sm:p-4 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-lg sm:rounded-xl font-semibold hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 text-sm sm:text-base"
               >
                 <i className="ri-add-line text-lg sm:text-xl"></i>
@@ -2613,7 +2550,7 @@ export default function SearchTab() {
               </div>
 
               <div className="space-y-2 max-h-48 sm:max-h-60 overflow-y-auto">
-                <button 
+                <button
                   onClick={() => handleAddToExistingTrip('Paris, França', '15 - 22 Dez 2024')}
                   className="w-full p-3 sm:p-4 bg-white border-2 border-gray-200 rounded-lg sm:rounded-xl hover:border-orange-500 transition-all duration-300 text-left group"
                 >
@@ -2633,7 +2570,7 @@ export default function SearchTab() {
                   </div>
                 </button>
 
-                <button 
+                <button
                   onClick={() => handleAddToExistingTrip('Tóquio, Japão', '10 - 20 Jan 2025')}
                   className="w-full p-3 sm:p-4 bg-white border-2 border-gray-200 rounded-lg sm:rounded-xl hover:border-orange-500 transition-all duration-300 text-left group"
                 >
@@ -2653,7 +2590,7 @@ export default function SearchTab() {
                   </div>
                 </button>
 
-                <button 
+                <button
                   onClick={() => handleAddToExistingTrip('Dubai, EAU', '05 - 12 Mar 2025')}
                   className="w-full p-3 sm:p-4 bg-white border-2 border-gray-200 rounded-lg sm:rounded-xl hover:border-orange-500 transition-all duration-300 text-left group"
                 >
@@ -2686,178 +2623,11 @@ export default function SearchTab() {
       )}
 
       {/* Create New Trip Modal - Responsive */}
-      {showCreateTripModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-xs sm:max-w-lg md:max-w-2xl max-h-[95vh] overflow-hidden">
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-gradient-to-r from-orange-500 via-pink-500 to-purple-500 text-white p-4 sm:p-6 flex items-center justify-between">
-              <div className="flex items-center gap-3 sm:gap-4">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                  <i className="ri-map-2-line text-lg sm:text-2xl"></i>
-                </div>
-                <div>
-                  <h2 className="text-lg sm:text-2xl font-bold">Criar Nova Viagens</h2>
-                  <p className="text-white/90 text-xs sm:text-sm">Planeje sua próxima aventura</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowCreateTripModal(false)}
-                className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
-              >
-                <i className="ri-close-line text-lg sm:text-2xl"></i>
-              </button>
-            </div>
+      <CreateTripModal
+        isOpen={showCreateTripModal}
+        onClose={() => setShowCreateTripModal(false)}
+      />
 
-            {/* Modal Content */}
-            <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(95vh-120px)]">
-              <div className="space-y-4 sm:space-y-6">
-                
-                {/* Trip Name */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Nome da Viagens *
-                  </label>
-                  <input
-                    type="text"
-                    value={tripForm.name}
-                    onChange={(e) => setTripForm({ ...tripForm, name: e.target.value })}
-                    placeholder="Ex: Férias em Paris 2025"
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-700"
-                  />
-                </div>
-
-                {/* Destination */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Destino *
-                  </label>
-                  <div className="relative">
-                    <i className="ri-map-pin-line absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    <input
-                      type="text"
-                      value={tripForm.destination}
-                      onChange={(e) => setTripForm({ ...tripForm, destination: e.target.value })}
-                      placeholder="Para onde você quer ir?"
-                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-700"
-                    />
-                  </div>
-                </div>
-
-                {/* Travelers */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    Número de Viajantes
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setTripForm({ ...tripForm, travelers: Math.max(1, tripForm.travelers - 1) })}
-                      className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-orange-500 hover:bg-orange-50 transition-colors"
-                    >
-                      <i className="ri-subtract-line text-lg"></i>
-                    </button>
-                    <span className="text-xl font-semibold text-gray-900 w-12 text-center">{tripForm.travelers}</span>
-                    <button
-                      onClick={() => setTripForm({ ...tripForm, travelers: tripForm.travelers + 1 })}
-                      className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-orange-500 hover:bg-orange-50 transition-colors"
-                    >
-                      <i className="ri-add-line text-lg"></i>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Trip Type */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    Tipo de Viagens
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {tripTypes.map((type) => (
-                      <button
-                        key={type.id}
-                        onClick={() => setTripForm({ ...tripForm, tripType: type.id })}
-                        className={`p-3 sm:p-4 rounded-xl border-2 transition-all text-left ${
-                          tripForm.tripType === type.id
-                            ? 'border-orange-500 bg-orange-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <i className={`${type.icon} text-2xl ${type.color} mb-2 block`}></i>
-                        <h4 className="font-semibold text-gray-900 text-sm">{type.name}</h4>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Budget */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    Orçamento Aproximado
-                  </label>
-                  <div className="space-y-3">
-                    {budgetOptions.map((budget) => (
-                      <button
-                        key={budget.id}
-                        onClick={() => setTripForm({ ...tripForm, budget: budget.id })}
-                        className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                          tripForm.budget === budget.id
-                            ? 'border-orange-500 bg-orange-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className={`font-semibold ${budget.color} text-sm`}>{budget.name}</h4>
-                            <p className="text-gray-600 text-xs">{budget.range}</p>
-                          </div>
-                          <div className={`w-5 h-5 rounded-full border-2 ${
-                            tripForm.budget === budget.id 
-                              ? 'border-orange-500 bg-orange-500' 
-                              : 'border-gray-300'
-                          }`}>
-                            {tripForm.budget === budget.id && (
-                              <div className="w-full h-full rounded-full bg-white scale-50"></div>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Descrição (Opcional)
-                  </label>
-                  <textarea
-                    value={tripForm.description}
-                    onChange={(e) => setTripForm({ ...tripForm, description: e.target.value })}
-                    placeholder="Conte-nos mais sobre seus planos para esta viagem..."
-                    rows={3}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-700 resize-none"
-                  />
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-6 mt-6 border-t border-gray-200">
-                <button
-                  onClick={() => setShowCreateTripModal(false)}
-                  className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleCreateTrip}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
-                >
-                  Criar Viagens
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
