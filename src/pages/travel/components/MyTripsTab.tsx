@@ -1,9 +1,13 @@
-
 import { useState, useEffect } from 'react';
 import TripPlanningModal from './TripPlanningModal';
 import CreateTripForm from './CreateTripForm';
+import ShareTripModal, { ShareConfig, PublishConfig } from './ShareTripModal';
+import { ConfirmationModal } from '../../../components/ConfirmationModal';
 import { useAuth } from '../../../context/AuthContext';
-import { getTrips, deleteTrip, updateTrip, Trip } from '../../../services/supabase';
+
+
+
+import { getTrips, deleteTrip, updateTrip, Trip, getNetworkUsers, User, createMarketplaceListing, deleteMarketplaceListing, supabase } from '../../../services/supabase';
 
 interface SharedUser {
   id: string;
@@ -71,17 +75,33 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
   const [shareLink, setShareLink] = useState('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
   const [commentText, setCommentText] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'newtrip' | 'stats' | 'maps' | 'goals' | 'suggestions' | 'retrospectives'>('trips');
+  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'shared' | 'newtrip' | 'stats' | 'maps' | 'goals' | 'suggestions' | 'retrospectives'>('trips');
   const [retrospectives, setRetrospectives] = useState<YearlyRetrospective[]>([]);
   const [selectedRetrospective, setSelectedRetrospective] = useState<YearlyRetrospective | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPlanningModalOpen, setIsPlanningModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [networkUsers, setNetworkUsers] = useState<User[]>([]);
+  const [loadingNetwork, setLoadingNetwork] = useState(false);
+  const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
+  const [feedbackModal, setFeedbackModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'info' | 'warning' | 'danger';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'success'
+  });
+
 
   useEffect(() => {
     refreshTrips();
     loadRetrospectives();
+    loadNetworkUsers();
   }, [user]);
 
   const refreshTrips = async () => {
@@ -94,6 +114,25 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
       }
     }
   };
+
+  const loadNetworkUsers = async () => {
+    if (!user) return;
+    try {
+      setLoadingNetwork(true);
+      const users = await getNetworkUsers(user.id);
+      setNetworkUsers(users);
+    } catch (error) {
+      console.error('Error loading network users:', error);
+    } finally {
+      setLoadingNetwork(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showShareModal) {
+      loadNetworkUsers();
+    }
+  }, [showShareModal]);
 
   const loadRetrospectives = () => {
     const mockRetrospectives: YearlyRetrospective[] = [
@@ -227,11 +266,168 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
     }, 3000);
   };
 
+
+
   const handleShareTrip = (trip: Trip) => {
     setSelectedTrip(trip);
     const link = `${window.location.origin}/travel/shared/${trip.id}`;
     setShareLink(link);
     setShowShareModal(true);
+  };
+
+  const handleShare = (config: ShareConfig) => {
+    if (!selectedTrip) return;
+
+    // Preserving existing shared users if possible, or creating new placeholders
+    // In a real app we'd fetch user details
+    const newSharedWith = config.sharedWith.map(userId => {
+      const existing = selectedTrip.sharedWith?.find(u => u.id === userId);
+      if (existing) return existing;
+      const netUser = networkUsers.find(u => u.id === userId);
+      return {
+        id: userId,
+        name: netUser?.full_name || 'Usuário',
+        avatar: netUser?.avatar_url || '',
+        permission: 'view',
+        joinedAt: new Date().toISOString()
+      } as SharedUser;
+    });
+
+    const updatedTrips = trips.map(t => {
+      if (t.id === selectedTrip.id) {
+        const updated = {
+          ...t,
+          visibility: config.visibility,
+          sharedWith: newSharedWith,
+          isShared: newSharedWith.length > 0
+        };
+        // Update Supabase
+        const { id, user_id, created_at, ...updates } = updated;
+        updateTrip(id, updates);
+        return updated;
+      }
+      return t;
+    });
+    setTrips(updatedTrips);
+    const updated = updatedTrips.find(t => t.id === selectedTrip.id);
+    if (updated) setSelectedTrip(updated);
+
+    alert('Configurações de compartilhamento salvas!');
+  };
+
+  const handlePublish = async (config: PublishConfig) => {
+    if (!selectedTrip) return;
+
+    // Optimistic update locally
+    const updatedTrips = trips.map(t => {
+      if (t.id === selectedTrip.id) {
+        return {
+          ...t,
+          marketplaceConfig: config
+        };
+      }
+      return t;
+    });
+
+    setTrips(updatedTrips);
+    const updated = updatedTrips.find(t => t.id === selectedTrip.id);
+    if (updated) setSelectedTrip(updated);
+
+    try {
+      if (config.isListed) {
+        // Create new listing in marketplace_listings table
+        await createMarketplaceListing({
+          trip_id: selectedTrip.id,
+          seller_id: (selectedTrip as any).user_id, // Assuming user_id is present
+          title: selectedTrip.title,
+          description: config.description || selectedTrip.description,
+          price: config.price,
+          currency: 'TM',
+          category: selectedTrip.trip_type
+        });
+
+        setFeedbackModal({
+          isOpen: true,
+          title: 'Sucesso!',
+          message: 'Roteiro publicado no Marketplace com sucesso!',
+          type: 'success'
+        });
+        // Notify MarketplaceTab to refresh
+        window.dispatchEvent(new Event('marketplace-updated'));
+
+        // ============================================================
+        // NOTIFICATION LOGIC: Broadcast to followers
+        // ============================================================
+        // 1. Get current user (Owner)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // 2. Fetch followers
+          const { data: followers } = await supabase
+            .from('followers')
+            .select('follower_id')
+            .eq('following_id', user.id);
+
+          if (followers && followers.length > 0) {
+            // 3. Create notifications for each follower
+            const notifications = followers.map(f => ({
+              user_id: f.follower_id,
+              type: 'trip_published',
+              title: `Novo Roteiro de ${user.user_metadata?.full_name || 'um viajante'}`,
+              message: `Acabou de publicar "${selectedTrip.title}". Confira no Marketplace!`,
+              is_read: false,
+              related_user_id: user.id
+            }));
+
+            // Batch insert notifications
+            await supabase.from('notifications').insert(notifications);
+          }
+        }
+        // ============================================================
+
+      } else {
+        // Handle unlisting: Remove from marketplace_listings table
+        await deleteMarketplaceListing(selectedTrip.id);
+        setFeedbackModal({
+          isOpen: true,
+          title: 'Removido',
+          message: 'Roteiro removido do Marketplace.',
+          type: 'info'
+        });
+
+        // Notify refresh in case it was open there
+        window.dispatchEvent(new Event('marketplace-updated'));
+      }
+
+      // Still update trip metadata for local state persistence
+      const { id, user_id, created_at, ...updates } = updated!;
+
+      // Aggressively sanitize: Remove ALL known virtual fields that are not DB columns
+      // These are fields added by getTrips or UI state that shouldn't be sent back to DB
+      const {
+        marketplaceConfig: _mc,
+        sharedWith: _sw,
+        pendingSuggestions: _ps,
+        isShared: _is,
+        owner: _own,
+        permissions: _perm,
+        places: _pl,
+        seller: _sel,
+        itinerary: _it, // itinerary is usually a column, but if it's large/complex maybe better to treat carefully? keeping it if it's a column. It IS a column.
+        ...safeUpdates
+      } = updates as any;
+
+      await updateTrip(id, {
+        ...safeUpdates,
+        metadata: {
+          ...selectedTrip.metadata, // Preserve existing metadata
+          marketplaceConfig: config   // Add/Update marketplace config
+        }
+      });
+
+    } catch (error) {
+      console.error('Error publishing trip:', error);
+      alert(`Erro ao salvar publicação: ${(error as any).message || 'Erro desconhecido'}`);
+    }
   };
 
   const handleInviteUser = () => {
@@ -266,22 +462,31 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
     setShareEmail('');
   };
 
-  const handleDeleteTrip = async (e: React.MouseEvent, trip: Trip) => {
+  const handleDeleteTrip = (e: React.MouseEvent, trip: Trip) => {
     e.stopPropagation();
-    if (!window.confirm(`Tem certeza que deseja excluir a viagem para "${trip.destination}"? Essa ação não pode ser desfeita.`)) return;
+    setTripToDelete(trip);
+  };
+
+  const confirmDeleteTrip = async () => {
+    if (!tripToDelete) return;
 
     try {
-      await deleteTrip(trip.id);
+      await deleteTrip(tripToDelete.id);
       refreshTrips();
-      if (selectedTrip?.id === trip.id) {
+      if (selectedTrip?.id === tripToDelete.id) {
         setIsPlanningModalOpen(false);
         setSelectedTrip(null);
       }
     } catch (error) {
       console.error('Error deleting trip:', error);
       alert('Erro ao excluir viagem. Tente novamente.');
+    } finally {
+      setTripToDelete(null);
     }
   };
+
+
+
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareLink);
@@ -556,8 +761,12 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+    if (!dateString) return '';
+    // Fix: Appending T00:00:00 ensures local time interpretation for YYYY-MM-DD strings
+    // avoiding the -3h timezone offset issue (e.g. 14 -> 13)
+    const safeDate = dateString.includes('T') ? dateString : `${dateString}T00:00:00`;
+    const date = new Date(safeDate);
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'UTC' }); // Force UTC interpretation if input is UTC
   };
 
   const getDaysUntilTrip = (startDate: string) => {
@@ -946,16 +1155,6 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleShareTrip(trip);
-                    }}
-                    className={`${pendingCount > 0 ? 'flex-1' : 'flex-1'} px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:shadow-md transition-all text-sm font-medium flex items-center justify-center gap-2 whitespace-nowrap`}
-                  >
-                    <i className="ri-share-line"></i>
-                    Compartilhar
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
                       setEditingTrip(trip);
                       setActiveSubTab('newtrip');
                     }}
@@ -968,11 +1167,12 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedTrip(trip);
-                      setShowCollaboratorsModal(true);
+                      setShowShareModal(true);
                     }}
                     className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+                    title="Compartilhar Viagem"
                   >
-                    <i className="ri-group-line text-lg"></i>
+                    <i className="ri-share-forward-line text-lg"></i>
                   </button>
                   <button
                     onClick={(e) => {
@@ -1907,6 +2107,15 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
             <span className="text-sm font-medium">Viagens</span>
           </button>
 
+          <button
+            onClick={() => setActiveSubTab('shared')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'shared' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+              }`}
+          >
+            <i className="ri-group-line"></i>
+            <span className="text-sm font-medium">Compartilhadas</span>
+          </button>
+
 
           <button
             onClick={() => setActiveSubTab('stats')}
@@ -1957,6 +2166,79 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
 
       {/* Content */}
       {activeSubTab === 'trips' && renderTripsContent()}
+      {activeSubTab === 'shared' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {trips.filter(t => t.isShared).length > 0 ? (
+            trips.filter(t => t.isShared).map(trip => {
+              const statusBadge = getStatusBadge(trip.status);
+              const daysUntil = getDaysUntilTrip(trip.start_date);
+              const pendingCount = getPendingSuggestionsCount(trip);
+
+              return (
+                <div
+                  key={trip.id}
+                  onClick={() => handleTripClick(trip)}
+                  className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group border-2 border-purple-100"
+                >
+                  {/* Cover Image */}
+                  <div className="relative h-48 overflow-hidden">
+                    <img
+                      src={
+                        trip.cover_image ||
+                        `https://readdy.ai/api/search-image?query=${trip.destination}%20beautiful%20travel%20destination%20scenic%20view&width=400&height=300&seq=trip-${trip.id}&orientation=landscape`
+                      }
+                      alt={trip.title}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+
+                    <div className="absolute top-3 right-3">
+                      <div className="px-3 py-1 bg-purple-500 text-white rounded-full text-xs font-bold shadow-lg flex items-center gap-1">
+                        <i className="ri-group-line"></i>
+                        Compartilhada Comigo
+                      </div>
+                    </div>
+
+                    <div className="absolute bottom-3 left-3 right-3">
+                      <h3 className="text-white font-bold text-lg mb-1">{trip.title}</h3>
+                      <div className="flex items-center gap-2 text-white/90 text-sm">
+                        <i className="ri-map-pin-line"></i>
+                        <span>{trip.destination}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold">
+                        {trip.user_id.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Compartilhado por</p>
+                        <p className="text-sm font-semibold text-gray-900">Proprietário da Viagem</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium text-sm">
+                        Visualizar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="col-span-3 text-center py-12 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i className="ri-group-line text-3xl text-purple-500"></i>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Nenhuma viagem compartilhada</h3>
+              <p className="text-gray-600">Viagens compartilhadas com você aparecerão aqui.</p>
+            </div>
+          )}
+        </div>
+      )}
       {activeSubTab === 'newtrip' && (
         <CreateTripForm
           onCancel={() => {
@@ -1980,437 +2262,330 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
       {activeSubTab === 'retrospectives' && renderRetrospectivesContent()}
 
       {/* Share Modal */}
+      {/* Share Modal */}
       {showShareModal && selectedTrip && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 text-white p-6 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                  <i className="ri-share-line text-2xl"></i>
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold">Compartilhar Viagens</h2>
-                  <p className="text-white/90 text-sm">{selectedTrip.title}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowShareModal(false)}
-                className="w-10 h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
-              >
-                <i className="ri-close-line text-2xl"></i>
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {/* Share Link */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Link de Compartilhamento
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={shareLink}
-                    readOnly
-                    className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 text-sm"
-                  />
-                  <button
-                    onClick={handleCopyLink}
-                    className="px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
-                  >
-                    <i className="ri-file-copy-line"></i>
-                    Copiar
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Qualquer pessoa com este link poderá visualizar sua viagem
-                </p>
-              </div>
-
-              {/* Invite by Email */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Convidar por E-mail
-                </label>
-                <div className="space-y-3">
-                  <input
-                    type="email"
-                    value={shareEmail}
-                    onChange={(e) => setShareEmail(e.target.value)}
-                    placeholder="email@exemplo.com"
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-700"
-                  />
-
-                  {/* Permission Selector */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setSharePermission('view')}
-                      className={`p-4 rounded-xl border-2 transition-all text-left ${sharePermission === 'view' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <i className="ri-eye-line text-xl text-purple-500"></i>
-                        <h4 className="font-semibold text-gray-900 text-sm">Visualizar</h4>
-                      </div>
-                      <p className="text-xs text-gray-600">Pode ver a viagem</p>
-                    </button>
-
-                    <button
-                      onClick={() => setSharePermission('edit')}
-                      className={`p-4 rounded-xl border-2 transition-all text-left ${sharePermission === 'edit' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <i className="ri-edit-line text-xl text-purple-500"></i>
-                        <h4 className="font-semibold text-gray-900 text-sm">Editar</h4>
-                      </div>
-                      <p className="text-xs text-gray-600">Pode sugerir mudanças</p>
-                    </button>
-                  </div>
-
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                    <div className="flex gap-3">
-                      <i className="ri-information-line text-blue-500 text-xl flex-shrink-0"></i>
-                      <div>
-                        <h4 className="font-semibold text-blue-900 text-sm mb-1">Sistema de Aprovação</h4>
-                        <p className="text-xs text-blue-700">
-                          Colaboradores com permissão de edição podem sugerir mudanças, mas todas as alterações precisam ser aprovadas por você antes de serem aplicadas ao roteiro.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleInviteUser}
-                    disabled={!shareEmail}
-                    className="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap"
-                  >
-                    <i className="ri-send-plane-fill"></i>
-                    Enviar Convite
-                  </button>
-                </div>
-              </div>
-
-              {/* Current Collaborators */}
-              {selectedTrip.sharedWith && selectedTrip.sharedWith.length > 0 && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    Colaboradores ({selectedTrip.sharedWith.length})
-                  </label>
-                  <div className="space-y-2">
-                    {selectedTrip.sharedWith.map((user) => (
-                      <div
-                        key={user.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
-                      >
-                        <div className="flex items-center gap-3">
-                          <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full object-cover" />
-                          <div>
-                            <h4 className="font-bold text-gray-900">{user.name}</h4>
-                            <p className="text-xs text-gray-500 capitalize">{user.permission}</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleRemoveCollaborator(user.id)}
-                          className="text-red-500 hover:text-red-600 transition-colors"
-                        >
-                          <i className="ri-close-line text-xl"></i>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <ShareTripModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          trip={selectedTrip}
+          networkUsers={networkUsers}
+          onShare={handleShare}
+          onPublish={handlePublish}
+        />
       )}
 
       {/* Collaborators Modal */}
-      {showCollaboratorsModal && selectedTrip && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 text-white p-6 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                  <i className="ri-group-line text-2xl"></i>
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold">Gerenciar Colaboradores</h2>
-                  <p className="text-white/90 text-sm">{selectedTrip.title}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowCollaboratorsModal(false)}
-                className="w-10 h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
-              >
-                <i className="ri-close-line text-2xl"></i>
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {selectedTrip.sharedWith && selectedTrip.sharedWith.length > 0 ? (
-                <div className="space-y-4">
-                  {selectedTrip.sharedWith.map((user) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center gap-4">
-                        <img src={user.avatar} alt={user.name} className="w-14 h-14 rounded-full object-cover" />
-                        <div>
-                          <h4 className="font-bold text-gray-900">{user.name}</h4>
-                          <p className="text-sm text-gray-500">Entrou {new Date(user.joinedAt).toLocaleDateString('pt-BR')}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <select
-                          value={user.permission}
-                          onChange={(e) => handleChangePermission(user.id, e.target.value as any)}
-                          className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-purple-500"
-                        >
-                          <option value="view">👁️ Visualizar</option>
-                          <option value="edit">✏️ Editar (Sugerir)</option>
-                          <option value="admin">👑 Admin</option>
-                        </select>
-
-                        <button
-                          onClick={() => handleRemoveCollaborator(user.id)}
-                          className="w-10 h-10 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors flex items-center justify-center"
-                        >
-                          <i className="ri-delete-bin-line"></i>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-purple-100 to-pink-100 flex items-center justify-center">
-                    <i className="ri-group-line text-4xl text-purple-500"></i>
+      {
+        showCollaboratorsModal && selectedTrip && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 text-white p-6 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                    <i className="ri-group-line text-2xl"></i>
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Nenhum colaborador ainda</h3>
-                  <p className="text-gray-600 mb-6">Compartilhe esta viagem para começar a colaborar!</p>
-                  <button
-                    onClick={() => {
-                      setShowCollaboratorsModal(false);
-                      handleShareTrip(selectedTrip);
-                    }}
-                    className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
-                  >
-                    Compartilhar Viagens
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Suggestions Review Modal */}
-      {showSuggestionsModal && selectedTrip && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-yellow-500 via-orange-500 to-pink-500 text-white p-6 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                  <i className="ri-notification-3-line text-2xl"></i>
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold">Revisar Sugestões</h2>
-                  <p className="text-white/90 text-sm">{selectedTrip.title}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowSuggestionsModal(false)}
-                className="w-10 h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
-              >
-                <i className="ri-close-line text-2xl"></i>
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {selectedTrip.pendingSuggestions && selectedTrip.pendingSuggestions.length > 0 ? (
-                <div className="space-y-4">
-                  {/* Tabs */}
-                  <div className="flex gap-2 border-b border-gray-200 pb-4">
-                    <button className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg font-medium text-sm">
-                      Pendentes ({selectedTrip.pendingSuggestions.filter(s => s.status === 'pending').length})
-                    </button>
-                    <button className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium text-sm hover:bg-gray-200">
-                      Aprovadas ({selectedTrip.pendingSuggestions.filter(s => s.status === 'approved').length})
-                    </button>
-                    <button className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium text-sm hover:bg-gray-200">
-                      Rejeitadas ({selectedTrip.pendingSuggestions.filter(s => s.status === 'rejected').length})
-                    </button>
+                  <div>
+                    <h2 className="text-2xl font-bold">Gerenciar Colaboradores</h2>
+                    <p className="text-white/90 text-sm">{selectedTrip.title}</p>
                   </div>
+                </div>
+                <button
+                  onClick={() => setShowCollaboratorsModal(false)}
+                  className="w-10 h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
 
-                  {/* Suggestions List */}
-                  {selectedTrip.pendingSuggestions
-                    .filter(s => s.status === 'pending')
-                    .map((suggestion) => (
+              {/* Content */}
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                {selectedTrip.sharedWith && selectedTrip.sharedWith.length > 0 ? (
+                  <div className="space-y-4">
+                    {selectedTrip.sharedWith.map((user) => (
                       <div
-                        key={suggestion.id}
-                        className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-2xl p-6"
+                        key={user.id}
+                        className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors"
                       >
-                        {/* Suggestion Header */}
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-start gap-4">
-                            <img src={suggestion.userAvatar} alt={suggestion.userName} className="w-12 h-12 rounded-full object-cover" />
-                            <div>
-                              <h4 className="font-bold text-gray-900">{suggestion.userName}</h4>
-                              <p className="text-sm text-gray-600">{getTimeAgo(suggestion.createdAt)}</p>
-                            </div>
-                          </div>
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getSuggestionColor(suggestion.type).replace('text-', 'bg-')}/20`}>
-                            <i className={`${getSuggestionIcon(suggestion.type)} text-xl ${getSuggestionColor(suggestion.type)}`}></i>
+                        <div className="flex items-center gap-4">
+                          <img src={user.avatar} alt={user.name} className="w-14 h-14 rounded-full object-cover" />
+                          <div>
+                            <h4 className="font-bold text-gray-900">{user.name}</h4>
+                            <p className="text-sm text-gray-500">Entrou {new Date(user.joinedAt).toLocaleDateString('pt-BR')}</p>
                           </div>
                         </div>
 
-                        {/* Suggestion Content */}
-                        <div className="bg-white rounded-xl p-4 mb-4">
-                          <h5 className="font-semibold text-gray-900 mb-2">{suggestion.description}</h5>
-                          <div className="text-sm text-gray-600">
-                            <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(suggestion.data, null, 2)}</pre>
-                          </div>
-                        </div>
-
-                        {/* Comments Section */}
-                        {suggestion.comments && suggestion.comments.length > 0 && (
-                          <div className="bg-white rounded-xl p-4 mb-4 space-y-3">
-                            <h6 className="font-semibold text-gray-900 text-sm mb-3">💬 Comentários ({suggestion.comments.length})</h6>
-                            {suggestion.comments.map((comment) => (
-                              <div key={comment.id} className="flex gap-3">
-                                <img src={comment.userAvatar} alt={comment.userName} className="w-8 h-8 rounded-full object-cover" />
-                                <div className="flex-1">
-                                  <div className="bg-gray-50 rounded-lg p-3">
-                                    <h6 className="font-semibold text-gray-900 text-sm">{comment.userName}</h6>
-                                    <p className="text-sm text-gray-700">{comment.text}</p>
-                                  </div>
-                                  <p className="text-xs text-gray-500 mt-1">{getTimeAgo(comment.created_at)}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Add Comment */}
-                        <div className="bg-white rounded-xl p-4 mb-4">
-                          <div className="flex gap-3">
-                            <input
-                              type="text"
-                              value={selectedSuggestion?.id === suggestion.id ? commentText : ''}
-                              onChange={(e) => {
-                                setSelectedSuggestion(suggestion);
-                                setCommentText(e.target.value);
-                              }}
-                              placeholder="Adicionar um comentário..."
-                              className="flex-1 px-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
-                              onKeyPress={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleAddComment(suggestion.id);
-                                }
-                              }}
-                            />
-                            <button
-                              onClick={() => handleAddComment(suggestion.id)}
-                              disabled={!commentText.trim()}
-                              className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <i className="ri-send-plane-fill"></i>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleApproveSuggestion(suggestion.id)}
-                            className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                        <div className="flex items-center gap-3">
+                          <select
+                            value={user.permission}
+                            onChange={(e) => handleChangePermission(user.id, e.target.value as any)}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-purple-500"
                           >
-                            <i className="ri-check-line text-xl"></i>
-                            Aprovar e Aplicar
-                          </button>
+                            <option value="view">👁️ Visualizar</option>
+                            <option value="edit">✏️ Editar (Sugerir)</option>
+                            <option value="admin">👑 Admin</option>
+                          </select>
+
                           <button
-                            onClick={() => handleRejectSuggestion(suggestion.id)}
-                            className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                            onClick={() => handleRemoveCollaborator(user.id)}
+                            className="w-10 h-10 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors flex items-center justify-center"
                           >
-                            <i className="ri-close-line text-xl"></i>
-                            Rejeitar
+                            <i className="ri-delete-bin-line"></i>
                           </button>
                         </div>
                       </div>
                     ))}
-
-                  {selectedTrip.pendingSuggestions.filter(s => s.status === 'pending').length === 0 && (
-                    <div className="text-center py-12">
-                      <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-green-100 to-emerald-100 flex items-center justify-center">
-                        <i className="ri-check-line text-4xl text-green-500"></i>
-                      </div>
-                      <h3 className="text-xl font-bold text-gray-900 mb-2">Tudo revisado!</h3>
-                      <p className="text-gray-600">Não há sugestões pendentes no momento.</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-yellow-100 to-orange-100 flex items-center justify-center">
-                    <i className="ri-lightbulb-line text-4xl text-yellow-500"></i>
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Nenhuma sugestão ainda</h3>
-                  <p className="text-gray-600 mb-6">Quando colaboradores sugerirem mudanças, elas aparecerão aqui para sua aprovação.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Retrospective Detail Modal */}
-      {selectedRetrospective && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedRetrospective(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="relative w-full h-64 sm:h-96">
-              <img
-                src={selectedRetrospective.coverImage}
-                alt={selectedRetrospective.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedRetrospective(null);
-                }}
-                className="absolute top-4 right-4 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors"
-              >
-                <i className="ri-close-line text-2xl"></i>
-              </button>
-
-              <div className="absolute bottom-6 left-6 right-6 text-white">
-                <h1 className="text-3xl sm:text-4xl font-bold mb-4">
-                  {selectedRetrospective.title}
-                </h1>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-purple-100 to-pink-100 flex items-center justify-center">
+                      <i className="ri-group-line text-4xl text-purple-500"></i>
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Nenhum colaborador ainda</h3>
+                    <p className="text-gray-600 mb-6">Compartilhe esta viagem para começar a colaborar!</p>
+                    <button
+                      onClick={() => {
+                        setShowCollaboratorsModal(false);
+                        handleShareTrip(selectedTrip);
+                      }}
+                      className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
+                    >
+                      Compartilhar Viagens
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
+          </div>
+        )
+      }
 
-            <div className="p-6">
-              <button className="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                <i className="ri-share-line text-xl"></i>
-                Compartilhar Retrospectiva
-              </button>
+      {/* Suggestions Review Modal */}
+      {
+        showSuggestionsModal && selectedTrip && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-yellow-500 via-orange-500 to-pink-500 text-white p-6 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                    <i className="ri-notification-3-line text-2xl"></i>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold">Revisar Sugestões</h2>
+                    <p className="text-white/90 text-sm">{selectedTrip.title}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSuggestionsModal(false)}
+                  className="w-10 h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                {selectedTrip.pendingSuggestions && selectedTrip.pendingSuggestions.length > 0 ? (
+                  <div className="space-y-4">
+                    {/* Tabs */}
+                    <div className="flex gap-2 border-b border-gray-200 pb-4">
+                      <button className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg font-medium text-sm">
+                        Pendentes ({selectedTrip.pendingSuggestions.filter(s => s.status === 'pending').length})
+                      </button>
+                      <button className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium text-sm hover:bg-gray-200">
+                        Aprovadas ({selectedTrip.pendingSuggestions.filter(s => s.status === 'approved').length})
+                      </button>
+                      <button className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium text-sm hover:bg-gray-200">
+                        Rejeitadas ({selectedTrip.pendingSuggestions.filter(s => s.status === 'rejected').length})
+                      </button>
+                    </div>
+
+                    {/* Suggestions List */}
+                    {selectedTrip.pendingSuggestions
+                      .filter(s => s.status === 'pending')
+                      .map((suggestion) => (
+                        <div
+                          key={suggestion.id}
+                          className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-2xl p-6"
+                        >
+                          {/* Suggestion Header */}
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-start gap-4">
+                              <img src={suggestion.userAvatar} alt={suggestion.userName} className="w-12 h-12 rounded-full object-cover" />
+                              <div>
+                                <h4 className="font-bold text-gray-900">{suggestion.userName}</h4>
+                                <p className="text-sm text-gray-600">{getTimeAgo(suggestion.createdAt)}</p>
+                              </div>
+                            </div>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getSuggestionColor(suggestion.type).replace('text-', 'bg-')}/20`}>
+                              <i className={`${getSuggestionIcon(suggestion.type)} text-xl ${getSuggestionColor(suggestion.type)}`}></i>
+                            </div>
+                          </div>
+
+                          {/* Suggestion Content */}
+                          <div className="bg-white rounded-xl p-4 mb-4">
+                            <h5 className="font-semibold text-gray-900 mb-2">{suggestion.description}</h5>
+                            <div className="text-sm text-gray-600">
+                              <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(suggestion.data, null, 2)}</pre>
+                            </div>
+                          </div>
+
+                          {/* Comments Section */}
+                          {suggestion.comments && suggestion.comments.length > 0 && (
+                            <div className="bg-white rounded-xl p-4 mb-4 space-y-3">
+                              <h6 className="font-semibold text-gray-900 text-sm mb-3">💬 Comentários ({suggestion.comments.length})</h6>
+                              {suggestion.comments.map((comment) => (
+                                <div key={comment.id} className="flex gap-3">
+                                  <img src={comment.userAvatar} alt={comment.userName} className="w-8 h-8 rounded-full object-cover" />
+                                  <div className="flex-1">
+                                    <div className="bg-gray-50 rounded-lg p-3">
+                                      <h6 className="font-semibold text-gray-900 text-sm">{comment.userName}</h6>
+                                      <p className="text-sm text-gray-700">{comment.text}</p>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">{getTimeAgo(comment.created_at)}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Add Comment */}
+                          <div className="bg-white rounded-xl p-4 mb-4">
+                            <div className="flex gap-3">
+                              <input
+                                type="text"
+                                value={selectedSuggestion?.id === suggestion.id ? commentText : ''}
+                                onChange={(e) => {
+                                  setSelectedSuggestion(suggestion);
+                                  setCommentText(e.target.value);
+                                }}
+                                placeholder="Adicionar um comentário..."
+                                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleAddComment(suggestion.id);
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={() => handleAddComment(suggestion.id)}
+                                disabled={!commentText.trim()}
+                                className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <i className="ri-send-plane-fill"></i>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleApproveSuggestion(suggestion.id)}
+                              className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                            >
+                              <i className="ri-check-line text-xl"></i>
+                              Aprovar e Aplicar
+                            </button>
+                            <button
+                              onClick={() => handleRejectSuggestion(suggestion.id)}
+                              className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                            >
+                              <i className="ri-close-line text-xl"></i>
+                              Rejeitar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                    {selectedTrip.pendingSuggestions.filter(s => s.status === 'pending').length === 0 && (
+                      <div className="text-center py-12">
+                        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-green-100 to-emerald-100 flex items-center justify-center">
+                          <i className="ri-check-line text-4xl text-green-500"></i>
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Tudo revisado!</h3>
+                        <p className="text-gray-600">Não há sugestões pendentes no momento.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-yellow-100 to-orange-100 flex items-center justify-center">
+                      <i className="ri-lightbulb-line text-4xl text-yellow-500"></i>
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Nenhuma sugestão ainda</h3>
+                    <p className="text-gray-600 mb-6">Quando colaboradores sugerirem mudanças, elas aparecerão aqui para sua aprovação.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+
+      {/* Retrospective Detail Modal */}
+      {
+        selectedRetrospective && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedRetrospective(null)}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="relative w-full h-64 sm:h-96">
+                <img
+                  src={selectedRetrospective.coverImage}
+                  alt={selectedRetrospective.title}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRetrospective(null);
+                  }}
+                  className="absolute top-4 right-4 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+
+                <div className="absolute bottom-6 left-6 right-6 text-white">
+                  <h1 className="text-3xl sm:text-4xl font-bold mb-4">
+                    {selectedRetrospective.title}
+                  </h1>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <button className="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+                  <i className="ri-share-line text-xl"></i>
+                  Compartilhar Retrospectiva
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!tripToDelete}
+        onClose={() => setTripToDelete(null)}
+        onConfirm={confirmDeleteTrip}
+        title="Excluir Viagem?"
+        message={`Tem certeza que deseja excluir a viagem para "${tripToDelete?.destination}"? Essa ação não pode ser desfeita.`}
+        type="danger"
+        confirmText="Sim, excluir"
+        cancelText="Cancelar"
+      />
+
+      {/* Feedback Modal */}
+      <ConfirmationModal
+        isOpen={feedbackModal.isOpen}
+        onClose={() => setFeedbackModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={() => setFeedbackModal(prev => ({ ...prev, isOpen: false }))}
+        title={feedbackModal.title}
+        message={feedbackModal.message}
+        confirmText="OK"
+        cancelText=""
+        type={feedbackModal.type}
+      />
+    </div >
   );
 }

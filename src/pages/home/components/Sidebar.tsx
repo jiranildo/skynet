@@ -12,6 +12,8 @@ interface SidebarProps {
   onCreateClick?: () => void;
   activeTab?: 'feed' | 'explore' | 'reels';
   onTabChange?: (tab: 'feed' | 'explore' | 'reels') => void;
+  onWalletClick?: () => void;
+  onGamificationClick?: () => void;
 }
 
 export default function Sidebar({
@@ -19,7 +21,9 @@ export default function Sidebar({
   onReelsClick,
   onCreateClick,
   activeTab = 'feed',
-  onTabChange = () => { }
+  onTabChange = () => { },
+  onWalletClick,
+  onGamificationClick
 }: SidebarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [userProfile, setUserProfile] = useState<UserType | null>(null);
@@ -186,6 +190,54 @@ export default function Sidebar({
                   <i className="ri-goblet-line text-2xl"></i>
                 </div>
                 <span className="text-base">Adega</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                onClick={() => navigate('/travel?tab=marketplace')}
+                className="w-full flex items-center gap-4 px-3 py-3 rounded-xl hover:bg-gray-50 transition-all"
+              >
+                <div className="w-6 h-6 flex items-center justify-center">
+                  <i className="ri-store-2-line text-2xl"></i>
+                </div>
+                <span className="text-base">Marketplace</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                onClick={() => navigate('/travel?tab=blogs')}
+                className="w-full flex items-center gap-4 px-3 py-3 rounded-xl hover:bg-gray-50 transition-all"
+              >
+                <div className="w-6 h-6 flex items-center justify-center">
+                  <i className="ri-article-line text-2xl"></i>
+                </div>
+                <span className="text-base">Blogs</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                onClick={onWalletClick}
+                className="w-full flex items-center gap-4 px-3 py-3 rounded-xl hover:bg-gray-50 transition-all"
+              >
+                <div className="w-6 h-6 flex items-center justify-center">
+                  <i className="ri-wallet-line text-2xl"></i>
+                </div>
+                <span className="text-base">Carteira</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                onClick={onGamificationClick}
+                className="w-full flex items-center gap-4 px-3 py-3 rounded-xl hover:bg-gray-50 transition-all"
+              >
+                <div className="w-6 h-6 flex items-center justify-center">
+                  <i className="ri-trophy-line text-2xl"></i>
+                </div>
+                <span className="text-base">Conquistas</span>
               </button>
             </li>
 

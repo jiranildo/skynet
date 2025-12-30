@@ -141,8 +141,19 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
 
       let finalImageUrl = selectedImage;
 
+      // If it's a generated image (remote URL) and we don't have a raw file yet, fetch and upload it
+      if (selectedImage && selectedImage.startsWith('http') && !rawFile) {
+        try {
+          const response = await fetch(selectedImage);
+          const blob = await response.blob();
+          finalImageUrl = await uploadPostImage(blob);
+        } catch (err) {
+          console.error('Error persisting generated image:', err);
+          // Fallback to URL if upload fails (or handle error)
+        }
+      }
       // If it's a local file, upload it
-      if (rawFile) {
+      else if (rawFile) {
         finalImageUrl = await uploadPostImage(rawFile);
       }
 

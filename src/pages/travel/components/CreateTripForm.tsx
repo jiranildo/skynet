@@ -44,42 +44,59 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
         setIsGeneratingImage(true);
         setGenerationProgress(0);
 
-        // Use Pollinations AI with a random seed to ensure uniqueness
-        const seed = Math.floor(Math.random() * 100000);
-        const query = encodeURIComponent(`${tripForm.destination} travel scenic best quality 4k`);
-        const imageUrl = `https://image.pollinations.ai/prompt/${query}?width=1024&height=600&nologo=true&seed=${seed}`;
+        // 1. Primary Strategy: Pollinations.ai (Flux Model - "Gemini Level" Quality)
+        // We use the Flux model with a heavily optimized prompt for photorealism.
+        const seed = Math.floor(Math.random() * 1000000);
+        const timestamp = Date.now();
 
-        // Preload image
+        // "Gemini Style" Prompt Engineering
+        const enhancedPrompt = `professional travel photography of ${tripForm.destination}, establishing shot, hyperrealistic, 8k resolution, hdr, dramatic lighting, cinematic composition, sharp focus, no text, highly detailed, national geographic style`;
+        const query = encodeURIComponent(enhancedPrompt);
+
+        const primaryUrl = `https://image.pollinations.ai/prompt/${query}?width=1200&height=630&nologo=true&seed=${seed}&model=flux&t=${timestamp}`;
+
+        // 2. Fallback Strategy: Unsplash
+        const fallbackUrl = 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1200&auto=format&fit=crop';
+
         const img = new Image();
-        img.src = imageUrl;
 
-        // Fake progress animation up to 90%
+        // Progress Animation
         let progress = 0;
         const interval = setInterval(() => {
-            progress += Math.random() * 15;
-            if (progress > 90) progress = 90;
-            setGenerationProgress(progress);
+            if (progress < 90) {
+                progress += Math.random() * 15;
+                setGenerationProgress(Math.min(95, progress));
+            }
         }, 500);
 
-        img.onload = () => {
+        const finish = (url: string) => {
             clearInterval(interval);
             setGenerationProgress(100);
-
-            // Small delay to let user see 100%
             setTimeout(() => {
-                setTripForm(prev => ({ ...prev, coverImage: imageUrl }));
+                setTripForm(prev => ({ ...prev, coverImage: url }));
                 setIsGeneratingImage(false);
                 setGenerationProgress(0);
             }, 500);
         };
 
+        img.onload = () => finish(primaryUrl);
+
         img.onerror = () => {
-            clearInterval(interval);
-            setIsGeneratingImage(false);
-            setGenerationProgress(0);
-            alert('Não foi possível gerar a imagem. Tente novamente.');
+            console.warn('Primary AI generation failed, switching to fallback.');
+            const backupImg = new Image();
+            backupImg.onload = () => finish(fallbackUrl);
+            backupImg.onerror = () => {
+                clearInterval(interval);
+                setIsGeneratingImage(false);
+                setGenerationProgress(0);
+                alert('Não foi possível carregar a imagem. Verifique sua conexão.');
+            };
+            backupImg.src = fallbackUrl;
         };
+
+        img.src = primaryUrl;
     };
+
     const tripTypes = [
         { id: 'leisure', name: 'Lazer', icon: 'ri-sun-line', color: 'text-orange-500' },
         { id: 'business', name: 'Negócios', icon: 'ri-briefcase-line', color: 'text-blue-500' },

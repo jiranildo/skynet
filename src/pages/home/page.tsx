@@ -93,6 +93,8 @@ export default function HomePage() {
           onCreateClick={handleCreateClick}
           activeTab={activeTab}
           onTabChange={setActiveTab as any}
+          onWalletClick={() => setShowWallet(true)}
+          onGamificationClick={() => setShowGamification(true)}
         />
       </div>
 
@@ -243,6 +245,16 @@ export default function HomePage() {
                 ></div>
                 <div className="absolute bottom-full right-0 mb-2 w-auto bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[80] animate-slideUp">
                   <div className="flex flex-col gap-2 p-3">
+                    <button
+                      onClick={() => {
+                        window.REACT_APP_NAVIGATE('/travel?tab=marketplace');
+                        setShowMenuDropdown(false);
+                      }}
+                      className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                      title="Marketplace"
+                    >
+                      <i className="ri-store-2-fill text-white text-base"></i>
+                    </button>
                     <button
                       onClick={() => {
                         setShowWallet(true);

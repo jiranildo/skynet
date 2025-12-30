@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import SearchTab from './components/SearchTab';
 import CreateTripModal from './components/CreateTripModal';
 import FlightsTab from './components/FlightsTab';
@@ -26,7 +27,16 @@ import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 type TabType = 'search' | 'flights' | 'hotels' | 'packages' | 'cars' | 'cruises' | 'tickets' | 'transfer' | 'insurance' | 'mytrips' | 'favorites' | 'offers' | 'marketplace' | 'blogs';
 
 export default function TravelPage() {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<TabType>('search');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam && ['search', 'flights', 'hotels', 'packages', 'cars', 'cruises', 'tickets', 'transfer', 'insurance', 'mytrips', 'favorites', 'offers', 'marketplace', 'blogs'].includes(tabParam)) {
+      setActiveTab(tabParam as TabType);
+    }
+  }, [location.search]);
   const [showCreateTripModal, setShowCreateTripModal] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
@@ -296,6 +306,16 @@ export default function TravelPage() {
                 ></div>
                 <div className="absolute bottom-full right-0 mb-2 w-auto bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[80] animate-slideUp">
                   <div className="flex flex-col gap-2 p-3">
+                    <button
+                      onClick={() => {
+                        setActiveTab('marketplace');
+                        setShowMenuDropdown(false);
+                      }}
+                      className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                      title="Marketplace"
+                    >
+                      <i className="ri-store-2-fill text-white text-base"></i>
+                    </button>
                     <button
                       onClick={() => {
                         setActiveTab('blogs');

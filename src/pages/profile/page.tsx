@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import CreateMenu from '../../components/CreateMenu';
 import CreatePostModal from '../home/components/CreatePostModal';
@@ -7,48 +7,111 @@ import NotificationsPanel from '../home/components/NotificationsPanel';
 import GamificationWidget from '../../components/GamificationWidget';
 import WalletWidget from '../../components/WalletWidget';
 import EditProfileModal from './components/EditProfileModal';
-import HeaderActions from '../../components/HeaderActions'; // Added this import
-import { ensureUserProfile, getFeedPosts, FeedPost, User as UserType, getUser, savedPostService } from '../../services/supabase';
+import HeaderActions from '../../components/HeaderActions';
+import {
+  ensureUserProfile,
+  getFeedPosts,
+  FeedPost,
+  User as UserType,
+  getUser,
+  getUserByUsername,
+  savedPostService,
+  followUser,
+  unfollowUser,
+  checkIfReelLiked,
+  getReelsByUser
+} from '../../services/supabase';
+import { supabase } from '../../services/supabase';
 
 type TabType = 'posts' | 'reels' | 'saved' | 'tagged';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { userId: routeUserId } = useParams<{ userId: string }>();
+  const { user: authUser, loading: authLoading, signOut } = useAuth();
+
   const [activeTab, setActiveTab] = useState<TabType>('posts');
   const [userProfile, setUserProfile] = useState<UserType | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [reels, setReels] = useState<any[]>([]);
   const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
+
+  // Determine which user ID we are viewing
+  const targetUserId = routeUserId || authUser?.id;
+  const isOwnProfile = authUser && targetUserId === authUser.id;
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !authUser && !routeUserId) {
       navigate('/login');
     }
-  }, [user, authLoading, navigate]);
+  }, [authUser, authLoading, routeUserId, navigate]);
 
   const [showCreatePost, setShowCreatePost] = useState(false);
-  const [, setShowReels] = useState(false);
+  const [showReels, setShowReels] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [showMenuDropdown, setShowMenuDropdown] = useState(false);
   const [showGamification, setShowGamification] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
 
+  // Load Profile Data
   useEffect(() => {
     const loadProfileAndPosts = async () => {
-      if (!user) return;
+      if (!targetUserId) return;
+
       try {
         setIsLoadingProfile(true);
-        // Using ensureUserProfile to create a profile if it doesn't exist
-        const profile = await ensureUserProfile();
+
+        let profile: UserType | null = null;
+
+        if (isOwnProfile) {
+          profile = await ensureUserProfile();
+        } else {
+          // Check if targetUserId is a UUID
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetUserId);
+
+          if (isUuid) {
+            profile = await getUser(targetUserId);
+          } else {
+            // Try fetching by username
+            try {
+              profile = await getUserByUsername(targetUserId);
+            } catch (e) {
+              console.warn("User not found by username, assuming ID or invalid");
+            }
+          }
+        }
+
         if (profile) {
           setUserProfile(profile);
-          const userPosts = await getFeedPosts(20, 0, user.id);
+          const realUserId = profile.id; // Use the resolved UUID
+
+          // Fetch posts for this user
+          const userPosts = await getFeedPosts(20, 0, realUserId);
           setPosts(userPosts);
+
+          // Fetch reels for this user
+          try {
+            const userReels = await getReelsByUser(realUserId);
+            setReels(userReels);
+          } catch (e) {
+            console.error("Error loading reels:", e);
+          }
+
+          // If viewing another user, check if following
+          if (!isOwnProfile && authUser) {
+            const { count } = await supabase
+              .from('followers')
+              .select('*', { count: 'exact', head: true })
+              .eq('follower_id', authUser.id)
+              .eq('following_id', realUserId);
+
+            setIsFollowing(!!count);
+          }
         }
       } catch (error) {
         console.error("Error loading profile data:", error);
@@ -57,16 +120,66 @@ export default function ProfilePage() {
       }
     };
 
-    if (user) {
-      loadProfileAndPosts();
+    loadProfileAndPosts();
+  }, [targetUserId, authUser, isOwnProfile]);
+
+  // Handle Follow/Unfollow
+  const handleFollowToggle = async () => {
+    if (!authUser || !userProfile || isFollowLoading) {
+      console.warn("Follow aborted: Missing authUser, userProfile, or loading.", { authUser, userProfile, isFollowLoading });
+      return;
     }
-  }, [user]);
+
+    const followerId = authUser.id;
+    const followingId = userProfile.id;
+
+    console.log(`Attempting to ${isFollowing ? 'unfollow' : 'follow'} user.`, { followerId, followingId });
+
+    setIsFollowLoading(true);
+    // Optimistic update
+    const previousState = isFollowing;
+    const previousFollowers = userProfile?.followers_count || 0;
+
+    setIsFollowing(!previousState);
+    if (userProfile) {
+      setUserProfile({
+        ...userProfile,
+        followers_count: previousState ? previousFollowers - 1 : previousFollowers + 1
+      });
+    }
+
+    try {
+      if (previousState) {
+        await unfollowUser(followerId, followingId);
+        console.log("Unfollow successful");
+      } else {
+        await followUser(followerId, followingId);
+        console.log("Follow successful");
+      }
+    } catch (error: any) {
+      console.error("Error toggling follow:", error);
+      alert(`Erro ao seguir/deixar de seguir: ${error.message || JSON.stringify(error)}`);
+
+      // Revert on error
+      setIsFollowing(previousState);
+      if (userProfile) {
+        setUserProfile({
+          ...userProfile,
+          followers_count: previousFollowers
+        });
+      }
+    } finally {
+      setIsFollowLoading(false);
+    }
+  };
+
 
   useEffect(() => {
-    if (activeTab === 'saved' && user && savedPosts.length === 0) {
+    if (activeTab === 'saved' && isOwnProfile && savedPosts.length === 0) {
       const loadSaved = async () => {
+        if (!authUser) return;
         try {
-          const data = await savedPostService.getSavedPosts(user.id);
+          const data = await savedPostService.getSavedPosts(authUser.id);
           setSavedPosts(data);
         } catch (error) {
           console.error("Error loading saved posts:", error);
@@ -74,9 +187,9 @@ export default function ProfilePage() {
       };
       loadSaved();
     }
-  }, [activeTab, user, savedPosts.length]);
+  }, [activeTab, isOwnProfile, authUser, savedPosts.length]);
 
-  if (authLoading || isLoadingProfile) {
+  if (authLoading && !userProfile) { // Show loading only if we have no profile data yet
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
         <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -85,34 +198,33 @@ export default function ProfilePage() {
     );
   }
 
-  // Fallback if profile still null but not loading
+  // Safe fallback
   const currentProfile = userProfile || {
-    id: user?.id || '',
-    username: user?.email?.split('@')[0] || 'user',
-    full_name: user?.user_metadata?.full_name || 'Usuário',
-    avatar_url: user?.user_metadata?.avatar_url,
+    id: targetUserId || '',
+    username: '...',
+    full_name: 'Usuário',
+    avatar_url: undefined,
     bio: '',
     website: '',
     followers_count: 0,
     following_count: 0,
     posts_count: 0,
-    is_admin: false,
-    created_at: '',
-    updated_at: ''
+    privacy_setting: 'public'
   } as UserType;
 
-
-  const tabs = [
-    { id: 'posts' as TabType, icon: 'ri-grid-line', label: 'Posts' },
-    { id: 'reels' as TabType, icon: 'ri-movie-line', label: 'Reels' },
-    { id: 'saved' as TabType, icon: 'ri-bookmark-line', label: 'Salvos' },
-    { id: 'tagged' as TabType, icon: 'ri-user-line', label: 'Marcações' },
-  ];
 
   const menuItems = [
     { icon: 'ri-wallet-line', label: 'Carteira', action: () => setShowWallet(true) },
     { icon: 'ri-trophy-line', label: 'Conquistas', action: () => setShowGamification(true) },
     { icon: 'ri-settings-3-line', label: 'Editar Perfil', action: () => setShowEditProfile(true) },
+    {
+      icon: 'ri-logout-box-line',
+      label: 'Sair',
+      action: async () => {
+        await signOut();
+        navigate('/login');
+      }
+    },
   ];
 
   const handleCreateClick = () => {
@@ -142,21 +254,20 @@ export default function ProfilePage() {
               className="hover:scale-110 transition-transform"
             >
               <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-gray-700 via-gray-600 to-gray-800 bg-clip-text text-transparent">
-                Perfil
+                {isOwnProfile ? 'Meu Perfil' : `Perfil de @${currentProfile.username}`}
               </h1>
             </button>
             <HeaderActions
               onShowNotifications={() => setShowNotifications(true)}
-              showMenu={true}
+              showMenu={isOwnProfile} // Only show full menu on own profile
               onShowMenu={() => setShowMenu(true)}
             />
           </div>
         </div>
       </header>
 
-      {/* Profile Sections & UI unchanged except for using profile data */}
-      {/* Menu Lateral (Drawer) */}
-      {showMenu && (
+      {/* Menu Lateral (Drawer) - Only for Own Profile */}
+      {showMenu && isOwnProfile && (
         <>
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 animate-fadeIn"
@@ -199,7 +310,7 @@ export default function ProfilePage() {
                   className="w-full flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-gray-50 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 rounded-xl transition-all group"
                 >
                   <div className="w-10 h-10 bg-gradient-to-r from-gray-700 to-gray-900 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <i className={`${item.icon} text - white text - base md: text - lg`}></i>
+                    <i className={`${item.icon} text-white text-base md:text-lg`}></i>
                   </div>
                   <span className="flex-1 text-left font-medium text-gray-700 group-hover:text-gray-900 text-sm md:text-base">
                     {item.label}
@@ -227,22 +338,39 @@ export default function ProfilePage() {
                 <div className="flex flex-col sm:flex-row items-center gap-3 mb-3">
                   <h2 className="text-xl md:text-2xl font-bold text-gray-900">{currentProfile.full_name || currentProfile.username}</h2>
                   <p className="text-gray-500 text-sm">@{currentProfile.username}</p>
+
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowEditProfile(true)}
-                      className="px-4 md:px-6 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-all whitespace-nowrap text-sm"
-                    >
-                      Editar Perfil
-                    </button>
-                    <button
-                      onClick={() => setIsFollowing(!isFollowing)}
-                      className={`px - 4 md: px - 6 py - 2 rounded - lg font - medium transition - all whitespace - nowrap text - sm ${isFollowing
-                        ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white hover:from-orange-600 hover:to-pink-600 font-bold'
-                        } `}
-                    >
-                      {isFollowing ? 'Seguindo' : 'Seguir'}
-                    </button>
+                    {isOwnProfile ? (
+                      <button
+                        onClick={() => setShowEditProfile(true)}
+                        className="px-4 md:px-6 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-all whitespace-nowrap text-sm"
+                      >
+                        Editar Perfil
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleFollowToggle}
+                        disabled={isFollowLoading}
+                        className={`px-6 py-2 rounded-xl font-semibold transition-all shadow-sm flex items-center gap-2 ${isFollowing
+                          ? 'bg-gray-100 text-gray-800 border border-gray-300 hover:bg-gray-200 hover:border-gray-400'
+                          : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white hover:from-orange-600 hover:to-pink-600 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {isFollowLoading ? (
+                          <i className="ri-loader-4-line animate-spin text-lg"></i>
+                        ) : isFollowing ? (
+                          <>
+                            <i className="ri-user-check-fill text-lg"></i>
+                            Seguindo
+                          </>
+                        ) : (
+                          <>
+                            <i className="ri-user-add-line text-lg"></i>
+                            Seguir
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -275,71 +403,121 @@ export default function ProfilePage() {
                     >
                       <i className="ri-link"></i>
                       {currentProfile.website.replace(/^https?:\/\//, '')}
-                    </a >
+                    </a>
                   )}
-                </div >
-              </div >
-            </div >
-          </div >
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Tabs */}
-          < div className="bg-white rounded-xl shadow-sm mb-4" >
+          <div className="bg-white rounded-xl shadow-sm mb-4">
             <div className="flex border-b border-gray-200">
-              {tabs.map((tab) => (
+              <button
+                onClick={() => setActiveTab('posts')}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'posts'
+                  ? 'text-gray-900 border-b-2 border-gray-900'
+                  : 'text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                <i className="ri-grid-line text-base sm:text-lg"></i>
+                <span className="hidden sm:inline text-xs sm:text-sm font-medium">Posts</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('reels')}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'reels'
+                  ? 'text-gray-900 border-b-2 border-gray-900'
+                  : 'text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                <i className="ri-movie-line text-base sm:text-lg"></i>
+                <span className="hidden sm:inline text-xs sm:text-sm font-medium">Reels</span>
+              </button>
+
+              {isOwnProfile && (
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === tab.id
+                  onClick={() => setActiveTab('saved')} // Only owner can see saved
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'saved'
                     ? 'text-gray-900 border-b-2 border-gray-900'
                     : 'text-gray-500 hover:text-gray-700'
                     }`}
                 >
-                  <i className={`${tab.icon} text-base sm:text-lg`}></i>
-                  <span className="hidden sm:inline text-xs sm:text-sm font-medium">{tab.label}</span>
+                  <i className="ri-bookmark-line text-base sm:text-lg"></i>
+                  <span className="hidden sm:inline text-xs sm:text-sm font-medium">Salvos</span>
                 </button>
-              ))}
+              )}
+
+              <button
+                onClick={() => setActiveTab('tagged')}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'tagged'
+                  ? 'text-gray-900 border-b-2 border-gray-900'
+                  : 'text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                <i className="ri-user-line text-base sm:text-lg"></i>
+                <span className="hidden sm:inline text-xs sm:text-sm font-medium">Marcações</span>
+              </button>
             </div>
-          </div >
+          </div>
 
           {/* Posts Grid */}
           {
-            (activeTab === 'posts' ? posts : activeTab === 'saved' ? savedPosts : []).length > 0 ? (
+            (activeTab === 'posts' ? posts : activeTab === 'reels' ? reels : activeTab === 'saved' ? savedPosts : []).length > 0 ? (
               <div className="grid grid-cols-3 gap-1 sm:gap-2">
-                {(activeTab === 'posts' ? posts : activeTab === 'saved' ? savedPosts : []).map((post) => (
+                {(activeTab === 'posts' ? posts : activeTab === 'reels' ? reels : activeTab === 'saved' ? savedPosts : []).map((item: any) => (
                   <div
-                    key={post.id}
+                    key={item.id}
                     className="relative aspect-square bg-gray-100 rounded-sm sm:rounded-lg overflow-hidden group cursor-pointer"
+                    onClick={() => {
+                      // TODO: Handle click (open post/reel modal)
+                    }}
                   >
-                    <img
-                      src={post.image}
-                      alt={`Post ${post.id}`}
-                      className="w-full h-full object-cover"
-                    />
+                    {activeTab === 'reels' ? (
+                      <video
+                        src={item.video_url}
+                        className="w-full h-full object-cover"
+                        muted
+                        playsInline
+                      />
+                    ) : (
+                      <img
+                        src={item.image || item.image_url}
+                        alt={`Post ${item.id}`}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                       <div className="flex items-center gap-1 text-white">
                         <i className="ri-heart-fill text-base sm:text-xl"></i>
-                        <span className="font-bold text-xs sm:text-sm">{post.likes}</span>
+                        <span className="font-bold text-xs sm:text-sm">{item.likes || item.likes_count}</span>
                       </div>
                       <div className="flex items-center gap-1 text-white">
-                        <i className="ri-chat-3-fill text-base sm:text-xl"></i>
-                        <span className="font-bold text-xs sm:text-sm">{post.comments}</span>
+                        <i className={`ri-${activeTab === 'reels' ? 'play-circle-fill' : 'chat-3-fill'} text-base sm:text-xl`}></i>
+                        <span className="font-bold text-xs sm:text-sm">{activeTab === 'reels' ? item.views_count : item.comments}</span>
                       </div>
                     </div>
+                    {activeTab === 'reels' && (
+                      <div className="absolute top-2 right-2 text-white">
+                        <i className="ri-movie-fill drop-shadow-md"></i>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             ) : (
               <div className="bg-white rounded-xl p-12 text-center text-gray-500">
-                <i className="ri-camera-lens-line text-4xl mb-4 block opacity-20"></i>
-                <p>Nenhuma postagem ainda.</p>
+                <i className={`ri-${activeTab === 'reels' ? 'movie' : 'camera-lens'}-line text-4xl mb-4 block opacity-20`}></i>
+                <p>Nenhuma {activeTab === 'reels' ? 'publicação (Reel)' : 'postagem'} ainda.</p>
               </div>
             )
           }
-        </div >
-      </div >
+        </div>
+      </div>
 
       {/* Mobile Navigation */}
-      < nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-40" >
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-40">
         <div className="flex items-center justify-around px-2 py-2 sm:py-3">
           <button onClick={() => window.REACT_APP_NAVIGATE('/')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
             <i className="ri-home-line text-xl sm:text-2xl"></i>
@@ -359,16 +537,26 @@ export default function ProfilePage() {
             <i className="ri-movie-line text-xl sm:text-2xl"></i>
             <span className="text-[9px] sm:text-[10px] font-medium">Reels</span>
           </button>
-          <button onClick={() => setShowMenu(true)} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
-            <i className="ri-menu-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Menu</span>
-          </button>
+          {isOwnProfile ? (
+            <button onClick={() => setShowMenu(true)} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
+              <i className="ri-menu-line text-xl sm:text-2xl"></i>
+              <span className="text-[9px] sm:text-[10px] font-medium">Menu</span>
+            </button>
+          ) : (
+            // If viewing another user, maybe show 'Profile' link to go back to own profile? For now, stick to standard
+            <button onClick={() => navigate('/profile')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
+              <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-300">
+                <img src={authUser?.user_metadata?.avatar_url || 'https://via.placeholder.com/30'} alt="Me" className="w-full h-full object-cover" />
+              </div>
+              <span className="text-[9px] sm:text-[10px] font-medium">Eu</span>
+            </button>
+          )}
         </div>
-      </nav >
+      </nav>
 
       {/* Modals */}
       {
-        showEditProfile && (
+        showEditProfile && isOwnProfile && (
           <EditProfileModal
             userProfile={currentProfile}
             onClose={() => setShowEditProfile(false)}
@@ -397,6 +585,6 @@ export default function ProfilePage() {
           </div>
         )
       }
-    </div >
+    </div>
   );
 }

@@ -80,6 +80,13 @@ export interface Trip {
   isShared?: boolean;
   owner?: string;
   permissions?: string;
+  visibility?: 'public' | 'followers' | 'private';
+  marketplaceConfig?: {
+    isListed: boolean;
+    price: number;
+    currency: 'TM' | 'BRL';
+    description?: string;
+  };
 }
 
 export interface Message {
@@ -89,6 +96,40 @@ export interface Message {
   content: string;
   is_read: boolean;
   created_at: string;
+  group_id?: string;
+  community_id?: string;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  avatar_url?: string;
+  created_by: string;
+  created_at: string;
+  members_count: number;
+  last_message?: string;
+  last_message_at?: string;
+  is_public?: boolean;
+}
+
+export interface Community {
+  id: string;
+  name: string;
+  description?: string;
+  avatar_url?: string;
+  cover_image?: string;
+  created_at: string;
+  members_count: number;
+  category: string;
+  is_public: boolean;
+}
+
+export interface GroupMember {
+  group_id: string;
+  user_id: string;
+  role: 'admin' | 'member';
+  joined_at: string;
 }
 
 export interface Conversation {
@@ -314,6 +355,23 @@ export const getReels = async () => {
         avatar_url
       )
     `)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as (Reel & { users: User })[];
+};
+
+export const getReelsByUser = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('reels')
+    .select(`
+      *,
+      users (
+        username,
+        avatar_url
+      )
+    `)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -714,12 +772,18 @@ export const getRecentStories = async () => {
   return Array.from(usersMap.values());
 };
 
-export const uploadPostImage = async (file: File) => {
+export const uploadPostImage = async (file: File | Blob) => {
   return uploadFile('posts', file);
 };
 
-export const uploadFile = async (bucket: string, file: File) => {
-  const fileExt = file.name.split('.').pop();
+export const uploadFile = async (bucket: string, file: File | Blob) => {
+  let fileExt = 'png'; // Default for blobs if type not found
+  if (file instanceof File) {
+    fileExt = file.name.split('.').pop() || 'png';
+  } else if (file.type) {
+    fileExt = file.type.split('/')[1] || 'png';
+  }
+
   const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
   const filePath = `${fileName}`;
 
@@ -775,10 +839,19 @@ export const deletePost = async (postId: string) => {
 // ==================== VIAGENS ====================
 
 export const getTrips = async (userId: string) => {
+  // Fetch trips where user is owner OR user is in sharedWith
+  // Since sharedWith is inside metadata JSONB, checking for existence of an element in a JSON array can be complex with simple OR.
+  // For simplicity and to ensure we get both, we might need a complex query or filtering.
+
+  // Try to use the OR syntax with JSON containment if supported, otherwise falling back to fetching and filtering might be needed
+  // but let's try a robust approach assuming 'metadata' column exists.
+
   const { data, error } = await supabase
     .from('trips')
     .select('*')
-    .eq('user_id', userId)
+    // We want trips where (user_id = userId) OR (metadata->sharedWith @> '[{"id": "userId"}]')
+    // Note: JSON containment operator @> requires correct spacing/formatting in raw SQL or filter
+    .or(`user_id.eq.${userId},metadata->sharedWith.cs.[{"id": "${userId}"}]`)
     .order('start_date', { ascending: false });
 
   if (error) throw error;
@@ -787,14 +860,109 @@ export const getTrips = async (userId: string) => {
   return data.map((t: any) => ({
     ...t,
     sharedWith: t.metadata?.sharedWith,
-    pendingSuggestions: t.metadata?.pendingSuggestions
+    pendingSuggestions: t.metadata?.pendingSuggestions,
+    marketplaceConfig: t.metadata?.marketplaceConfig,
+    isShared: t.user_id !== userId // Mark as shared if not owned by current user
   })) as Trip[];
+};
+
+
+export const getMarketplaceTrips = async () => {
+  // Query marketplace_listings joined with trips and users (sellers)
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .select(`
+      *,
+      trip:trips (
+        *,
+        users:user_id (
+          id,
+          username,
+          full_name,
+          avatar_url,
+          privacy_setting,
+          followers_count,
+          posts_count
+        )
+      )
+    `)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  // Map to Trip structure with injected marketplace info
+  return data.map((listing: any) => ({
+    ...listing.trip,
+    marketplaceConfig: {
+      isListed: true,
+      price: listing.price,
+      currency: listing.currency,
+      description: listing.description
+    },
+    seller: listing.trip.users,
+    listing_id: listing.id // Keep reference to listing ID
+  })) as (Trip & { seller: User, listing_id: string })[];
+};
+
+export const createMarketplaceListing = async (listing: {
+  trip_id: string;
+  seller_id: string;
+  title: string;
+  description: string;
+  price: number;
+  currency: string;
+  category?: string;
+}) => {
+  const { data, error } = await supabase
+    .from('marketplace_listings')
+    .upsert([{ ...listing, is_active: true }], { onConflict: 'trip_id' })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const deleteMarketplaceListing = async (tripId: string) => {
+  const { error } = await supabase
+    .from('marketplace_listings')
+    .delete()
+    .eq('trip_id', tripId);
+
+  if (error) throw error;
+};
+
+
+
+export const getNetworkUsers = async (userId: string) => {
+  // Get users that the current user receives posts from (followings) 
+  // OR users that follow the current user. "Network" usually implies mutual or one-way connection.
+  // Let's get people the user follows for now (following_id).
+
+  const { data, error } = await supabase
+    .from('followers')
+    .select(`
+      following_id,
+      users:following_id (
+        id,
+        username,
+        full_name,
+        avatar_url
+      )
+    `)
+    .eq('follower_id', userId);
+
+  if (error) throw error;
+
+  // Transform to simple User array
+  return data.map((item: any) => item.users) as User[];
 };
 
 export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated_at'>) => {
   // Extract UI fields to metadata
-  const { sharedWith, pendingSuggestions, ...rest } = trip;
-  const metadata = { ...(trip as any).metadata, sharedWith, pendingSuggestions };
+  const { sharedWith, pendingSuggestions, marketplaceConfig, ...rest } = trip;
+  const metadata = { ...(trip as any).metadata, sharedWith, pendingSuggestions, marketplaceConfig };
 
   const { data, error } = await supabase
     .from('trips')
@@ -807,37 +975,26 @@ export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated
   return {
     ...data,
     sharedWith: data.metadata?.sharedWith,
-    pendingSuggestions: data.metadata?.pendingSuggestions
+    pendingSuggestions: data.metadata?.pendingSuggestions,
+    marketplaceConfig: data.metadata?.marketplaceConfig
   } as Trip;
 };
 
 export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
   // Extract UI fields to metadata
-  const { sharedWith, pendingSuggestions, metadata: existingMeta, ...rest } = updates;
+  const { sharedWith, pendingSuggestions, marketplaceConfig, metadata: existingMeta, ...rest } = updates;
 
   let payload: any = { ...rest, updated_at: new Date().toISOString() };
 
-  if (sharedWith !== undefined || pendingSuggestions !== undefined || existingMeta !== undefined) {
-    // We need to merge metadata. 
-    // Note: This simple merge assumes we have previous metadata or don't care about overwriting if we don't fetch it first.
-    // Ideally we should fetch, but for efficiency we might just patch.
-    // Supabase doesn't support deep merge patch easily without raw SQL or function.
-    // But we can just assume `updates` contains the new state for these fields.
+  // Fix: We must spread existingMeta FIRST, then override with new values.
+  // Otherwise, old metadata overwrites the new updates.
+  payload.metadata = {
+    ...existingMeta,
+  };
 
-    // However, to preserve other metadata fields, we might need to be careful.
-    // For now, I'll construct a metadata object.
-    // If the caller passes 'metadata', use it, else empty object?
-    // Actually, if we want to UPDATE, we might overwrite existing metadata if we just send { sharedWith } as metadata.
-    // But `jsonb` update in Supabase (Postgres) usually replaces the column value unless we use `jsonb_set`.
-    // The standard `update` replaces the column.
-    // So we risk losing data if we don't read first.
-    // BUT, for this app, `sharedWith` and `pendingSuggestions` ARE the metadata.
-    payload.metadata = {
-      sharedWith,
-      pendingSuggestions,
-      ...existingMeta
-    };
-  }
+  if (sharedWith !== undefined) payload.metadata.sharedWith = sharedWith;
+  if (pendingSuggestions !== undefined) payload.metadata.pendingSuggestions = pendingSuggestions;
+  if (marketplaceConfig !== undefined) payload.metadata.marketplaceConfig = marketplaceConfig;
 
   const { data, error } = await supabase
     .from('trips')
@@ -851,7 +1008,8 @@ export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
   return {
     ...data,
     sharedWith: data.metadata?.sharedWith,
-    pendingSuggestions: data.metadata?.pendingSuggestions
+    pendingSuggestions: data.metadata?.pendingSuggestions,
+    marketplaceConfig: data.metadata?.marketplaceConfig
   } as Trip;
 };
 
@@ -867,6 +1025,7 @@ export const deleteTrip = async (tripId: string) => {
 // ==================== MENSAGENS ====================
 
 export const getConversationsWithDetails = async (userId: string) => {
+  console.log('Fetching conversations for user:', userId);
   const { data, error } = await supabase
     .from('conversations')
     .select(`
@@ -877,7 +1036,12 @@ export const getConversationsWithDetails = async (userId: string) => {
     .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
     .order('last_message_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    console.error('Error fetching conversations:', error);
+    throw error;
+  }
+
+  console.log('Fetched conversations count:', data?.length || 0);
 
   // Transform to friendlier format
   return data.map((c: any) => {
@@ -889,22 +1053,42 @@ export const getConversationsWithDetails = async (userId: string) => {
   });
 };
 
-export const getMessages = async (conversationId: string) => {
-  const { data, error } = await supabase
-    .from('messages')
-    .select(`
-      *,
-      sender:users!messages_sender_id_fkey(username, avatar_url)
-    `)
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true });
+export const getOrCreateConversation = async (otherUserId: string) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Usuário não autenticado');
 
-  if (error) throw error;
-  return data;
+  const userId1 = user.id;
+  const userId2 = otherUserId;
+
+  // Sort IDs to match the UNIQUE(user1_id, user2_id) logic if we decide to enforce order
+  // For now, let's just check both possibilities or use the sorted approach
+  const [sorted1, sorted2] = [userId1, userId2].sort();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('user1_id', sorted1)
+    .eq('user2_id', sorted2)
+    .maybeSingle();
+
+  if (existing) return existing;
+
+  const { data: newConv, error: createError } = await supabase
+    .from('conversations')
+    .insert({
+      user1_id: sorted1,
+      user2_id: sorted2,
+      last_message_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+
+  if (createError) throw createError;
+  return newConv;
 };
 
-// ... sendMessage ...
-// ... markMessageAsRead ...
+
+
 
 export const getNotificationsWithDetails = async (userId: string) => {
   const { data, error } = await supabase
@@ -919,17 +1103,6 @@ export const getNotificationsWithDetails = async (userId: string) => {
 
   if (error) throw error;
   return data;
-};
-
-export const sendMessage = async (message: Omit<Message, 'id' | 'created_at' | 'is_read'>) => {
-  const { data, error } = await supabase
-    .from('messages')
-    .insert(message)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as Message;
 };
 
 export const markMessageAsRead = async (messageId: string) => {
@@ -1140,6 +1313,39 @@ export const getFollowing = async (userId: string) => {
 
   if (error) throw error;
   return data as Follower[];
+};
+
+export const getFollowingWithDetails = async (userId: string) => {
+  // Step 1: Get the IDs of users being followed
+  const { data: relationData, error: relationError } = await supabase
+    .from('followers')
+    .select('following_id')
+    .eq('follower_id', userId);
+
+  if (relationError) {
+    console.error('Error fetching follower relations:', relationError);
+    throw relationError;
+  }
+
+  // If no following, return empty immediately
+  if (!relationData || relationData.length === 0) {
+    return [];
+  }
+
+  const followingIds = relationData.map(r => r.following_id);
+
+  // Step 2: Fetch the actual user details for these IDs
+  const { data: usersData, error: usersError } = await supabase
+    .from('users')
+    .select('id, username, full_name, avatar_url')
+    .in('id', followingIds);
+
+  if (usersError) {
+    console.error('Error fetching user details:', usersError);
+    throw usersError;
+  }
+
+  return usersData || [];
 };
 
 // ==================== FAVORITOS DE VIAGEM ====================
@@ -2047,6 +2253,350 @@ export const searchPosts = async (query: string) => {
     `)
     .ilike('caption', `%${query}%`)
     .limit(10);
+
+  if (error) throw error;
+  return data;
+};
+
+// ==================== GRUPOS & COMUNIDADES (CRUD COMPLETO) ====================
+
+// --- GRUPOS ---
+
+export const createGroup = async (name: string, description: string, members: string[]) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Usuário não autenticado');
+
+  // 1. Create Group
+  const { data: group, error: groupError } = await supabase
+    .from('groups')
+    .insert({
+      name,
+      description,
+      created_by: user.id
+    })
+    .select()
+    .single();
+
+  if (groupError) throw groupError;
+
+  // 2. Add members (including creator as admin)
+  const membersToAdd = [
+    { group_id: group.id, user_id: user.id, role: 'admin' },
+    ...members.map(memberId => ({ group_id: group.id, user_id: memberId, role: 'member' }))
+  ];
+
+  const { error: membersError } = await supabase
+    .from('group_members')
+    .insert(membersToAdd);
+
+  if (membersError) {
+    console.error('Error adding group members:', membersError);
+    // Ideally rollback group here
+    throw membersError;
+  }
+
+  return group;
+};
+
+export const getGroups = async (userId: string) => {
+  // Fetch groups where user is a member OR creator
+
+  // 1. Get groups by membership
+  const { data: memberData, error: memberError } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('user_id', userId);
+
+  if (memberError) throw memberError;
+
+  // 2. Get groups by ownership (created_by)
+  const { data: ownedData, error: ownedError } = await supabase
+    .from('groups')
+    .select('id')
+    .eq('created_by', userId);
+
+  if (ownedError) throw ownedError;
+
+  // Combine IDs
+  const groupIds = new Set([
+    ...(memberData?.map((item: any) => item.group_id) || []),
+    ...(ownedData?.map((item: any) => item.id) || [])
+  ]);
+
+  if (groupIds.size === 0) return [];
+
+  const { data: groupsData, error: groupsError } = await supabase
+    .from('groups')
+    .select('*')
+    .in('id', Array.from(groupIds));
+
+  if (groupsError) throw groupsError;
+
+  return groupsData as Group[];
+};
+
+export const updateGroup = async (groupId: string, updates: Partial<Group>) => {
+  const { data, error } = await supabase
+    .from('groups')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', groupId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Group;
+};
+
+export const deleteGroup = async (groupId: string) => {
+  const { error } = await supabase
+    .from('groups')
+    .delete()
+    .eq('id', groupId);
+
+  if (error) throw error;
+};
+
+export const leaveGroup = async (groupId: string) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Usuário não autenticado');
+
+  const { error } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+};
+
+
+// --- COMUNIDADES ---
+
+export const createCommunity = async (name: string, description: string, category: string, isPublic: boolean) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Usuário não autenticado');
+
+  // 1. Create Community
+  const { data: community, error: commError } = await supabase
+    .from('communities')
+    .insert({
+      name,
+      description,
+      category,
+      is_public: isPublic,
+      created_by: user.id
+    })
+    .select()
+    .single();
+
+  if (commError) throw commError;
+
+  // 2. Add creator as admin
+  const { error: memberError } = await supabase
+    .from('community_members')
+    .insert({
+      community_id: community.id,
+      user_id: user.id,
+      role: 'admin'
+    });
+
+  if (memberError) {
+    console.error('Error adding community admin:', memberError);
+    throw memberError;
+  }
+
+  return community;
+};
+
+export const getCommunities = async () => {
+  // Fetch communities the user is a member of OR created (My Communities)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  console.log('Fetching communities for user:', user.id);
+
+  // 1. Get communities by membership
+  const { data: memberData, error: memberError } = await supabase
+    .from('community_members')
+    .select('community_id')
+    .eq('user_id', user.id);
+
+  if (memberError) {
+    console.error('Error fetching community memberships:', memberError);
+    throw memberError;
+  }
+
+  // 2. Get communities by ownership
+  const { data: ownedData, error: ownedError } = await supabase
+    .from('communities')
+    .select('id')
+    .eq('created_by', user.id);
+
+  if (ownedError) {
+    console.error('Error fetching owned communities:', ownedError);
+    // Don't throw, just continue with members? No, safer to throw or log
+    throw ownedError;
+  }
+
+  const communityIds = new Set([
+    ...(memberData?.map((item: any) => item.community_id) || []),
+    ...(ownedData?.map((item: any) => item.id) || [])
+  ]);
+
+  console.log('Found Community IDs (Member + Owned):', Array.from(communityIds));
+
+  if (communityIds.size === 0) return [];
+
+  const { data: communitiesData, error: commError } = await supabase
+    .from('communities')
+    .select('*')
+    .in('id', Array.from(communityIds));
+
+  if (commError) {
+    console.error('Error fetching community details:', commError);
+    throw commError;
+  }
+
+  console.log('Fetched Communities Data count:', communitiesData?.length || 0);
+  return communitiesData as Community[];
+};
+
+export const getAllCommunities = async () => {
+  // Fetch ALL public communities (for discovery)
+  const { data, error } = await supabase
+    .from('communities')
+    .select('*')
+    .eq('is_public', true)
+    .order('members_count', { ascending: false });
+
+  if (error) throw error;
+  return data as Community[];
+};
+
+export const updateCommunity = async (communityId: string, updates: Partial<Community>) => {
+  const { data, error } = await supabase
+    .from('communities')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', communityId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Community;
+};
+
+export const deleteCommunity = async (communityId: string) => {
+  const { error } = await supabase
+    .from('communities')
+    .delete()
+    .eq('id', communityId);
+
+  if (error) throw error;
+};
+
+export const joinCommunity = async (communityId: string) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Usuário não autenticado');
+
+  // Check if already member
+  const { data: existing } = await supabase
+    .from('community_members')
+    .select('id')
+    .eq('community_id', communityId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (existing) return; // Already a member
+
+  const { error } = await supabase
+    .from('community_members')
+    .insert({
+      community_id: communityId,
+      user_id: user.id,
+      role: 'member'
+    });
+
+  if (error) throw error;
+};
+
+export const leaveCommunity = async (communityId: string) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Usuário não autenticado');
+
+  const { error } = await supabase
+    .from('community_members')
+    .delete()
+    .eq('community_id', communityId)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+};
+
+export const getMessages = async (chatId: string, type: 'direct' | 'group' | 'community') => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return []; // Should handle auth better
+
+  let query = supabase
+    .from('messages')
+    .select(`
+      *,
+      sender:users!sender_id (
+        username,
+        avatar_url
+      )
+    `)
+    .order('created_at', { ascending: true });
+
+  if (type === 'direct') {
+    // Logic for direct messages (requires complex OR with current user)
+    // Simplified: assuming chatId matches the conversation ID or other user ID logic handled higher up
+    // For now, let's assume chatId IS the conversation/connection ID
+    query = query.eq('conversation_id', chatId);
+  } else if (type === 'group') {
+    query = query.eq('group_id', chatId);
+  } else if (type === 'community') {
+    query = query.eq('community_id', chatId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return data.map((msg: any) => ({
+    id: msg.id,
+    text: msg.content,
+    sender: msg.sender_id === (user?.id) ? 'me' : msg.sender?.username, // Simplify for UI
+    avatar: msg.sender?.avatar_url,
+    time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    created_at: msg.created_at,
+    sender_id: msg.sender_id // Add this for precise ID checks
+  }));
+};
+
+export const sendMessage = async (chatId: string, type: 'direct' | 'group' | 'community', content: string) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Usuário não autenticado');
+
+  const payload: any = {
+    sender_id: user.id,
+    content,
+    created_at: new Date().toISOString()
+  };
+
+  if (type === 'direct') {
+    // Determine receiver or use conversation_id
+    // payload.receiver_id = chatId; 
+    payload.conversation_id = chatId; // Assume chatId is conversation ID for simplicity
+  } else if (type === 'group') {
+    payload.group_id = chatId;
+  } else if (type === 'community') {
+    payload.community_id = chatId;
+  }
+
+  const { data, error } = await supabase
+    .from('messages')
+    .insert(payload)
+    .select()
+    .single();
 
   if (error) throw error;
   return data;

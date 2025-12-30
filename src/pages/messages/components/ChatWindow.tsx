@@ -1,342 +1,604 @@
+
 import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/services/supabase';
+import { format } from 'date-fns';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
+import { AlertModal } from '@/components/AlertModal';
+import { getMessages, sendMessage, uploadAttachment, deleteMessage, updateLastSeen, getChatHeaderInfo, ChatMessage } from '@/services/messages/chatService';
+import { RealtimeManager } from '@/services/messages/realtimeService';
+import EditGroupModal from './EditGroupModal';
+import GroupInfoModal from './GroupInfoModal';
+import { CameraCaptureModal } from './CameraCaptureModal';
 
 interface ChatWindowProps {
-  chatId: string | null;
-  onBack?: () => void;
+    chatId: string;
+    type: 'direct' | 'group' | 'community';
+    onBack: () => void;
 }
 
-const chatData: Record<string, any> = {
-  'sarah': {
-    type: 'direct',
-    name: 'Sarah Johnson',
-    username: 'sarahjohnson',
-    online: true,
-    avatar: 'https://readdy.ai/api/search-image?query=professional%20woman%20portrait%20smiling%20friendly%20face%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-1&orientation=squarish',
-    messages: [
-      { id: 1, text: 'Hey! How are you doing?', sender: 'them', time: '10:30', avatar: 'https://readdy.ai/api/search-image?query=professional%20woman%20portrait%20smiling%20friendly%20face%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-1&orientation=squarish' },
-      { id: 2, text: 'I\'m great! Just finished working on a new project', sender: 'me', time: '10:32' },
-      { id: 3, text: 'That\'s awesome! What kind of project?', sender: 'them', time: '10:33', avatar: 'https://readdy.ai/api/search-image?query=professional%20woman%20portrait%20smiling%20friendly%20face%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-1&orientation=squarish' },
-      { id: 4, text: 'It\'s a social media platform with some cool AI features', sender: 'me', time: '10:35' },
-      { id: 5, text: 'That sounds amazing! Let\'s do it 🎉', sender: 'them', time: '10:36', avatar: 'https://readdy.ai/api/search-image?query=professional%20woman%20portrait%20smiling%20friendly%20face%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-1&orientation=squarish' }
-    ]
-  },
-  'wine-lovers': {
-    type: 'group',
-    name: 'Wine Lovers 🍷',
-    members: 24,
-    avatar: 'https://readdy.ai/api/search-image?query=elegant%20wine%20glasses%20red%20wine%20tasting%20sophisticated%20ambiance%20warm%20lighting&width=100&height=100&seq=group-wine-lovers&orientation=squarish',
-    messages: [
-      { id: 1, text: 'Alguém já experimentou o Malbec argentino?', sender: 'Alex', time: '09:15', avatar: 'https://readdy.ai/api/search-image?query=professional%20person%20portrait%20friendly%20smile%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-4&orientation=squarish' },
-      { id: 2, text: 'Sim! É excelente. Recomendo o Catena Zapata', sender: 'me', time: '09:18' },
-      { id: 3, text: 'Concordo! Esse é um dos melhores', sender: 'Maria', time: '09:20', avatar: 'https://readdy.ai/api/search-image?query=woman%20portrait%20cheerful%20expression%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-5&orientation=squarish' },
-      { id: 4, text: 'Vou experimentar esse fim de semana 🍷', sender: 'Carlos', time: '09:25', avatar: 'https://readdy.ai/api/search-image?query=man%20portrait%20confident%20smile%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-8&orientation=squarish' }
-    ]
-  },
-  'travel-community': {
-    type: 'community',
-    name: 'Viajantes do Mundo 🌍',
-    members: 1247,
-    avatar: 'https://readdy.ai/api/search-image?query=world%20travel%20destinations%20iconic%20landmarks%20passport%20adventure%20map%20globe%20international%20tourism&width=100&height=100&seq=community-travel&orientation=squarish',
-    messages: [
-      { id: 1, text: 'Dicas para viajar pela Europa em 2025?', sender: 'Maria', time: '08:30', avatar: 'https://readdy.ai/api/search-image?query=woman%20portrait%20cheerful%20expression%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-5&orientation=squarish' },
-      { id: 2, text: 'Comece por Portugal e Espanha! Clima ótimo e preços acessíveis', sender: 'João', time: '08:35', avatar: 'https://readdy.ai/api/search-image?query=man%20portrait%20professional%20smile%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-6&orientation=squarish' },
-      { id: 3, text: 'Não esqueça de visitar a Itália! Roma é imperdível', sender: 'me', time: '08:40' },
-      { id: 4, text: 'Ótimas dicas! Vou anotar tudo 📝', sender: 'Maria', time: '08:42', avatar: 'https://readdy.ai/api/search-image?query=woman%20portrait%20cheerful%20expression%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-5&orientation=squarish' }
-    ]
-  },
-  'mike': {
-    type: 'direct',
-    name: 'Mike Chen',
-    username: 'mikechen',
-    online: true,
-    avatar: 'https://readdy.ai/api/search-image?query=professional%20man%20portrait%20confident%20smile%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-2&orientation=squarish',
-    messages: [
-      { id: 1, text: 'Did you see the latest updates?', sender: 'them', time: '09:15', avatar: 'https://readdy.ai/api/search-image?query=professional%20man%20portrait%20confident%20smile%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-2&orientation=squarish' },
-      { id: 2, text: 'Yes! They look fantastic', sender: 'me', time: '09:20' },
-      { id: 3, text: 'Thanks for sharing!', sender: 'them', time: '09:22', avatar: 'https://readdy.ai/api/search-image?query=professional%20man%20portrait%20confident%20smile%20modern%20photography%20clean%20background&width=100&height=100&seq=chat-avatar-2&orientation=squarish' }
-    ]
-  }
-};
+const realtimeManager = new RealtimeManager();
 
-export default function ChatWindow({ chatId, onBack }: ChatWindowProps) {
-  const [newMessage, setNewMessage] = useState('');
-  const [chat, setChat] = useState<any>(null);
-  const [showCallMenu, setShowCallMenu] = useState(false);
-  const [isInCall, setIsInCall] = useState(false);
-  const [callType, setCallType] = useState<'voice' | 'video' | null>(null);
-  const [callDuration, setCallDuration] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    const [headerInfo, setHeaderInfo] = useState<{ name: string; avatar?: string; subtitle?: string; isOnline?: boolean; createdBy?: string } | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { }
+    });
 
-  useEffect(() => {
-    if (chatId !== null) {
-      setChat(chatData[chatId]);
-    }
-  }, [chatId]);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [inputText, setInputText] = useState('');
+    const [loading, setLoading] = useState(true);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [sending, setSending] = useState(false);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chat?.messages]);
+    // Rich Features State
+    const [showEmoji, setShowEmoji] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploading, setUploading] = useState(false);
+    const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+    const [alertState, setAlertState] = useState<{ isOpen: boolean; title: string; message: string; type: 'danger' | 'warning' | 'info' | 'success' }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        type: 'info'
+    });
 
-  useEffect(() => {
-    let interval: any;
-    if (isInCall) {
-      interval = setInterval(() => {
-        setCallDuration(prev => prev + 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isInCall]);
+    // Modal States
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+    const [showCamera, setShowCamera] = useState(false);
+    const [showAttachMenu, setShowAttachMenu] = useState(false);
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newMessage.trim() && chat) {
-      const newMsg = {
-        id: chat.messages.length + 1,
-        text: newMessage,
-        sender: 'me',
-        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-      };
-      setChat({ ...chat, messages: [...chat.messages, newMsg] });
-      setNewMessage('');
-    }
-  };
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
+    }, []);
 
-  const startCall = (type: 'voice' | 'video') => {
-    setCallType(type);
-    setIsInCall(true);
-    setCallDuration(0);
-    setShowCallMenu(false);
-  };
+    // Load Header Info
+    useEffect(() => {
+        getChatHeaderInfo(chatId, type).then(info => {
+            if (info) setHeaderInfo(info);
+        });
+    }, [chatId, type]);
 
-  const endCall = () => {
-    setIsInCall(false);
-    setCallType(null);
-    setCallDuration(0);
-  };
+    // Fetch and Subscribe
+    useEffect(() => {
+        setLoading(true);
+        const scope = type === 'group' ? { groupId: chatId }
+            : type === 'community' ? { communityId: chatId }
+                : { conversationId: chatId };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+        getMessages(scope)
+            .then(msgs => {
+                setMessages(msgs);
+                setLoading(false);
+                scrollToBottom();
+            })
+            .catch(err => {
+                console.error('Failed to load messages', err);
+                setLoading(false);
+            });
 
-  if (!chat) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-white h-full">
-        <div className="text-center px-4">
-          <div className="w-24 h-24 mx-auto mb-4 flex items-center justify-center">
-            <i className="ri-message-3-line text-7xl text-gray-300"></i>
-          </div>
-          <h3 className="text-xl font-semibold mb-2">Suas Mensagens</h3>
-          <p className="text-gray-500 text-sm">Envie mensagens privadas para amigos ou participe de grupos e comunidades</p>
-        </div>
-      </div>
-    );
-  }
+        const handleNewMessage = (msg: any) => {
+            setMessages(prev => {
+                if (prev.some(m => m.id === msg.id)) return prev;
+                return [...prev, msg as ChatMessage];
+            });
+            scrollToBottom();
+        };
 
-  return (
-    <div className="flex flex-col h-full bg-white relative">
-      {/* Call Overlay */}
-      {isInCall && (
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 z-50 flex flex-col items-center justify-center">
-          <div className="text-center mb-8">
-            <div className="w-32 h-32 mx-auto mb-6 rounded-full overflow-hidden border-4 border-white/20">
-              <img
-                src={chat.avatar}
-                alt={chat.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-2">{chat.name}</h3>
-            <p className="text-white/70 text-lg">{formatDuration(callDuration)}</p>
-          </div>
+        if (type === 'direct') realtimeManager.subscribeToChat(chatId, handleNewMessage);
+        else if (type === 'group') realtimeManager.subscribeToGroup(chatId, handleNewMessage);
+        else if (type === 'community') realtimeManager.subscribeToCommunity(chatId, handleNewMessage);
 
-          <div className="flex items-center gap-6">
-            {callType === 'video' && (
-              <button className="w-14 h-14 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors">
-                <i className="ri-camera-off-line text-2xl text-white"></i>
-              </button>
-            )}
-            <button className="w-14 h-14 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors">
-              <i className="ri-mic-off-line text-2xl text-white"></i>
-            </button>
-            <button 
-              onClick={endCall}
-              className="w-16 h-16 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors shadow-lg"
-            >
-              <i className="ri-phone-line text-3xl text-white"></i>
-            </button>
-            <button className="w-14 h-14 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors">
-              <i className="ri-volume-up-line text-2xl text-white"></i>
-            </button>
-            {callType === 'video' && (
-              <button className="w-14 h-14 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors">
-                <i className="ri-camera-switch-line text-2xl text-white"></i>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+        return () => {
+            realtimeManager.unsubscribeAll();
+        };
+    }, [chatId, type]);
 
-      {/* Chat Header */}
-      <div className="border-b border-gray-200 p-4 bg-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="lg:hidden hover:bg-gray-100 p-2 rounded-full transition-colors -ml-2"
-              >
-                <i className="ri-arrow-left-line text-xl"></i>
-              </button>
-            )}
-            <div className="relative">
-              <div className="w-10 h-10 rounded-full overflow-hidden">
-                <img 
-                  src={chat.avatar}
-                  alt={chat.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              {chat.type === 'direct' && chat.online && (
-                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-              )}
-            </div>
-            <div>
-              <h3 className="font-semibold text-base flex items-center gap-2">
-                {chat.name}
-                {chat.type === 'group' && (
-                  <i className="ri-group-line text-sm text-gray-500"></i>
-                )}
-                {chat.type === 'community' && (
-                  <i className="ri-global-line text-sm text-gray-500"></i>
-                )}
-              </h3>
-              <p className="text-xs text-gray-500">
-                {chat.type === 'direct' 
-                  ? (chat.online ? 'Ativo agora' : 'Ativo há 2h')
-                  : `${chat.members} membros`
+    const scrollToBottom = () => {
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    };
+
+    // Update Last Seen
+    useEffect(() => {
+        updateLastSeen(chatId, type);
+        const interval = setInterval(() => updateLastSeen(chatId, type), 60000);
+        return () => clearInterval(interval);
+    }, [chatId, type]);
+
+    const handleSend = async (content?: string, msgType: 'text' | 'image' = 'text') => {
+        const textToSend = content !== undefined ? content : inputText;
+        if (!textToSend.trim() && msgType === 'text') return;
+
+        setSending(true);
+        try {
+            const params: any = { content: textToSend, type: msgType };
+            if (type === 'direct') params.conversationId = chatId;
+            if (type === 'group') params.groupId = chatId;
+            if (type === 'community') params.communityId = chatId;
+
+            if (replyTo) params.replyToId = replyTo.id;
+
+            let newMsg = await sendMessage(params);
+
+            // Manually attach reply_to info since we removed it from the insert select
+            if (replyTo) {
+                newMsg = { ...newMsg, reply_to: replyTo };
+            }
+
+            setMessages(prev => {
+                const exists = prev.some(m => m.id === newMsg.id);
+                if (exists) return prev.map(m => m.id === newMsg.id ? newMsg : m);
+                return [...prev, newMsg];
+            });
+            if (msgType === 'text') setInputText('');
+            setReplyTo(null);
+            scrollToBottom();
+            setShowEmoji(false);
+        } catch (e: any) {
+            console.error('Send Error:', e);
+            setAlertState({
+                isOpen: true,
+                title: 'Falha ao Enviar',
+                message: `Erro: ${e.message || JSON.stringify(e)}`,
+                type: 'danger'
+            });
+        } finally {
+            setSending(false);
+        }
+    };
+
+    const handleHeaderClick = () => {
+        if (type === 'direct') return;
+
+        if (headerInfo?.createdBy === currentUser?.id) {
+            setIsEditModalOpen(true);
+        } else {
+            setIsInfoModalOpen(true);
+        }
+    };
+
+    const onEmojiClick = (emojiData: EmojiClickData) => {
+        setInputText(prev => prev + emojiData.emoji);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const file = e.target.files[0];
+
+        // Validate
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            setAlertState({ isOpen: true, title: 'Arquivo muito grande', message: 'O arquivo deve ter no máximo 5MB.', type: 'warning' });
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const publicUrl = await uploadAttachment(file);
+            setUploading(false);
+            setShowAttachMenu(false); // Close menu if open
+
+            // Send Image Message
+            await sendMessage({
+                content: publicUrl,
+                type: 'image',
+                replyToId: replyTo?.id,
+                ...(type === 'group' ? { groupId: chatId } : type === 'community' ? { communityId: chatId } : { conversationId: chatId })
+            });
+
+            setReplyTo(null);
+            scrollToBottom();
+        } catch (error) {
+            console.error(error);
+            setUploading(false);
+            setAlertState({ isOpen: true, title: 'Erro', message: 'Falha ao enviar arquivo.', type: 'danger' });
+        }
+    };
+
+    const handleCameraCapture = async (imageSrc: string) => {
+        setUploading(true);
+        setShowCamera(false);
+        try {
+            // Convert Base64 to Blob
+            const res = await fetch(imageSrc);
+            const blob = await res.blob();
+            const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+            const publicUrl = await uploadAttachment(file);
+            setUploading(false);
+            setShowAttachMenu(false);
+
+            await sendMessage({
+                content: publicUrl,
+                type: 'image',
+                replyToId: replyTo?.id,
+                ...(type === 'group' ? { groupId: chatId } : type === 'community' ? { communityId: chatId } : { conversationId: chatId })
+            });
+            scrollToBottom();
+        } catch (error) {
+            console.error(error);
+            setUploading(false);
+            setAlertState({ isOpen: true, title: 'Erro', message: 'Falha ao enviar foto da câmera.', type: 'danger' });
+        }
+    };
+
+    const handleSendLocation = () => {
+        if (!navigator.geolocation) {
+            setAlertState({ isOpen: true, title: 'Erro', message: 'Geolocalização não suportada pelo navegador.', type: 'warning' });
+            return;
+        }
+
+        setUploading(true); // Reuse uploading spinner 
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+                const locationString = `https://www.google.com/maps?q=${latitude},${longitude}`;
+
+                // We send as 'text' for now, but formatted specially or could add 'location' type support if backend allows. 
+                // Assuming 'text' is safest fallback unless we change schema.
+                // Let's stick to text that renders nicely or create a 'location' type if we can't.
+                // The user asked to "enviar a localizacao".
+
+                try {
+                    await sendMessage({
+                        content: locationString,
+                        type: 'text', // Using text so it renders as a link.
+                        replyToId: replyTo?.id,
+                        ...(type === 'group' ? { groupId: chatId } : type === 'community' ? { communityId: chatId } : { conversationId: chatId })
+                    });
+                    setUploading(false);
+                    setShowAttachMenu(false);
+                    scrollToBottom();
+                } catch (error) {
+                    setUploading(false);
                 }
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {chat.type === 'direct' && (
-              <>
-                <div className="relative">
-                  <button 
-                    onClick={() => setShowCallMenu(!showCallMenu)}
-                    className="hover:bg-gray-100 p-2 rounded-full transition-colors"
-                  >
-                    <i className="ri-phone-line text-xl text-orange-500"></i>
-                  </button>
-                  {showCallMenu && (
-                    <>
-                      <div 
-                        className="fixed inset-0 z-40"
-                        onClick={() => setShowCallMenu(false)}
-                      ></div>
-                      <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50 w-48">
-                        <button
-                          onClick={() => startCall('voice')}
-                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                        >
-                          <i className="ri-phone-line text-lg text-orange-500"></i>
-                          <span className="text-sm font-medium">Chamada de Voz</span>
-                        </button>
-                        <button
-                          onClick={() => startCall('video')}
-                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-t border-gray-100"
-                        >
-                          <i className="ri-vidicon-line text-lg text-orange-500"></i>
-                          <span className="text-sm font-medium">Chamada de Vídeo</span>
-                        </button>
-                      </div>
-                    </>
-                  )}
+            },
+            (error) => {
+                console.error(error);
+                setUploading(false);
+                setAlertState({ isOpen: true, title: 'Erro', message: 'Não foi possível obter a localização.', type: 'warning' });
+            }
+        );
+    };
+
+    return (
+        <div className="flex flex-col h-full bg-[#EFE7DD] relative">
+            {/* WhatsApp Header */}
+            <div className="h-[60px] px-4 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between flex-shrink-0 z-20">
+                <div className="flex items-center gap-2">
+                    <button onClick={onBack} className="md:hidden p-2 -ml-2 text-[#00a884]">
+                        <i className="ri-arrow-left-line text-2xl"></i>
+                    </button>
+                    <div className="flex items-center gap-3 cursor-pointer" onClick={handleHeaderClick}>
+                        {/* Avatar & Info */}
+                        <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden">
+                            {headerInfo?.avatar ? (
+                                <img src={headerInfo.avatar} className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-500">
+                                    <i className="ri-user-fill text-xl"></i>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex flex-col justify-center">
+                            <h3 className="font-medium text-[#111b21] text-[16px] leading-tight">
+                                {headerInfo?.name || 'Carregando...'}
+                            </h3>
+                            <p className="text-[13px] text-[#667781] leading-none mt-0.5 truncate max-w-[200px]">
+                                {headerInfo?.subtitle || ''}
+                            </p>
+                        </div>
+                    </div>
                 </div>
-              </>
-            )}
-            <button className="hover:bg-gray-100 p-2 rounded-full transition-colors">
-              <i className="ri-information-line text-xl"></i>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-        {chat.messages.map((msg: any) => (
-          <div
-            key={msg.id}
-            className={`flex gap-2 ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}
-          >
-            {msg.sender !== 'me' && msg.avatar && (
-              <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
-                <img src={msg.avatar} alt="" className="w-full h-full object-cover" />
-              </div>
-            )}
-            <div className={`flex flex-col ${msg.sender === 'me' ? 'items-end' : 'items-start'}`}>
-              {msg.sender !== 'me' && chat.type !== 'direct' && (
-                <span className="text-xs font-medium text-gray-600 mb-1 px-1">{msg.sender}</span>
-              )}
-              <div
-                className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
-                  msg.sender === 'me'
-                    ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
-                    : 'bg-white text-gray-900 border border-gray-200'
-                }`}
-              >
-                <p className="text-sm break-words">{msg.text}</p>
-              </div>
-              <span className={`text-xs mt-1 px-1 ${msg.sender === 'me' ? 'text-gray-500' : 'text-gray-500'}`}>
-                {msg.time}
-              </span>
+                <div className="flex items-center gap-4 text-[#54656f]">
+                    <button>
+                        <i className="ri-vidicon-line text-xl"></i>
+                    </button>
+                    <button>
+                        <i className="ri-phone-line text-xl"></i>
+                    </button>
+                    <button>
+                        <i className="ri-search-line text-xl"></i>
+                    </button>
+                </div>
             </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* Message Input */}
-      <form onSubmit={handleSend} className="border-t border-gray-200 p-4 bg-white">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="hover:bg-gray-100 p-2 rounded-full transition-colors flex-shrink-0"
-          >
-            <i className="ri-image-line text-xl text-orange-500"></i>
-          </button>
-          <button
-            type="button"
-            className="hover:bg-gray-100 p-2 rounded-full transition-colors flex-shrink-0"
-          >
-            <i className="ri-attachment-line text-xl text-gray-600"></i>
-          </button>
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Mensagem..."
-            className="flex-1 outline-none bg-gray-100 rounded-full px-4 py-2.5 text-sm"
-          />
-          {newMessage.trim() ? (
-            <button
-              type="submit"
-              className="px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-full font-semibold hover:shadow-lg transition-all flex-shrink-0 whitespace-nowrap text-sm"
-            >
-              Enviar
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="hover:bg-gray-100 p-2 rounded-full transition-colors flex-shrink-0"
-            >
-              <i className="ri-emotion-line text-xl text-gray-600"></i>
-            </button>
-          )}
+            {/* Modals outside main flow */}
+            {isEditModalOpen && type !== 'direct' && (
+                <EditGroupModal
+                    type={type}
+                    item={{ id: chatId, name: headerInfo?.name, avatar_url: headerInfo?.avatar, created_by: headerInfo?.createdBy }}
+                    onClose={() => setIsEditModalOpen(false)}
+                    onSuccess={() => {
+                        setIsEditModalOpen(false);
+                        getChatHeaderInfo(chatId, type).then(info => info && setHeaderInfo(info));
+                    }}
+                />
+            )}
+
+            {isInfoModalOpen && type !== 'direct' && (
+                <GroupInfoModal
+                    type={type}
+                    item={{ id: chatId, name: headerInfo?.name, avatar_url: headerInfo?.avatar, description: '' }}
+                    onClose={() => setIsInfoModalOpen(false)}
+                />
+            )}
+
+            {/* Messages Area with Doodle Background */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-1 relative"
+                style={{
+                    backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")',
+                    backgroundRepeat: 'repeat',
+                    backgroundSize: '400px'
+                }}>
+                <div className="absolute inset-0 bg-[#EFE7DD] opacity-90 pointer-events-none"></div>
+
+                <div className="relative z-10 flex flex-col gap-2 pb-2">
+                    {loading ? (
+                        <div className="flex justify-center py-10"><span className="loading loading-spinner text-[#00a884]"></span></div>
+                    ) : (
+                        messages.map((msg) => (
+                            <MessageBubble
+                                key={msg.id}
+                                message={msg}
+                                type={type}
+                                currentUserId={currentUser?.id}
+                                onDelete={(id) => setMessages(prev => prev.filter(m => m.id !== id))}
+                                onReply={(msg) => setReplyTo(msg)}
+                                onConfirmDelete={() => {
+                                    setConfirmModal({
+                                        isOpen: true,
+                                        title: 'Excluir mensagem?',
+                                        message: 'Deseja apagar esta mensagem?',
+                                        onConfirm: async () => {
+                                            await deleteMessage(msg.id);
+                                            setMessages(prev => prev.filter(m => m.id !== msg.id));
+                                        }
+                                    });
+                                }}
+                            />
+                        ))
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+            </div>
+
+            {/* Input Area */}
+            <div className="min-h-[62px] px-4 py-2 bg-[#f0f2f5] flex items-end gap-2 z-20">
+                {uploading && (
+                    <div className="absolute bottom-20 left-10 p-2 bg-white rounded-lg shadow-md text-xs text-[#00a884] animate-pulse">
+                        Carregando mídia...
+                    </div>
+                )}
+
+                {showEmoji && (
+                    <div className="absolute bottom-[70px] left-4 z-30 shadow-2xl rounded-2xl overflow-hidden animate-fadeInUp">
+                        <EmojiPicker onEmojiClick={onEmojiClick} width={300} height={400} />
+                    </div>
+                )}
+
+                <div className="flex items-center gap-2 mb-2 text-[#54656f] relative">
+                    <button onClick={() => setShowEmoji(!showEmoji)} className="p-1 hover:bg-gray-200 rounded-full transition-colors">
+                        <i className={`ri-emotion-line text-2xl ${showEmoji ? 'text-[#00a884]' : ''}`}></i>
+                    </button>
+
+                    {/* Attachment Menu Button */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowAttachMenu(!showAttachMenu)}
+                            className={`p-1 hover:bg-gray-200 rounded-full transition-colors ${showAttachMenu ? 'bg-gray-200 rotation-45' : ''}`}
+                        >
+                            <i className={`ri-add-line text-2xl transition-transform ${showAttachMenu ? 'rotate-45' : ''}`}></i>
+                        </button>
+
+                        {/* Attachment Menu Dropdown */}
+                        {showAttachMenu && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)}></div>
+                                <div className="absolute bottom-12 left-0 z-20 flex flex-col gap-2 mb-2 animate-scaleIn origin-bottom-left">
+                                    <button onClick={handleSendLocation} className="w-12 h-12 rounded-full bg-none flex items-center justify-center shadow-lg hover:brightness-90 transition-all group relative">
+                                        <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-white">
+                                            <i className="ri-map-pin-line text-xl"></i>
+                                        </div>
+                                        <span className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Localização</span>
+                                    </button>
+                                    <button onClick={() => setShowCamera(true)} className="w-12 h-12 rounded-full bg-none flex items-center justify-center shadow-lg hover:brightness-90 transition-all group relative">
+                                        <div className="w-12 h-12 rounded-full bg-pink-500 flex items-center justify-center text-white">
+                                            <i className="ri-camera-fill text-xl"></i>
+                                        </div>
+                                        <span className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Câmera</span>
+                                    </button>
+                                    <button onClick={() => fileInputRef.current?.click()} className="w-12 h-12 rounded-full bg-none flex items-center justify-center shadow-lg hover:brightness-90 transition-all group relative">
+                                        <div className="w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center text-white">
+                                            <i className="ri-image-fill text-xl"></i>
+                                        </div>
+                                        <span className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Fotos e Vídeos</span>
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
+                </div>
+
+                <div className="flex-1 bg-white rounded-lg px-4 py-2 mb-1.5 shadow-sm border border-white focus-within:border-white">
+                    {replyTo && (
+                        <div className="mb-2 bg-gray-50 border-l-[4px] border-[#00a884] rounded-r p-2 flex justify-between items-center text-sm bg-[#d9fdd3]/30">
+                            <div>
+                                <span className="block font-bold text-[#00a884] text-xs mb-0.5">{replyTo.sender?.username}</span>
+                                <span className="text-gray-500 line-clamp-1 text-xs">{replyTo.content}</span>
+                            </div>
+                            <button onClick={() => setReplyTo(null)}>
+                                <i className="ri-close-line text-gray-500"></i>
+                            </button>
+                        </div>
+                    )}
+                    <textarea
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSend();
+                            }
+                        }}
+                        placeholder="Mensagem"
+                        className="w-full bg-transparent border-none p-0 focus:ring-0 text-[15px] max-h-[100px] resize-none text-[#111b21] placeholder:text-[#54656f]"
+                        rows={1}
+                    />
+                </div>
+
+                <div className="mb-2">
+                    {inputText.trim() ? (
+                        <button onClick={() => handleSend()} className="w-10 h-10 rounded-full bg-[#00a884] flex items-center justify-center text-white shadow-sm hover:bg-[#008f6f] transition-colors">
+                            {sending ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-send-plane-fill"></i>}
+                        </button>
+                    ) : (
+                        <button className="w-10 h-10 rounded-full bg-[#f0f2f5] flex items-center justify-center text-[#54656f] hover:bg-gray-200 transition-colors">
+                            <i className="ri-mic-fill text-xl"></i>
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Overlays */}
+            {showEmoji && <div className="fixed inset-0 z-10" onClick={() => setShowEmoji(false)}></div>}
+
+            <AlertModal
+                isOpen={alertState.isOpen}
+                onClose={() => setAlertState(prev => ({ ...prev, isOpen: false }))}
+                title={alertState.title}
+                message={alertState.message}
+                type={alertState.type}
+            />
+
+            {confirmModal.isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+                        <h3 className="text-lg font-medium text-[#111b21] mb-2">{confirmModal.title}</h3>
+                        <p className="text-[#54656f] mb-6 text-sm">{confirmModal.message}</p>
+                        <div className="flex justify-end gap-4 font-medium text-sm">
+                            <button onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} className="text-[#00a884] hover:bg-[#f0f2f5] px-3 py-2 rounded">
+                                Cancelar
+                            </button>
+                            <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({ ...prev, isOpen: false })); }} className="text-[#00a884] hover:bg-[#f0f2f5] px-3 py-2 rounded">
+                                Apagar para mim
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <CameraCaptureModal
+                isOpen={showCamera}
+                onClose={() => setShowCamera(false)}
+                onCapture={handleCameraCapture}
+            />
         </div>
-      </form>
-    </div>
-  );
+    );
+}
+
+function MessageBubble({
+    message,
+    type,
+    currentUserId,
+    onDelete,
+    onReply,
+    onConfirmDelete
+}: {
+    message: ChatMessage,
+    type: string,
+    currentUserId?: string,
+    onDelete: (id: string) => void,
+    onReply: (msg: ChatMessage) => void,
+    onConfirmDelete: () => void
+}) {
+    const isMine = currentUserId === message.sender_id;
+    const [showContext, setShowContext] = useState(false);
+
+    return (
+        <div className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} group mb-1`}>
+            <div className={`max-w-[85%] md:max-w-[65%] relative`}>
+
+                {/* Bubble */}
+                <div
+                    className={`
+                        px-3 py-1.5 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-[14.2px] leading-[19px] text-[#111b21] relative rounded-lg
+                        ${isMine
+                            ? 'bg-[#d9fdd3] rounded-tr-none'
+                            : 'bg-white rounded-tl-none'
+                        }
+                    `}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        setShowContext(true);
+                    }}
+                >
+                    {/* Tiny Triangle SVG for bubble tail */}
+                    {isMine ? (
+                        <svg viewBox="0 0 8 13" height="13" width="8" className="absolute -right-[8px] top-0 text-[#d9fdd3] fill-current"><path d="M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z"></path></svg>
+                    ) : (
+                        <svg viewBox="0 0 8 13" height="13" width="8" className="absolute -left-[8px] top-0 text-white fill-current"><path d="M1.533 3.568L8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z"></path></svg>
+                    )}
+
+                    {/* Sender Name in groups */}
+                    {!isMine && type === 'group' && (
+                        <p className={`text-[13px] font-medium mb-1 ${['text-orange-500', 'text-pink-500', 'text-purple-500', 'text-blue-500'][message.sender_id.charCodeAt(0) % 4]}`}>
+                            {message.sender?.full_name || message.sender?.username}
+                        </p>
+
+                    )}
+
+                    {/* Reply Context */}
+                    {message.reply_to && (
+                        <div className="bg-black/5 rounded-[4px] border-l-[4px] border-[#00a884] p-1.5 mb-1.5 text-xs">
+                            <p className="font-medium text-[#00a884] mb-0.5">{message.reply_to.sender?.username}</p>
+                            <p className="text-[#54656f] truncate line-clamp-1">{message.reply_to.content}</p>
+                        </div>
+                    )}
+
+                    {/* Content */}
+                    <div className="pr-2 pb-1.5 break-words whitespace-pre-wrap">
+                        {message.type === 'image' ? (
+                            <img src={message.content} className="rounded-lg max-h-[300px] object-cover" />
+                        ) : (
+                            message.content
+                        )}
+                    </div>
+
+                    {/* Metadata (Time & Check) */}
+                    <div className="float-right flex items-center gap-1 ml-2 mt-1 relative -bottom-1">
+                        <span className="text-[11px] text-[#667781]">
+                            {format(new Date(message.created_at), 'HH:mm')}
+                        </span>
+                        {isMine && (
+                            <span className={message.read_at ? 'text-[#53bdeb]' : 'text-[#667781]'}>
+                                {/* Double check icon */}
+                                <svg viewBox="0 0 16 15" width="16" height="15" className="fill-current"><path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.283a.32.32 0 0 0 .397.04l.056-.041 6.186-7.79a.319.319 0 0 0-.067-.502l.613-.343zM4.61 7.227l-.482-.372a.365.365 0 0 0-.51.063L.266 11.238a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.283a.32.32 0 0 0 .397.04l.056-.041 3.518-3.085a.319.319 0 0 0 .022.257l.64-.176z"></path></svg>
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {/* Dropdown Menu (Context) */}
+                {showContext && (
+                    <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowContext(false)}></div>
+                        <div className={`absolute z-50 bg-white shadow-lg rounded py-1 w-48 animate-scaleIn origin-top-right ${isMine ? 'right-0' : 'left-0'} top-8`}>
+                            <button onClick={() => { onReply(message); setShowContext(false); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 text-[14.5px] text-[#111b21]">
+                                Responder
+                            </button>
+                            <button onClick={() => { onConfirmDelete(); setShowContext(false); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 text-[14.5px] text-[#111b21]">
+                                Apagar
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
 }
