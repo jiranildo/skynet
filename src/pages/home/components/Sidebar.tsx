@@ -110,7 +110,9 @@ export default function Sidebar({
                 </div>
                 <span className="text-base">Notificações</span>
                 {unreadNotifications > 0 && (
-                  <span className="ml-auto w-2 h-2 bg-gradient-to-r from-orange-500 to-pink-500 rounded-full"></span>
+                  <span className="ml-auto bg-gradient-to-r from-orange-500 to-pink-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                    {unreadNotifications}
+                  </span>
                 )}
               </button>
             </li>

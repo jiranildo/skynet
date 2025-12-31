@@ -9,6 +9,8 @@ import { RealtimeManager } from '@/services/messages/realtimeService';
 import EditGroupModal from './EditGroupModal';
 import GroupInfoModal from './GroupInfoModal';
 import { CameraCaptureModal } from './CameraCaptureModal';
+import VideoCallModal from './VideoCallModal';
+import { VideoCaptureModal } from './VideoCaptureModal';
 
 interface ChatWindowProps {
     chatId: string;
@@ -51,6 +53,9 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
     const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
     const [showCamera, setShowCamera] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
+    const [showCallModal, setShowCallModal] = useState(false);
+    const [isVoiceCall, setIsVoiceCall] = useState(false);
+    const [showVideoCapture, setShowVideoCapture] = useState(false);
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => setCurrentUser(user));
@@ -264,8 +269,50 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
         );
     };
 
+    const handleVideoCall = () => {
+        setIsVoiceCall(false);
+        setShowCallModal(true);
+    };
+
+    const handleVoiceCall = () => {
+        setIsVoiceCall(true);
+        setShowCallModal(true);
+    };
+
+    const handleSearch = () => {
+        setAlertState({
+            isOpen: true,
+            title: 'Em breve',
+            message: 'Pesquisa na conversa estará disponível na próxima atualização!',
+            type: 'info'
+        });
+    };
+
+    const handleVideoCapture = async (videoBlob: Blob) => {
+        setUploading(true);
+        setShowVideoCapture(false);
+        try {
+            const file = new File([videoBlob], `video_${Date.now()}.webm`, { type: 'video/webm' });
+            const publicUrl = await uploadAttachment(file);
+            setUploading(false);
+            setShowAttachMenu(false);
+
+            await sendMessage({
+                content: publicUrl,
+                type: 'image',
+                replyToId: replyTo?.id,
+                ...(type === 'group' ? { groupId: chatId } : type === 'community' ? { communityId: chatId } : { conversationId: chatId })
+            });
+            scrollToBottom();
+        } catch (error) {
+            console.error(error);
+            setUploading(false);
+            setAlertState({ isOpen: true, title: 'Erro', message: 'Falha ao enviar vídeo.', type: 'danger' });
+        }
+    };
+
     return (
-        <div className="flex flex-col h-full bg-[#EFE7DD] relative">
+        <div className="flex flex-col h-screen bg-[#EFE7DD] relative">
             {/* WhatsApp Header */}
             <div className="h-[60px] px-4 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between flex-shrink-0 z-20">
                 <div className="flex items-center gap-2">
@@ -294,13 +341,11 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                     </div>
                 </div>
                 <div className="flex items-center gap-4 text-[#54656f]">
-                    <button>
-                        <i className="ri-vidicon-line text-xl"></i>
-                    </button>
-                    <button>
+                    {/* Video call button removed and moved to attachment dropdown as "Video Message" */}
+                    <button onClick={handleVoiceCall}>
                         <i className="ri-phone-line text-xl"></i>
                     </button>
-                    <button>
+                    <button onClick={handleSearch}>
                         <i className="ri-search-line text-xl"></i>
                     </button>
                 </div>
@@ -411,6 +456,14 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                                         </div>
                                         <span className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Câmera</span>
                                     </button>
+
+                                    <button onClick={() => setShowVideoCapture(true)} className="w-12 h-12 rounded-full bg-none flex items-center justify-center shadow-lg hover:brightness-90 transition-all group relative">
+                                        <div className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center text-white">
+                                            <i className="ri-movie-line text-xl"></i>
+                                        </div>
+                                        <span className="absolute left-14 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Vídeo</span>
+                                    </button>
+
                                     <button onClick={() => fileInputRef.current?.click()} className="w-12 h-12 rounded-full bg-none flex items-center justify-center shadow-lg hover:brightness-90 transition-all group relative">
                                         <div className="w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center text-white">
                                             <i className="ri-image-fill text-xl"></i>
@@ -498,6 +551,22 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                 onClose={() => setShowCamera(false)}
                 onCapture={handleCameraCapture}
             />
+
+            <VideoCallModal
+                isOpen={showCallModal}
+                onClose={() => setShowCallModal(false)}
+                recipient={{
+                    name: headerInfo?.name || 'Usuário',
+                    avatar: headerInfo?.avatar
+                }}
+                isVoiceOnly={isVoiceCall}
+            />
+
+            <VideoCaptureModal
+                isOpen={showVideoCapture}
+                onClose={() => setShowVideoCapture(false)}
+                onCapture={handleVideoCapture}
+            />
         </div>
     );
 }
@@ -563,8 +632,12 @@ function MessageBubble({
 
                     {/* Content */}
                     <div className="pr-2 pb-1.5 break-words whitespace-pre-wrap">
-                        {message.type === 'image' ? (
-                            <img src={message.content} className="rounded-lg max-h-[300px] object-cover" />
+                        {message.type === 'image' || (message.content && (message.content.endsWith('.webm') || message.content.endsWith('.mp4'))) ? (
+                            (message.content.endsWith('.webm') || message.content.endsWith('.mp4')) ? (
+                                <video src={message.content} controls className="rounded-lg max-h-[300px] max-w-full" />
+                            ) : (
+                                <img src={message.content} className="rounded-lg max-h-[300px] object-cover" />
+                            )
                         ) : (
                             message.content
                         )}

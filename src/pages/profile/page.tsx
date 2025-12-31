@@ -19,9 +19,12 @@ import {
   followUser,
   unfollowUser,
   checkIfReelLiked,
-  getReelsByUser
+  getReelsByUser,
+  storyService,
+  Story
 } from '../../services/supabase';
 import { supabase } from '../../services/supabase';
+import StoryViewer from '../home/components/StoryViewer';
 
 type TabType = 'posts' | 'reels' | 'saved' | 'tagged';
 
@@ -34,6 +37,8 @@ export default function ProfilePage() {
   const [userProfile, setUserProfile] = useState<UserType | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [reels, setReels] = useState<any[]>([]);
+  const [userStories, setUserStories] = useState<Story[]>([]);
+  const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -100,6 +105,14 @@ export default function ProfilePage() {
             setReels(userReels);
           } catch (e) {
             console.error("Error loading reels:", e);
+          }
+
+          // Fetch stories for this user
+          try {
+            const stories = await storyService.getByUser(realUserId);
+            setUserStories(stories);
+          } catch (e) {
+            console.error("Error loading stories:", e);
           }
 
           // If viewing another user, check if following
@@ -329,11 +342,22 @@ export default function ProfilePage() {
           {/* Profile Header */}
           <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-4">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 md:gap-6">
-              <img
-                src={currentProfile.avatar_url || 'https://via.placeholder.com/150'}
-                alt="Profile"
-                className="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover border-4 border-gray-100 shadow-sm"
-              />
+              <div className="relative group cursor-pointer" onClick={() => userStories.length > 0 && setShowStoryViewer(true)}>
+                <div className={`p-[3px] rounded-full ${userStories.length > 0 ? 'bg-gradient-to-tr from-yellow-400 via-orange-500 to-purple-600' : 'bg-transparent'}`}>
+                  <div className="bg-white p-[2px] rounded-full">
+                    <img
+                      src={currentProfile.avatar_url || 'https://via.placeholder.com/150'}
+                      alt="Profile"
+                      className="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover shadow-sm"
+                    />
+                  </div>
+                </div>
+                {userStories.length > 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                    <i className="ri-play-circle-fill text-white text-4xl drop-shadow-md"></i>
+                  </div>
+                )}
+              </div>
               <div className="flex-1 text-center sm:text-left">
                 <div className="flex flex-col sm:flex-row items-center gap-3 mb-3">
                   <h2 className="text-xl md:text-2xl font-bold text-gray-900">{currentProfile.full_name || currentProfile.username}</h2>
@@ -564,6 +588,12 @@ export default function ProfilePage() {
           />
         )
       }
+      {userStories.length > 0 && showStoryViewer && (
+        <StoryViewer
+          stories={userStories}
+          onClose={() => setShowStoryViewer(false)}
+        />
+      )}
       {showNotifications && <NotificationsPanel onClose={() => setShowNotifications(false)} />}
       {showCreateMenu && <CreateMenu onClose={() => setShowCreateMenu(false)} onSelectOption={handleCreateOption} />}
       {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}

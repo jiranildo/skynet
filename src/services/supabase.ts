@@ -15,6 +15,8 @@ export interface User {
   id: string;
   username: string;
   full_name: string;
+  first_name?: string;
+  last_name?: string;
   avatar_url: string;
   bio?: string;
   website?: string;
@@ -1091,18 +1093,42 @@ export const getOrCreateConversation = async (otherUserId: string) => {
 
 
 export const getNotificationsWithDetails = async (userId: string) => {
-  const { data, error } = await supabase
+  // 1. Fetch raw notifications
+  const { data: notifications, error } = await supabase
     .from('notifications')
-    .select(`
-      *,
-      related_user:users!notifications_related_user_id_fkey(username, avatar_url),
-      related_post:posts!notifications_related_post_id_fkey(image_url)
-    `)
+    .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data;
+  if (!notifications || notifications.length === 0) return [];
+
+  // 2. Extract IDs for related entities
+  const relatedUserIds = [...new Set(notifications.map(n => n.related_user_id).filter(Boolean))];
+  const relatedPostIds = [...new Set(notifications.map(n => n.related_post_id).filter(Boolean))];
+
+  // 3. Fetch related entities in parallel
+  const [usersResult, postsResult] = await Promise.all([
+    relatedUserIds.length > 0
+      ? supabase.from('users').select('id, username, avatar_url').in('id', relatedUserIds)
+      : { data: [], error: null },
+    relatedPostIds.length > 0
+      ? supabase.from('posts').select('id, image_url').in('id', relatedPostIds)
+      : { data: [], error: null }
+  ]);
+
+  if (usersResult.error) console.error('Error fetching related users:', usersResult.error);
+  if (postsResult.error) console.error('Error fetching related posts:', postsResult.error);
+
+  const usersMap = new Map((usersResult.data?.map(u => [u.id, u]) || []) as [string, any][]);
+  const postsMap = new Map((postsResult.data?.map(p => [p.id, p]) || []) as [string, any][]);
+
+  // 4. Join data
+  return notifications.map(n => ({
+    ...n,
+    related_user: n.related_user_id ? usersMap.get(n.related_user_id) : null,
+    related_post: n.related_post_id ? postsMap.get(n.related_post_id) : null
+  }));
 };
 
 export const markMessageAsRead = async (messageId: string) => {
@@ -1997,6 +2023,18 @@ export const storyService = {
     const { data, error } = await supabase
       .from('stories')
       .select('*, users(username, avatar_url)')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return data as Story[];
+  },
+
+  async getByUser(userId: string): Promise<Story[]> {
+    const { data, error } = await supabase
+      .from('stories')
+      .select('*, users(username, avatar_url)')
+      .eq('user_id', userId)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: true });
 

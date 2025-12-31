@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { supabase, deletePost, updatePost, likePost, unlikePost, savedPostService, getComments, createComment, updateComment, deleteComment } from '@/services/supabase';
 import { useAuth } from '@/context/AuthContext';
 
@@ -26,6 +27,47 @@ export default function Post({ post, onEdit }: PostProps) {
   const media = post.media_urls && post.media_urls.length > 0 ? post.media_urls : [post.image];
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
 
+  // Modal State
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'danger' | 'warning' | 'info' | 'success';
+    confirmText?: string;
+    cancelText?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+    onConfirm: () => { }
+  });
+
+  const showAlert = (title: string, message: string, type: 'danger' | 'warning' | 'info' | 'success' = 'info') => {
+    setModalState({
+      isOpen: true,
+      title,
+      message,
+      type,
+      confirmText: 'OK',
+      cancelText: '',
+      onConfirm: () => setModalState(prev => ({ ...prev, isOpen: false }))
+    });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, type: 'danger' | 'warning' = 'danger') => {
+    setModalState({
+      isOpen: true,
+      title,
+      message,
+      type,
+      confirmText: 'Confirmar',
+      cancelText: 'Cancelar',
+      onConfirm
+    });
+  };
+
   useEffect(() => {
     const checkOwner = async () => {
       if (user && user.id === post.userId) {
@@ -35,9 +77,15 @@ export default function Post({ post, onEdit }: PostProps) {
     checkOwner();
   }, [user, post.userId]);
 
+  const commentInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (showComments) {
       loadComments();
+      // Wait for render animation/expansion
+      setTimeout(() => {
+        commentInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
     }
   }, [showComments]);
 
@@ -56,7 +104,7 @@ export default function Post({ post, onEdit }: PostProps) {
     const wasLiked = isLiked;
     // Optimistic update
     setIsLiked(!wasLiked);
-    setLikes(wasLiked ? likes - 1 : likes + 1);
+    setLikes(prev => wasLiked ? Math.max(0, prev - 1) : prev + 1);
 
     try {
       if (wasLiked) {
@@ -117,21 +165,27 @@ export default function Post({ post, onEdit }: PostProps) {
       setReplyTo(null); // Clear reply context after submitting
     } catch (error) {
       console.error("Error posting comment:", error);
-      alert("Erro ao publicar comentário.");
+      showAlert('Erro', 'Erro ao publicar comentário.', 'danger');
     } finally {
       setIsSubmittingComment(false);
     }
   };
 
   const handleCommentDelete = async (commentId: string) => {
-    if (!window.confirm("Excluir comentário?")) return;
-    try {
-      await deleteComment(commentId);
-      setCommentsData(commentsData.filter(c => c.id !== commentId));
-      setCommentCount(prev => prev - 1);
-    } catch (error) {
-      console.error("Error deleting comment:", error);
-    }
+    showConfirm(
+      'Excluir comantário?',
+      'Tem certeza que deseja excluir este comentário?',
+      async () => {
+        try {
+          await deleteComment(commentId);
+          setCommentsData(prevComments => prevComments.filter(c => c.id !== commentId));
+          setCommentCount(prev => prev - 1);
+        } catch (error) {
+          console.error("Error deleting comment:", error);
+          showAlert('Erro', 'Erro ao excluir comentário.', 'danger');
+        }
+      }
+    );
   };
 
   const handleCommentEdit = (comment: any) => {
@@ -184,7 +238,7 @@ export default function Post({ post, onEdit }: PostProps) {
         await navigator.share(shareData);
       } else {
         await navigator.clipboard.writeText(shareData.url);
-        alert('Link copiado para a área de transferência!');
+        showAlert('Sucesso', 'Link copiado para a área de transferência!', 'success');
       }
     } catch (error) {
       console.error('Error sharing:', error);
@@ -192,18 +246,22 @@ export default function Post({ post, onEdit }: PostProps) {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Tem certeza que deseja excluir esta postagem?")) return;
-
-    try {
-      setIsDeleting(true);
-      await deletePost(post.id);
-      window.location.reload(); // Simple refresh for now
-    } catch (error) {
-      console.error("Error deleting post:", error);
-      alert("Erro ao excluir postagem.");
-    } finally {
-      setIsDeleting(false);
-    }
+    showConfirm(
+      'Excluir Postagem',
+      'Tem certeza que deseja excluir esta postagem? Esta ação não pode ser desfeita.',
+      async () => {
+        try {
+          setIsDeleting(true);
+          await deletePost(post.id);
+          window.location.reload(); // Simple refresh
+        } catch (error) {
+          console.error("Error deleting post:", error);
+          showAlert('Erro', 'Erro ao excluir postagem.', 'danger');
+        } finally {
+          setIsDeleting(false);
+        }
+      }
+    );
   };
 
 
@@ -441,6 +499,7 @@ export default function Post({ post, onEdit }: PostProps) {
             )}
             <div className="flex items-center gap-2 sm:gap-3 py-2 border-t border-gray-100">
               <input
+                ref={commentInputRef}
                 type="text"
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
@@ -463,6 +522,16 @@ export default function Post({ post, onEdit }: PostProps) {
           </div>
         )}
       </div>
-    </article>
+      <ConfirmationModal
+        isOpen={modalState.isOpen}
+        onClose={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={modalState.onConfirm}
+        title={modalState.title}
+        message={modalState.message}
+        type={modalState.type}
+        confirmText={modalState.confirmText}
+        cancelText={modalState.cancelText}
+      />
+    </article >
   );
 }

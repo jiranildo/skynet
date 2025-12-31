@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { storyService, uploadFile, createReel, createPost, updatePost, ensureUserProfile, uploadPostImage } from '@/services/supabase';
 import { useAuth } from '../../../context/AuthContext';
 
@@ -66,6 +67,28 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
     const [textInput, setTextInput] = useState('');
     const [textColor, setTextColor] = useState('#FFFFFF');
 
+    // Modal State
+    const [modalState, setModalState] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        type: 'danger' | 'warning' | 'info' | 'success';
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        type: 'info'
+    });
+
+    const showAlert = (title: string, message: string, type: 'danger' | 'warning' | 'info' | 'success' = 'info') => {
+        setModalState({
+            isOpen: true,
+            title,
+            message,
+            type
+        });
+    };
+
     useEffect(() => {
         // Reset state when tab changes, ONLY if not editing
         if (!editingPost) {
@@ -88,16 +111,16 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
             // Validation
             if (activeTab === 'REEL') {
                 if (selectedFiles.length > 1) {
-                    alert('Reels permitem apenas 1 vídeo.');
+                    showAlert('Atenção', 'Reels permitem apenas 1 vídeo.', 'warning');
                     return;
                 }
                 const file = selectedFiles[0];
                 if (!file.type.startsWith('video/')) {
-                    alert('Para Reels, selecione um vídeo.');
+                    showAlert('Formato Inválido', 'Para Reels, selecione um vídeo.', 'warning');
                     return;
                 }
                 if (file.size > 50 * 1024 * 1024) {
-                    alert('Vídeo muito grande. Limite de 50MB.');
+                    showAlert('Arquivo Muito Grande', 'Vídeo muito grande. Limite de 50MB.', 'warning');
                     return;
                 }
                 setFiles([file]);
@@ -106,7 +129,7 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
                 // Post / Story - Allow multiple
                 const maxFiles = 10;
                 if (files.length + selectedFiles.length > maxFiles) {
-                    alert(`Máximo de ${maxFiles} arquivos.`);
+                    showAlert('Limite Excedido', `Máximo de ${maxFiles} arquivos.`, 'warning');
                     return;
                 }
 
@@ -123,7 +146,7 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
 
     const handleGetLocation = () => {
         if (!navigator.geolocation) {
-            alert('Geolocalização não suportada.');
+            showAlert('Não Suportado', 'Geolocalização não suportada neste dispositivo.', 'warning');
             return;
         }
 
@@ -143,14 +166,14 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
                 setLocation(formatted);
             } catch (error) {
                 console.error("Error fetching location:", error);
-                alert("Erro ao obter endereço.");
+                showAlert('Erro', 'Erro ao obter endereço.', 'danger');
             } finally {
                 setProcessingLocation(false);
             }
         }, (error) => {
             console.error("Geolocation error:", error);
             setProcessingLocation(false);
-            alert("Permissão de localização negada ou indisponível.");
+            showAlert('Permissão Negada', 'Permissão de localização negada ou indisponível.', 'warning');
         });
     };
 
@@ -220,7 +243,7 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
             onClose();
         } catch (error) {
             console.error('Error creating:', error);
-            alert('Erro ao criar publicação. Tente novamente.');
+            showAlert('Erro', 'Erro ao criar publicação. Tente novamente.', 'danger');
         } finally {
             setLoading(false);
         }
@@ -622,6 +645,17 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
                     </button>
                 </div>
             )}
+            {/* Modal */}
+            <ConfirmationModal
+                isOpen={modalState.isOpen}
+                onClose={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+                title={modalState.title}
+                message={modalState.message}
+                type={modalState.type}
+                confirmText="OK"
+                cancelText="" // Hide cancel button
+            />
         </div>
     );
 }

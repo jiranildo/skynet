@@ -65,12 +65,14 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                 </div>
 
                 <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-colors"
-                    >
-                        {cancelText}
-                    </button>
+                    {cancelText && (
+                        <button
+                            onClick={onClose}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-colors"
+                        >
+                            {cancelText}
+                        </button>
+                    )}
                     <button
                         onClick={() => {
                             onConfirm();

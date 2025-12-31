@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPost, supabase, ensureUserProfile, uploadPostImage, updatePost, FeedPost } from '@/services/supabase';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 interface CreatePostModalProps {
   onClose: () => void;
@@ -25,6 +26,28 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
     mood: ''
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Modal State
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'danger' | 'warning' | 'info' | 'success';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
+
+  const showAlert = (title: string, message: string, type: 'danger' | 'warning' | 'info' | 'success' = 'info') => {
+    setModalState({
+      isOpen: true,
+      title,
+      message,
+      type
+    });
+  };
 
   useEffect(() => {
     if (editingPost) {
@@ -96,7 +119,7 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
 
   const handleGetLocation = async () => {
     if (!navigator.geolocation) {
-      alert("Geolocalização não é suportada pelo seu navegador.");
+      showAlert('Não Suportado', 'Geolocalização não é suportada pelo seu navegador.', 'warning');
       return;
     }
 
@@ -119,13 +142,13 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
       (error) => {
         console.error("Error getting location:", error);
         setIsGettingLocation(false);
-        alert("Não foi possível obter sua localização.");
+        showAlert('Erro', 'Não foi possível obter sua localização.', 'warning');
       }
     );
   };
   const handleShare = async () => {
     if (!selectedImage) {
-      alert("Por favor, adicione uma imagem.");
+      showAlert('Imagem Requerida', 'Por favor, adicione uma imagem.', 'warning');
       return;
     }
 
@@ -133,7 +156,7 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
       setIsLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        alert("Você precisa estar logado para postar.");
+        showAlert('Login Necessário', 'Você precisa estar logado para postar.', 'warning');
         return;
       }
 
@@ -180,7 +203,7 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
       window.location.reload();
     } catch (error) {
       console.error('Error creating post:', error);
-      alert(`Erro ao criar post: ${(error as any).message}`);
+      showAlert('Erro', `Erro ao criar post: ${(error as any).message}`, 'danger');
     } finally {
       setIsLoading(false);
     }
@@ -455,6 +478,17 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
 
         </div>
       </div>
-    </div>
+
+      <ConfirmationModal
+        isOpen={modalState.isOpen}
+        onClose={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+        title={modalState.title}
+        message={modalState.message}
+        type={modalState.type}
+        confirmText="OK"
+        cancelText="" // Hide cancel button
+      />
+    </div >
   );
 }

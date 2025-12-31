@@ -14,6 +14,8 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [invites, setInvites] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -21,6 +23,8 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
 
   const loadData = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const [notifsData, invitesData] = await Promise.all([
@@ -30,8 +34,11 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
         setNotifications(notifsData);
         setInvites(invitesData || []);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading data:', error);
+      setError(error.message || JSON.stringify(error) || 'Erro desconhecido');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -48,20 +55,21 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
     }
   };
 
-  const handleInviteResponse = async (groupId: string, accept: boolean) => {
+  const handleInviteResponse = async (type: 'group' | 'community', targetId: string, accept: boolean) => {
     try {
-      await respondToGroupInvite(groupId, accept);
+      await respondToGroupInvite(type, targetId, accept);
       // Remove locally or reload
-      setInvites(prev => prev.filter(i => i.id !== groupId));
-      // Create a local notification? Or toast?
+      setInvites(prev => prev.filter(i => i.target_id !== targetId));
+      loadData();
     } catch (e) {
       console.error(e);
+      setError('Erro ao responder convite');
     }
   };
 
   const filteredItems = () => {
     // If specific filter
-    if (activeFilter === 'invites') return invites.map(i => ({ ...i, type: 'invite', created_at: i.created_at || new Date().toISOString() })); // Adapter
+    if (activeFilter === 'invites') return invites.map(i => ({ ...i, origin_type: i.type, type: 'invite', created_at: i.created_at || new Date().toISOString() })); // Adapter
 
     // Notifications filter
     const filteredNotifs = notifications.filter(notif => {
@@ -72,7 +80,7 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
     });
 
     if (activeFilter === 'all') {
-      const inviteItems = invites.map(i => ({ ...i, type: 'invite', created_at: i.created_at || new Date().toISOString() }));
+      const inviteItems = invites.map(i => ({ ...i, origin_type: i.type, type: 'invite', created_at: i.created_at || new Date().toISOString() }));
       // Combine and sort by date? Invites usually high priority. 
       // Let's put invites at top.
       return [...inviteItems, ...filteredNotifs];
@@ -164,7 +172,17 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
 
         {/* Notifications List */}
         <div className="overflow-y-auto flex-1 p-0">
-          {items.length === 0 ? (
+          {loading ? (
+            <div className="flex justify-center items-center h-40">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <i className="ri-error-warning-line text-3xl text-red-500 mb-2"></i>
+              <p className="text-gray-900 font-medium">Erro: {error}</p>
+              <button onClick={loadData} className="mt-2 text-blue-500 hover:underline">Tentar novamente</button>
+            </div>
+          ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
                 <i className="ri-notification-off-line text-3xl text-gray-400"></i>
@@ -197,13 +215,13 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
                           <p className="text-sm text-gray-600 mb-2">Convidou você para participar do grupo.</p>
                           <div className="flex gap-2">
                             <button
-                              onClick={() => handleInviteResponse(item.id, true)}
+                              onClick={() => handleInviteResponse(item.origin_type, item.target_id, true)}
                               className="px-4 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow-md hover:scale-105 transition-all"
                             >
                               Aceitar
                             </button>
                             <button
-                              onClick={() => handleInviteResponse(item.id, false)}
+                              onClick={() => handleInviteResponse(item.origin_type, item.target_id, false)}
                               className="px-4 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50"
                             >
                               Recusar

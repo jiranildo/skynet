@@ -281,7 +281,7 @@ export const getPendingGroupInvites = async () => {
             id,
             group_id,
             role,
-            created_at,
+            joined_at,
             groups:group_id (
                 id,
                 name,
@@ -301,7 +301,7 @@ export const getPendingGroupInvites = async () => {
             id,
             community_id,
             role,
-            created_at,
+            joined_at,
             communities:community_id (
                 id,
                 name,
@@ -314,25 +314,30 @@ export const getPendingGroupInvites = async () => {
     if (commError) throw commError;
 
     // Normalize
-    const groups = groupInvites?.map((i: any) => ({
-        id: i.id, // membership id
-        target_id: i.groups.id,
-        name: i.groups.name,
-        avatar_url: i.groups.avatar_url,
-        type: 'group' as const,
-        role: i.role,
-        sent_at: i.created_at
-    })) || [];
+    // Normalize
+    const groups = groupInvites
+        ?.filter((i: any) => i.groups)
+        .map((i: any) => ({
+            id: i.id, // membership id
+            target_id: i.groups.id,
+            name: i.groups.name,
+            avatar_url: i.groups.avatar_url,
+            type: 'group' as const,
+            role: i.role,
+            sent_at: i.joined_at
+        })) || [];
 
-    const comms = commInvites?.map((i: any) => ({
-        id: i.id,
-        target_id: i.communities.id,
-        name: i.communities.name,
-        avatar_url: i.communities.avatar_url,
-        type: 'community' as const,
-        role: i.role,
-        sent_at: i.created_at
-    })) || [];
+    const comms = commInvites
+        ?.filter((i: any) => i.communities)
+        .map((i: any) => ({
+            id: i.id,
+            target_id: i.communities.id,
+            name: i.communities.name,
+            avatar_url: i.communities.avatar_url,
+            type: 'community' as const,
+            role: i.role,
+            sent_at: i.joined_at
+        })) || [];
 
     return [...groups, ...comms];
 };

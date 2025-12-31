@@ -39,10 +39,12 @@ export default function EditProfileModal({ userProfile, onClose, onUpdate }: Edi
         setIsGenerating(true);
         // Simulation: AI Avatar generation
         setTimeout(() => {
-            const generatedUrl = `https://readdy.ai/api/search-image?query=creative%20artistic%20avatar%20portrait%20stylized%20character&width=400&height=400&seq=${Date.now()}`;
+            // Use Pravatar for realistic human avatars
+            const uniqueId = Date.now();
+            const generatedUrl = `https://i.pravatar.cc/400?u=${uniqueId}`;
             setAvatarUrl(generatedUrl);
             setIsGenerating(false);
-        }, 2000);
+        }, 1500);
     };
 
     const handleSubmit = async () => {
@@ -196,9 +198,9 @@ export default function EditProfileModal({ userProfile, onClose, onUpdate }: Edi
                                 </button>
                             </div>
                             <p className="mt-2 text-[10px] text-gray-400 leading-tight">
-                                {privacySetting === 'public' && "Qualquer pessoa pode ver seu perfil e posts no Explorar."}
-                                {privacySetting === 'private' && "Apenas seguidores aprovados podem ver seu conteúdo."}
-                                {privacySetting === 'friends' && "Apenas amigos mútuos podem ver suas postagens."}
+                                {privacySetting === 'public' && "Seu perfil será apresentado a toda a rede."}
+                                {privacySetting === 'private' && "Somente por convite e você precisa aprovar seguidores."}
+                                {privacySetting === 'friends' && "Somente seus amigos podem ver o perfil."}
                             </p>
                         </div>
                         <div>

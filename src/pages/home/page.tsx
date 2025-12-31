@@ -119,7 +119,7 @@ export default function HomePage() {
       </header>
 
       {/* Content */}
-      <div className="md:ml-64 pt-[57px] md:pt-0 pb-6 md:pb-20">
+      <div className="md:ml-64 pt-[57px] md:pt-0 pb-24 md:pb-20">
         <div className="px-3 sm:px-4 md:px-6 md:py-6">
           {activeTab === 'feed' ? (
             <>
