@@ -119,3 +119,4 @@ out
 
 # Vite output
 dist
+.env

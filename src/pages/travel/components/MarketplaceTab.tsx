@@ -290,57 +290,59 @@ export default function MarketplaceTab() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-2xl p-6 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <i className="ri-store-line text-3xl"></i>
-              <h2 className="text-2xl font-bold">Marketplace de Viagens</h2>
+      {/* Header & Stats Compact Row */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <i className="ri-store-2-line text-purple-600"></i>
+            Marketplace
+          </h2>
+          <p className="text-sm text-gray-500 font-light">
+            Explore roteiros exclusivos da comunidade
+          </p>
+        </div>
+
+        {/* Stats Icons with Tooltips */}
+        <div className="flex items-center gap-4">
+          {/* Total Items */}
+          <div className="group relative flex items-center justify-center">
+            <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center cursor-help transition-colors hover:bg-blue-100">
+              <i className="ri-shopping-bag-3-line text-lg"></i>
             </div>
-            <p className="text-white/90">Compre e venda roteiros personalizados com Travel Money</p>
+            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+              {items.length} Roteiros Disponíveis
+            </span>
           </div>
-          <button
-            onClick={handleStartSelling}
-            className="px-6 py-3 bg-white text-purple-600 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center gap-2 whitespace-nowrap"
-          >
-            <i className="ri-add-line text-xl"></i>
-            Vender Roteiro
-          </button>
-        </div>
-      </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl p-6 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <i className="ri-shopping-bag-line text-3xl opacity-80"></i>
-            <span className="text-2xl font-bold">{items.length}</span>
+          {/* Featured */}
+          <div className="group relative flex items-center justify-center">
+            <div className="w-9 h-9 rounded-full bg-yellow-50 text-yellow-500 flex items-center justify-center cursor-help transition-colors hover:bg-yellow-100">
+              <i className="ri-star-smile-line text-lg"></i>
+            </div>
+            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+              {featuredItems.length} em Destaque
+            </span>
           </div>
-          <p className="text-white/90 text-sm">Roteiros Disponíveis</p>
-        </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl p-6 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <i className="ri-star-line text-3xl opacity-80"></i>
-            <span className="text-2xl font-bold">{featuredItems.length}</span>
+          {/* Balance */}
+          <div className="group relative flex items-center justify-center">
+            <div className="w-9 h-9 rounded-full bg-green-50 text-green-500 flex items-center justify-center cursor-help transition-colors hover:bg-green-100">
+              <i className="ri-wallet-3-line text-lg"></i>
+            </div>
+            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+              Seu Saldo: {userBalance} TM
+            </span>
           </div>
-          <p className="text-white/90 text-sm">Em Destaque</p>
-        </div>
 
-        <div className="bg-gradient-to-br from-orange-500 to-pink-500 rounded-2xl p-6 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <i className="ri-wallet-line text-3xl opacity-80"></i>
-            <span className="text-2xl font-bold">{userBalance}</span>
+          {/* Verified Sellers */}
+          <div className="group relative flex items-center justify-center">
+            <div className="w-9 h-9 rounded-full bg-purple-50 text-purple-500 flex items-center justify-center cursor-help transition-colors hover:bg-purple-100">
+              <i className="ri-verified-badge-line text-lg"></i>
+            </div>
+            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+              {items.filter(i => i.seller.verified).length} Vendedores Verificados
+            </span>
           </div>
-          <p className="text-white/90 text-sm">Seu Saldo (TM)</p>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl p-6 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <i className="ri-user-star-line text-3xl opacity-80"></i>
-            <span className="text-2xl font-bold">{items.filter(i => i.seller.verified).length}</span>
-          </div>
-          <p className="text-white/90 text-sm">Vendedores Verificados</p>
         </div>
       </div>
 

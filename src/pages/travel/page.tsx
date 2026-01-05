@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import SearchTab from './components/SearchTab';
+import AISearchTab from './components/AISearchTab';
 import CreateTripModal from './components/CreateTripModal';
 import FlightsTab from './components/FlightsTab';
 import HotelsTab from './components/HotelsTab';
@@ -24,7 +25,7 @@ import WalletWidget from '../../components/WalletWidget';
 import HeaderActions from '../../components/HeaderActions';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 
-type TabType = 'search' | 'flights' | 'hotels' | 'packages' | 'cars' | 'cruises' | 'tickets' | 'transfer' | 'insurance' | 'mytrips' | 'favorites' | 'offers' | 'marketplace' | 'blogs';
+type TabType = 'search' | 'ai-search' | 'flights' | 'hotels' | 'packages' | 'cars' | 'cruises' | 'tickets' | 'transfer' | 'insurance' | 'mytrips' | 'favorites' | 'offers' | 'marketplace' | 'blogs';
 
 export default function TravelPage() {
   const location = useLocation();
@@ -33,7 +34,7 @@ export default function TravelPage() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
-    if (tabParam && ['search', 'flights', 'hotels', 'packages', 'cars', 'cruises', 'tickets', 'transfer', 'insurance', 'mytrips', 'favorites', 'offers', 'marketplace', 'blogs'].includes(tabParam)) {
+    if (tabParam && ['search', 'ai-search', 'flights', 'hotels', 'packages', 'cars', 'cruises', 'tickets', 'transfer', 'insurance', 'mytrips', 'favorites', 'offers', 'marketplace', 'blogs'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     }
   }, [location.search]);
@@ -49,7 +50,7 @@ export default function TravelPage() {
 
   const tabs = [
     { id: 'search', label: 'Buscar', icon: 'ri-search-line' },
-
+    { id: 'ai-search', label: 'Pesquisa AI', icon: 'ri-sparkling-fill' },
     { id: 'mytrips', label: 'Minhas Viagens', icon: 'ri-map-pin-user-line' },
     { id: 'marketplace', label: 'Marketplace', icon: 'ri-store-line' },
     { id: 'flights', label: 'Voos', icon: 'ri-flight-takeoff-line' },
@@ -93,6 +94,7 @@ export default function TravelPage() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'search': return <SearchTab />;
+      case 'ai-search': return <AISearchTab />;
       case 'flights': return <FlightsTab />;
       case 'hotels': return <HotelsTab />;
       case 'packages': return <PackagesTab />;
