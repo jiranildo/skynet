@@ -120,3 +120,6 @@ out
 # Vite output
 dist
 .env
+
+# macOS
+.DS_Store
