@@ -47,6 +47,7 @@ export default function MarketplaceTab() {
   const [sortBy, setSortBy] = useState<'popular' | 'recent' | 'price-low' | 'price-high'>('popular');
   const [searchQuery, setSearchQuery] = useState('');
   const [userBalance, setUserBalance] = useState(0);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   // Novo roteiro para vender (Not used for now as we use My Trips -> Publish)
 
@@ -57,6 +58,13 @@ export default function MarketplaceTab() {
   useEffect(() => {
     loadMarketplaceItems();
     loadUserBalance();
+
+    // Load current user for owner check
+    const loadUser = async () => {
+      const { data: { user } } = await import('../../../services/supabase').then(m => m.supabase.auth.getUser());
+      setCurrentUser(user);
+    };
+    loadUser();
 
     const handleMarketplaceUpdate = () => {
       loadMarketplaceItems();
@@ -80,6 +88,8 @@ export default function MarketplaceTab() {
   const loadMarketplaceItems = async () => {
     try {
       const trips = await getMarketplaceTrips();
+      console.log('DEBUG: Marketplace Trips fetched:', trips);
+      console.log('DEBUG: Current User:', (window as any).supabase?.auth?.currentUser?.id);
 
       const marketplaceItems: MarketplaceItem[] = trips.map(trip => {
         // Calculate days
@@ -145,6 +155,7 @@ export default function MarketplaceTab() {
         };
       });
 
+      console.log('DEBUG: Mapped Items:', marketplaceItems);
       setItems(marketplaceItems);
     } catch (error) {
       console.error('Error loading marketplace items:', error);
@@ -187,81 +198,111 @@ export default function MarketplaceTab() {
     return colors[category] || 'bg-gray-100';
   };
 
-  const handlePurchase = (item: MarketplaceItem) => {
+  const handleCollaborate = async (item: MarketplaceItem) => {
+    if (userBalance < item.price) {
+      alert('❌ Saldo insuficiente para colaborar neste roteiro.');
+      return;
+    }
+
+    try {
+      const { supabase } = await import('../../../services/supabase');
+
+      // Call RPC
+      const { error } = await supabase.rpc('join_trip_collaborator', { target_trip_id: item.id });
+
+      if (error) {
+        console.error(error);
+        if (error.message.includes('already')) {
+          alert('⚠️ Você já é um colaborador deste roteiro!');
+        } else {
+          alert('❌ Erro ao entrar como colaborador: ' + error.message);
+        }
+        return;
+      }
+
+      // Deduct balance logic (Mirroring handlePurchase)
+      const wallet = localStorage.getItem('travel-money-wallet');
+      if (wallet) {
+        const data = JSON.parse(wallet);
+        const newBalance = data.balance - item.price;
+
+        const newTransaction = {
+          id: Date.now().toString(),
+          type: 'expense' as const,
+          amount: item.price,
+          description: `Colaboração: ${item.title}`,
+          category: 'booking' as const,
+          date: new Date().toISOString()
+        };
+
+        data.balance = newBalance;
+        data.transactions = [newTransaction, ...(data.transactions || [])];
+        localStorage.setItem('travel-money-wallet', JSON.stringify(data));
+        setUserBalance(newBalance);
+        window.dispatchEvent(new Event('wallet-updated'));
+      }
+
+      alert('🤝 Agora você é um colaborador! O roteiro apareceu na aba "Compartilhadas" em Minhas Viagens.');
+      setShowDetailModal(false);
+      // Force refresh of My Tripss
+      window.dispatchEvent(new Event('marketplace-updated'));
+
+    } catch (err) {
+      console.error(err);
+      alert('Erro inesperado ao colaborar.');
+    }
+  };
+
+  const handlePurchase = async (item: MarketplaceItem) => {
     if (userBalance < item.price) {
       alert('❌ Saldo insuficiente! Você precisa de mais Travel Money para comprar este roteiro.');
       return;
     }
 
-    // Deduzir do saldo
-    const wallet = localStorage.getItem('travel-money-wallet');
-    if (wallet) {
-      const data = JSON.parse(wallet);
-      const newBalance = data.balance - item.price;
+    try {
+      const { supabase } = await import('../../../services/supabase');
 
-      // Adicionar transação
-      const newTransaction = {
-        id: Date.now().toString(),
-        type: 'expense' as const,
-        amount: item.price,
-        description: `Compra: ${item.title}`,
-        category: 'booking' as const,
-        date: new Date().toISOString()
-      };
+      // 1. Call RPC to buy and clone trip
+      const { data: newTripId, error } = await supabase.rpc('buy_trip', {
+        original_trip_id: item.id,
+        sale_price: item.price
+      });
 
-      data.balance = newBalance;
-      data.transactions = [newTransaction, ...(data.transactions || [])];
+      if (error) throw error;
 
-      localStorage.setItem('travel-money-wallet', JSON.stringify(data));
-      setUserBalance(newBalance);
+      // 2. Deduct from local wallet (Legacy/Client-side wallet)
+      const wallet = localStorage.getItem('travel-money-wallet');
+      if (wallet) {
+        const data = JSON.parse(wallet);
+        const newBalance = data.balance - item.price;
 
-      // Adicionar roteiro às viagens do usuário
-      const userTrips = localStorage.getItem('user-trips');
-      const trips = userTrips ? JSON.parse(userTrips) : [];
+        const newTransaction = {
+          id: Date.now().toString(),
+          type: 'expense' as const,
+          amount: item.price,
+          description: `Compra: ${item.title}`,
+          category: 'booking' as const,
+          date: new Date().toISOString()
+        };
 
-      const newTrip = {
-        id: Date.now().toString(),
-        name: item.title,
-        destination: item.destination,
-        startDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        endDate: new Date(Date.now() + (30 + item.days) * 24 * 60 * 60 * 1000).toISOString(),
-        travelers: 1,
-        tripType: item.category,
-        budget: '€€€',
-        description: item.description,
-        createdAt: new Date().toISOString(),
-        status: 'planning',
-        places: item.itinerary.map((day, idx) => ({
-          id: `place-${idx}`,
-          name: day.title,
-          description: day.description,
-          time: '09:00',
-          duration: '8h'
-        })),
-        coverImage: item.coverImage,
-        purchasedFrom: item.seller.name,
-        marketplaceItemId: item.id
-      };
+        data.balance = newBalance;
+        data.transactions = [newTransaction, ...(data.transactions || [])]; // Fix potential null
 
-      trips.push(newTrip);
-      localStorage.setItem('user-trips', JSON.stringify(trips));
+        localStorage.setItem('travel-money-wallet', JSON.stringify(data));
+        setUserBalance(newBalance);
+        window.dispatchEvent(new Event('wallet-updated'));
+      }
 
-      // Atualizar vendas do item
-      const updatedItems = items.map(i =>
-        i.id === item.id ? { ...i, sales: i.sales + 1 } : i
-      );
-      setItems(updatedItems);
-
-
-      alert(`✅ Roteiro comprado com sucesso!\n\n💰 ${item.price} TM debitados\n📍 Roteiro adicionado em "Minhas Viagens"\n\nBoa viagem! 🎉`);
+      alert('🎉 Roteiro adquirido com sucesso! Uma cópia foi criada em "Minhas Viagens" onde você é o dono e tem controle total.');
       setShowDetailModal(false);
+      // Force refresh
+      window.dispatchEvent(new Event('marketplace-updated'));
 
-      // Disparar evento para atualizar wallet widget
-      window.dispatchEvent(new Event('wallet-updated'));
+    } catch (err) {
+      console.error('Purchase failed', err);
+      alert('Erro ao processar a compra: ' + (err as any).message);
     }
   };
-
-
 
   const filteredItems = items
     .filter(item => {
@@ -601,6 +642,16 @@ export default function MarketplaceTab() {
                     </span>
                   </div>
 
+                  {/* Owner Label */}
+                  {(currentUser && item.seller.id === currentUser.id) && (
+                    <div className="mb-3">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-purple-100 text-purple-700 text-xs font-semibold border border-purple-200">
+                        <i className="ri-user-star-fill"></i>
+                        Seu Roteiro
+                      </span>
+                    </div>
+                  )}
+
                   {/* Description */}
                   <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
 
@@ -775,26 +826,36 @@ export default function MarketplaceTab() {
                       </p>
                     </div>
                     {/* Owner Check: If owner, show distinct UI */}
-                    {selectedItem.seller.id === (window as any).supabase?.auth?.currentUser?.id || selectedItem.seller.id === 'current-user' ? ( // 'current-user' is a fallback mock
+                    {(currentUser && selectedItem.seller.id === currentUser.id) ? (
                       <div className="flex flex-col items-end gap-2">
                         <button
                           disabled
-                          className="px-8 py-4 bg-gray-200 text-gray-500 font-semibold rounded-xl cursor-not-allowed whitespace-nowrap"
+                          className="px-8 py-4 bg-gray-100 text-gray-500 font-semibold rounded-xl cursor-not-allowed whitespace-nowrap border border-gray-200"
                         >
                           <i className="ri-user-settings-line mr-2"></i>
                           Você é o autor
                         </button>
-                        <p className="text-xs text-gray-500">Este roteiro está publicado e visível para outros usuários.</p>
+                        <p className="text-xs text-gray-500">Este roteiro é seu.</p>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => handlePurchase(selectedItem)}
-                        disabled={userBalance < selectedItem.price}
-                        className="w-full md:w-auto px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      >
-                        <i className="ri-shopping-cart-line mr-2"></i>
-                        {userBalance < selectedItem.price ? 'Saldo Insuficiente' : 'Comprar Roteiro'}
-                      </button>
+                      <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+                        <button
+                          onClick={() => handleCollaborate(selectedItem)}
+                          disabled={userBalance < selectedItem.price}
+                          className="px-6 py-4 bg-white text-purple-600 font-semibold rounded-xl border-2 border-purple-500 hover:bg-purple-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          <i className="ri-group-line mr-2"></i>
+                          Colaborar (Manter Link)
+                        </button>
+                        <button
+                          onClick={() => handlePurchase(selectedItem)}
+                          disabled={userBalance < selectedItem.price}
+                          className="px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          <i className="ri-shopping-cart-line mr-2"></i>
+                          {userBalance < selectedItem.price ? 'Saldo Insuficiente' : 'Comprar (Cópia)'}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

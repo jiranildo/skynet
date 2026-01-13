@@ -277,8 +277,11 @@ export default function Stories() {
           trip={{
             ...selectedTrip,
             id: String(selectedTrip.id),
-            cover_image: selectedTrip.cover_image || '',
-            dates: `${new Date(selectedTrip.start_date).toLocaleDateString()} - ${new Date(selectedTrip.end_date).toLocaleDateString()}`
+            cover_image: selectedTrip.cover_image || ''
+          }}
+          onTripUpdated={(updatedTrip) => {
+            setSelectedTrip(updatedTrip);
+            setUniqueTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t));
           }}
         />
       )}

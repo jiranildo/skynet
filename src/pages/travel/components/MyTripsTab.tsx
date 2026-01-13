@@ -346,6 +346,13 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
           category: selectedTrip.trip_type
         });
 
+        // CRITICAL: Update Trip Visibility to Public so others can see it (RLS)
+        // Also sync marketplaceConfig to metadata for consistency
+        await updateTrip(selectedTrip.id, {
+          visibility: 'public',
+          marketplaceConfig: config
+        });
+
         setFeedbackModal({
           isOpen: true,
           title: 'Sucesso!',
@@ -381,12 +388,29 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
             // Batch insert notifications
             await supabase.from('notifications').insert(notifications);
           }
+
+          // 4. Notify the Publisher (Self)
+          await supabase.from('notifications').insert({
+            user_id: user.id,
+            type: 'system',
+            title: 'Roteiro Publicado!',
+            message: `Seu roteiro "${selectedTrip.title}" já está disponível no Marketplace.`,
+            is_read: false,
+            related_user_id: user.id
+          });
         }
         // ============================================================
 
       } else {
         // Handle unlisting: Remove from marketplace_listings table
         await deleteMarketplaceListing(selectedTrip.id);
+
+        // Revert visibility to private when unsharing
+        await updateTrip(selectedTrip.id, {
+          visibility: 'private',
+          marketplaceConfig: config
+        });
+
         setFeedbackModal({
           isOpen: true,
           title: 'Removido',
@@ -427,6 +451,24 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
     } catch (error) {
       console.error('Error publishing trip:', error);
       alert(`Erro ao salvar publicação: ${(error as any).message || 'Erro desconhecido'}`);
+    }
+  };
+
+  const handleLeaveTrip = async (trip: Trip) => {
+    if (!confirm('Tem certeza que deseja sair desta viagem compartilhada? Você perderá o acesso a ela e não poderá mais ver ou editar.')) return;
+
+    try {
+      const { supabase } = await import('../../../services/supabase');
+      // Call RPC
+      const { error } = await supabase.rpc('leave_trip', { target_trip_id: trip.id });
+
+      if (error) throw error;
+
+      alert('Você saiu da viagem com sucesso.');
+      refreshTrips();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao sair da viagem.');
     }
   };
 
@@ -1199,10 +1241,15 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
             onClose={() => {
               setIsPlanningModalOpen(false);
               setSelectedTrip(null);
+              refreshTrips(); // Refresh to get latest data including itinerary updates
             }}
             trip={{
               ...selectedTrip,
               cover_image: selectedTrip.cover_image || `https://readdy.ai/api/search-image?query=${selectedTrip.destination}%20beautiful%20travel%20destination%20scenic%20view&width=800&height=400&seq=trip-modal-${selectedTrip.id}&orientation=landscape`
+            }}
+            onTripUpdated={(updatedTrip) => {
+              setTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t));
+              setSelectedTrip(updatedTrip);
             }}
           />
         )
@@ -2210,18 +2257,32 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
 
                   <div className="p-4">
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold">
-                        {trip.user_id.substring(0, 2).toUpperCase()}
-                      </div>
+                      {trip.owner?.avatar_url ? (
+                        <img src={trip.owner.avatar_url} alt={trip.owner.full_name} className="w-8 h-8 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold">
+                          {(trip.owner?.full_name || 'U').substring(0, 2).toUpperCase()}
+                        </div>
+                      )}
                       <div>
                         <p className="text-xs text-gray-500">Compartilhado por</p>
-                        <p className="text-sm font-semibold text-gray-900">Proprietário da Viagem</p>
+                        <p className="text-sm font-semibold text-gray-900">{trip.owner?.full_name || 'Usuário Desconhecido'}</p>
                       </div>
                     </div>
 
                     <div className="flex gap-2">
                       <button className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium text-sm">
                         Visualizar
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleLeaveTrip(trip);
+                        }}
+                        className="px-4 py-2 bg-red-50 text-red-500 rounded-lg font-medium text-sm hover:bg-red-100 transition-colors border border-red-100"
+                        title="Sair desta viagem"
+                      >
+                        <i className="ri-logout-box-r-line"></i>
                       </button>
                     </div>
                   </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { useAuth } from '../../../context/AuthContext';
 import { createTrip, updateTrip } from '../../../services/supabase';
 
@@ -25,6 +26,8 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
         destination: initialData?.destination || '',
         startDate: initialData?.start_date || '',
         endDate: initialData?.end_date || '',
+        startTime: initialData?.metadata?.startTime || '09:00',
+        endTime: initialData?.metadata?.endTime || '18:00',
         travelers: initialData?.travelers || 2,
         tripType: initialData?.trip_type || 'leisure',
         budget: getBudgetLevel(initialData?.budget),
@@ -35,66 +38,117 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const [generationProgress, setGenerationProgress] = useState(0);
 
-    const handleGenerateImage = () => {
+    const handleGenerateImage = async () => {
         if (!tripForm.destination) {
             alert('Por favor, preencha o destino primeiro');
             return;
         }
 
+        const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+        if (!apiKey) {
+            alert('Erro de configuração: VITE_GOOGLE_API_KEY não encontrada. O sistema usará um prompt padrão.');
+            console.error('VITE_GOOGLE_API_KEY missing');
+            // We proceed with the default prompt, but warn the user
+        }
+
         setIsGeneratingImage(true);
         setGenerationProgress(0);
-
-        // 1. Primary Strategy: Pollinations.ai (Flux Model - "Gemini Level" Quality)
-        // We use the Flux model with a heavily optimized prompt for photorealism.
-        const seed = Math.floor(Math.random() * 1000000);
-        const timestamp = Date.now();
-
-        // "Gemini Style" Prompt Engineering
-        const enhancedPrompt = `professional travel photography of ${tripForm.destination}, establishing shot, hyperrealistic, 8k resolution, hdr, dramatic lighting, cinematic composition, sharp focus, no text, highly detailed, national geographic style`;
-        const query = encodeURIComponent(enhancedPrompt);
-
-        const primaryUrl = `https://image.pollinations.ai/prompt/${query}?width=1200&height=630&nologo=true&seed=${seed}&model=flux&t=${timestamp}`;
-
-        // 2. Fallback Strategy: Unsplash
-        const fallbackUrl = 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1200&auto=format&fit=crop';
-
-        const img = new Image();
 
         // Progress Animation
         let progress = 0;
         const interval = setInterval(() => {
             if (progress < 90) {
-                progress += Math.random() * 15;
-                setGenerationProgress(Math.min(95, progress));
+                progress += Math.random() * 10;
+                setGenerationProgress(Math.min(90, progress));
             }
-        }, 500);
+        }, 300);
 
-        const finish = (url: string) => {
-            clearInterval(interval);
-            setGenerationProgress(100);
-            setTimeout(() => {
-                setTripForm(prev => ({ ...prev, coverImage: url }));
-                setIsGeneratingImage(false);
-                setGenerationProgress(0);
-            }, 500);
-        };
+        try {
+            // Find selected trip type name for context
+            const selectedTripType = tripTypes.find(t => t.id === tripForm.tripType)?.name || 'Viagem';
 
-        img.onload = () => finish(primaryUrl);
+            // 1. Generate Optimized Search Keywords with Gemini
+            let searchKeywords = `${tripForm.destination}, ${selectedTripType}, travel`; // Default
+            let isGeminiUsed = false;
 
-        img.onerror = () => {
-            console.warn('Primary AI generation failed, switching to fallback.');
-            const backupImg = new Image();
-            backupImg.onload = () => finish(fallbackUrl);
-            backupImg.onerror = () => {
+            if (apiKey) {
+                try {
+                    const genAI = new GoogleGenerativeAI(apiKey);
+                    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+                    const result = await model.generateContent(`
+                        You are an expert travel photographer's assistant.
+                        Generate a SHORT, VIVID, VISUAL description (in English) of a perfect travel photo for: "${tripForm.destination}" with a "${selectedTripType}" vibe.
+                        
+                        Rules:
+                        - Focus on visual elements (colors, lighting, landmarks).
+                        - NO introduction, NO "Here is a description", NO "prompt:".
+                        - Just the raw description text.
+                        - Max 25 words.
+                        - Example output: "Sun setting over the Eiffel Tower with golden light reflecting on the Seine river, autumn leaves"
+                    `);
+                    const response = await result.response;
+                    const text = response.text();
+                    if (text && text.length > 5) {
+                        searchKeywords = text.replace(/[*"]/g, '').trim(); // Clean up quotes/markdown
+                        isGeminiUsed = true;
+                        console.log('✨ Gemini visual description:', searchKeywords);
+                    }
+                } catch (e) {
+                    console.error("Gemini description generation failed:", e);
+                }
+            }
+
+            // 2. Reliable Image Strategy: LoremFlickr (Real Photos)
+            // Pollinations is unstable and returns "Robot" errors. We switch to LoremFlickr for real photos based on tags.
+
+            const cleanDestination = tripForm.destination.replace(/[^a-zA-Z0-9\s]/g, '');
+            // Create specific tags for Flickr search
+            // We use the Gemini visual keywords if available, otherwise construct standard tags
+            const tags = searchKeywords
+                ? searchKeywords.split(',').map(s => s.trim().replace(/\s+/g, '')).join(',')
+                : `${cleanDestination.replace(/\s+/g, '')},travel,landmark,city`;
+
+            const randomLock = Math.floor(Math.random() * 10000);
+
+            // Primary: Strict Tag Match
+            const primaryUrl = `https://loremflickr.com/1200/630/${encodeURIComponent(tags)}/all?lock=${randomLock}`;
+
+            // Secondary: Relaxed Match (Just City)
+            const secondaryUrl = `https://loremflickr.com/1200/630/${encodeURIComponent(cleanDestination.replace(/\s+/g, ''))},travel/?lock=${randomLock}`;
+
+            // Final Fallback: Unsplash Static
+            const staticFallbackUrl = `https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?ixlib=rb-4.0.3&q=80&w=1200&auto=format&fit=crop`;
+
+            const img = new Image();
+
+            const finish = (url: string) => {
                 clearInterval(interval);
-                setIsGeneratingImage(false);
-                setGenerationProgress(0);
-                alert('Não foi possível carregar a imagem. Verifique sua conexão.');
+                setGenerationProgress(100);
+                setTimeout(() => {
+                    setTripForm(prev => ({ ...prev, coverImage: url }));
+                    setIsGeneratingImage(false);
+                    setGenerationProgress(0);
+                }, 500);
             };
-            backupImg.src = fallbackUrl;
-        };
 
-        img.src = primaryUrl;
+            img.onload = () => finish(primaryUrl);
+
+            img.onerror = () => {
+                const img2 = new Image();
+                img2.onload = () => finish(secondaryUrl);
+                img2.onerror = () => finish(staticFallbackUrl);
+                img2.src = secondaryUrl;
+            };
+
+            img.src = primaryUrl;
+
+        } catch (error) {
+            clearInterval(interval);
+            setIsGeneratingImage(false);
+            console.error("Image generation flow error", error);
+            alert('Ocorreu um erro ao gerar a imagem.');
+        }
     };
 
     const tripTypes = [
@@ -139,7 +193,11 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
             budget: budgetVal,
             description: tripForm.description,
             cover_image: tripForm.coverImage,
-            status: 'planning' as const
+            status: 'planning' as const,
+            metadata: {
+                startTime: tripForm.startTime,
+                endTime: tripForm.endTime
+            }
         };
 
         try {
@@ -236,6 +294,38 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
                                 onChange={(e) => setTripForm({ ...tripForm, endDate: e.target.value })}
                                 className="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-700"
                             />
+                        </div>
+                    </div>
+
+                    {/* Times */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Horário de Chegada (Ida)
+                            </label>
+                            <div className="relative">
+                                <i className="ri-time-line absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                <input
+                                    type="time"
+                                    value={tripForm.startTime}
+                                    onChange={(e) => setTripForm({ ...tripForm, startTime: e.target.value })}
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-700"
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Horário de Partida (Volta)
+                            </label>
+                            <div className="relative">
+                                <i className="ri-time-line absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                <input
+                                    type="time"
+                                    value={tripForm.endTime}
+                                    onChange={(e) => setTripForm({ ...tripForm, endTime: e.target.value })}
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-700"
+                                />
+                            </div>
                         </div>
                     </div>
 

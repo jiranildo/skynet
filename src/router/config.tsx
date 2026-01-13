@@ -12,6 +12,7 @@ const AdminPage = lazy(() => import('../pages/admin/page'));
 const AdminLoginPage = lazy(() => import('../pages/admin-login/page'));
 const LoginPage = lazy(() => import('../pages/auth/login'));
 const SignupPage = lazy(() => import('../pages/auth/signup'));
+const SettingsPage = lazy(() => import('../pages/settings/page'));
 const NotFound = lazy(() => import('../pages/NotFound'));
 
 const routes: RouteObject[] = [
@@ -59,6 +60,10 @@ const routes: RouteObject[] = [
   {
     path: '/admin/login',
     element: <AdminLoginPage />,
+  },
+  {
+    path: '/settings',
+    element: <SettingsPage />,
   },
   {
     path: '*',

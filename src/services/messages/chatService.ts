@@ -150,20 +150,37 @@ export const sendMessage = async (
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Auth required');
 
+    // 1. Resolve receiver_id for Direct Messages
+    let receiverId = null;
+    if (params.conversationId) {
+        // We need to fetch the conversation to see who the other user is
+        // optimization: pass receiverId in params if possible, but for safety fetching here
+        const { data: conv } = await supabase
+            .from('conversations')
+            .select('user1_id, user2_id')
+            .eq('id', params.conversationId)
+            .single();
+
+        if (conv) {
+            receiverId = conv.user1_id === user.id ? conv.user2_id : conv.user1_id;
+        }
+    }
+
     const msgData: any = {
         sender_id: user.id,
         content: params.content,
         type: params.type || 'text',
         reply_to_id: params.replyToId || null,
         location_lat: params.location?.lat,
-        location_lng: params.location?.lng
+        location_lng: params.location?.lng,
+        receiver_id: receiverId // Add receiver_id for unread counts
     };
 
     if (params.conversationId) msgData.conversation_id = params.conversationId;
     if (params.groupId) msgData.group_id = params.groupId;
     if (params.communityId) msgData.community_id = params.communityId;
 
-    const { data, error } = await supabase
+    const { data: messageData, error } = await supabase
         .from('messages')
         .insert(msgData)
         .select(`
@@ -173,6 +190,19 @@ export const sendMessage = async (
         .single();
 
     if (error) throw error;
+
+    // 2. Create Notification for Receiver (Direct Messages only for now)
+    if (receiverId) {
+        await supabase.from('notifications').insert({
+            user_id: receiverId,
+            type: 'message', // New type
+            related_user_id: user.id,
+            related_post_id: null, // No post
+            title: 'Nova mensagem',
+            message: params.content, // Or snippet
+            is_read: false
+        });
+    }
 
     // Update last_message
     const now = new Date().toISOString();
@@ -196,7 +226,7 @@ export const sendMessage = async (
         // or we skip it.
     }
 
-    return data as ChatMessage;
+    return messageData as ChatMessage;
 };
 
 

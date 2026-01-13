@@ -4,9 +4,11 @@ import { useAuth } from '../../context/AuthContext';
 import CreateMenu from '../../components/CreateMenu';
 import CreatePostModal from '../home/components/CreatePostModal';
 import NotificationsPanel from '../home/components/NotificationsPanel';
-import GamificationWidget from '../../components/GamificationWidget';
-import WalletWidget from '../../components/WalletWidget';
-import EditProfileModal from './components/EditProfileModal';
+// import GamificationWidget from '../../components/GamificationWidget'; // Removed as it is now in ProfileHub
+// import WalletWidget from '../../components/WalletWidget'; // Removed as it is now in ProfileHub
+// import EditProfileModal from './components/EditProfileModal'; // Removed as it is now in ProfileHub
+// import SettingsModal from './components/SettingsModal'; // Removed as it is now in ProfileHub
+// import ProfileHubModal from './components/ProfileHubModal'; // Removed as we are using SettingsPage now
 import HeaderActions from '../../components/HeaderActions';
 import {
   ensureUserProfile,
@@ -41,7 +43,17 @@ export default function ProfilePage() {
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-  const [showEditProfile, setShowEditProfile] = useState(false);
+  /* New ProfileHub State - REMOVED, using SettingsPage */
+  // const [profileHub, setProfileHubState] = useState<{ isOpen: boolean; tab: 'edit' | 'settings' | 'wallet' | 'gamification' }>({
+  //   isOpen: false,
+  //   tab: 'edit'
+  // });
+
+  // Old states removed:
+  // const [showEditProfile, setShowEditProfile] = useState(false);
+  // const [showSettings, setShowSettings] = useState(false);
+  // const [showGamification, setShowGamification] = useState(false);
+  // const [showWallet, setShowWallet] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
 
@@ -58,9 +70,9 @@ export default function ProfilePage() {
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showReels, setShowReels] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  const [showGamification, setShowGamification] = useState(false);
-  const [showWallet, setShowWallet] = useState(false);
+  // const [showMenu, setShowMenu] = useState(false); // Removed as main menu is now settings page
+  // const [showGamification, setShowGamification] = useState(false); // Removed
+  // const [showWallet, setShowWallet] = useState(false); // Removed
   const [showCreateMenu, setShowCreateMenu] = useState(false);
 
   // Load Profile Data
@@ -226,20 +238,7 @@ export default function ProfilePage() {
   } as UserType;
 
 
-  const menuItems = [
-    { icon: 'ri-wallet-line', label: 'Carteira', action: () => setShowWallet(true) },
-    { icon: 'ri-trophy-line', label: 'Conquistas', action: () => setShowGamification(true) },
-    { icon: 'ri-settings-3-line', label: 'Editar Perfil', action: () => setShowEditProfile(true) },
-    {
-      icon: 'ri-logout-box-line',
-      label: 'Sair',
-      action: async () => {
-        await signOut();
-        navigate('/login');
-      }
-    },
-  ];
-
+  // Helper functions
   const handleCreateClick = () => {
     setShowCreateMenu(true);
   };
@@ -272,69 +271,21 @@ export default function ProfilePage() {
             </button>
             <HeaderActions
               onShowNotifications={() => setShowNotifications(true)}
-              showMenu={isOwnProfile} // Only show full menu on own profile
-              onShowMenu={() => setShowMenu(true)}
+              showMenu={isOwnProfile} // Still show the button
+              onShowMenu={() => navigate('/settings?tab=settings')} // Direct navigation
+              menuIcon="ri-settings-3-line"
             />
           </div>
         </div>
       </header>
 
-      {/* Menu Lateral (Drawer) - Only for Own Profile */}
+      {/* Menu Lateral (Drawer) - Removed */}{/*
       {showMenu && isOwnProfile && (
         <>
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 animate-fadeIn"
-            onClick={() => setShowMenu(false)}
-          ></div>
-
-          <div className="fixed top-0 right-0 bottom-0 w-full max-w-sm bg-white shadow-2xl z-50 animate-slideInRight overflow-y-auto">
-            <div className="bg-gradient-to-r from-gray-700 to-gray-900 p-4 md:p-6 text-white">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg md:text-2xl font-bold">Menu</h2>
-                <button
-                  onClick={() => setShowMenu(false)}
-                  className="w-10 h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
-                >
-                  <i className="ri-close-line text-2xl"></i>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-xl p-3">
-                <img
-                  src={currentProfile.avatar_url || 'https://via.placeholder.com/150'}
-                  alt="User"
-                  className="w-12 h-12 rounded-full object-cover border-2 border-white"
-                />
-                <div>
-                  <h3 className="font-bold text-white text-sm md:text-base">{currentProfile.full_name || currentProfile.username}</h3>
-                  <p className="text-white/90 text-xs md:text-sm">@{currentProfile.username}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3 md:p-4 space-y-2">
-              {menuItems.map((item, index) => (
-                <button
-                  key={index}
-                  onClick={() => {
-                    item.action();
-                    setShowMenu(false);
-                  }}
-                  className="w-full flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-gray-50 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 rounded-xl transition-all group"
-                >
-                  <div className="w-10 h-10 bg-gradient-to-r from-gray-700 to-gray-900 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <i className={`${item.icon} text-white text-base md:text-lg`}></i>
-                  </div>
-                  <span className="flex-1 text-left font-medium text-gray-700 group-hover:text-gray-900 text-sm md:text-base">
-                    {item.label}
-                  </span>
-                  <i className="ri-arrow-right-s-line text-gray-400 group-hover:text-gray-600"></i>
-                </button>
-              ))}
-            </div>
-          </div>
+        ... removed ...
         </>
       )}
+      */}
 
       {/* Content */}
       <div className="pt-[57px] md:pt-[73px] pb-20 md:pb-6">
@@ -365,12 +316,31 @@ export default function ProfilePage() {
 
                   <div className="flex gap-2">
                     {isOwnProfile ? (
-                      <button
-                        onClick={() => setShowEditProfile(true)}
-                        className="px-4 md:px-6 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-all whitespace-nowrap text-sm"
-                      >
-                        Editar Perfil
-                      </button>
+                      <>
+                        <button
+                          onClick={() => navigate('/settings?tab=wallet')}
+                          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl flex items-center gap-2 font-medium hover:bg-gray-200 transition-all text-sm"
+                          title="Carteira"
+                        >
+                          <i className="ri-wallet-3-line text-lg"></i>
+                          <span className="hidden lg:inline">Carteira</span>
+                        </button>
+                        <button
+                          onClick={() => navigate('/settings?tab=gamification')}
+                          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl flex items-center gap-2 font-medium hover:bg-gray-200 transition-all text-sm"
+                          title="Conquistas"
+                        >
+                          <i className="ri-trophy-line text-lg"></i>
+                          <span className="hidden lg:inline">Conquistas</span>
+                        </button>
+                        <button
+                          onClick={() => navigate('/settings?tab=edit')}
+                          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl flex items-center gap-2 font-medium hover:bg-gray-200 transition-all text-sm"
+                        >
+                          <i className="ri-edit-line text-lg"></i>
+                          <span className="hidden sm:inline">Editar Perfil</span>
+                        </button>
+                      </>
                     ) : (
                       <button
                         onClick={handleFollowToggle}
@@ -429,114 +399,134 @@ export default function ProfilePage() {
                       {currentProfile.website.replace(/^https?:\/\//, '')}
                     </a>
                   )}
+                  {/* Location display based on settings */}
+                  {currentProfile.location && currentProfile.show_location !== false && (
+                    <div className="flex items-center gap-1 text-gray-500 text-xs md:text-sm mt-1">
+                      <i className="ri-map-pin-line"></i>
+                      <span>{currentProfile.location}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="bg-white rounded-xl shadow-sm mb-4">
-            <div className="flex border-b border-gray-200">
-              <button
-                onClick={() => setActiveTab('posts')}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'posts'
-                  ? 'text-gray-900 border-b-2 border-gray-900'
-                  : 'text-gray-500 hover:text-gray-700'
-                  }`}
-              >
-                <i className="ri-grid-line text-base sm:text-lg"></i>
-                <span className="hidden sm:inline text-xs sm:text-sm font-medium">Posts</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('reels')}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'reels'
-                  ? 'text-gray-900 border-b-2 border-gray-900'
-                  : 'text-gray-500 hover:text-gray-700'
-                  }`}
-              >
-                <i className="ri-movie-line text-base sm:text-lg"></i>
-                <span className="hidden sm:inline text-xs sm:text-sm font-medium">Reels</span>
-              </button>
-
-              {isOwnProfile && (
-                <button
-                  onClick={() => setActiveTab('saved')} // Only owner can see saved
-                  className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'saved'
-                    ? 'text-gray-900 border-b-2 border-gray-900'
-                    : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                >
-                  <i className="ri-bookmark-line text-base sm:text-lg"></i>
-                  <span className="hidden sm:inline text-xs sm:text-sm font-medium">Salvos</span>
-                </button>
-              )}
-
-              <button
-                onClick={() => setActiveTab('tagged')}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'tagged'
-                  ? 'text-gray-900 border-b-2 border-gray-900'
-                  : 'text-gray-500 hover:text-gray-700'
-                  }`}
-              >
-                <i className="ri-user-line text-base sm:text-lg"></i>
-                <span className="hidden sm:inline text-xs sm:text-sm font-medium">Marcações</span>
-              </button>
+          {/* Privacy Check */}
+          {(!isOwnProfile && (currentProfile.privacy_setting === 'private' || currentProfile.privacy_setting === 'friends') && !isFollowing) ? (
+            <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i className="ri-lock-2-line text-4xl text-gray-400"></i>
+              </div>
+              <h3 className="font-bold text-lg text-gray-900">Esta conta é privada</h3>
+              <p className="text-gray-500 text-sm mt-1">Siga esta conta para ver suas fotos e vídeos.</p>
             </div>
-          </div>
-
-          {/* Posts Grid */}
-          {
-            (activeTab === 'posts' ? posts : activeTab === 'reels' ? reels : activeTab === 'saved' ? savedPosts : []).length > 0 ? (
-              <div className="grid grid-cols-3 gap-1 sm:gap-2">
-                {(activeTab === 'posts' ? posts : activeTab === 'reels' ? reels : activeTab === 'saved' ? savedPosts : []).map((item: any) => (
-                  <div
-                    key={item.id}
-                    className="relative aspect-square bg-gray-100 rounded-sm sm:rounded-lg overflow-hidden group cursor-pointer"
-                    onClick={() => {
-                      // TODO: Handle click (open post/reel modal)
-                    }}
+          ) : (
+            <>
+              {/* Tabs */}
+              <div className="bg-white rounded-xl shadow-sm mb-4">
+                <div className="flex border-b border-gray-200">
+                  <button
+                    onClick={() => setActiveTab('posts')}
+                    className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'posts'
+                      ? 'text-gray-900 border-b-2 border-gray-900'
+                      : 'text-gray-500 hover:text-gray-700'
+                      }`}
                   >
-                    {activeTab === 'reels' ? (
-                      <video
-                        src={item.video_url}
-                        className="w-full h-full object-cover"
-                        muted
-                        playsInline
-                      />
-                    ) : (
-                      <img
-                        src={item.image || item.image_url}
-                        alt={`Post ${item.id}`}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
+                    <i className="ri-grid-line text-base sm:text-lg"></i>
+                    <span className="hidden sm:inline text-xs sm:text-sm font-medium">Posts</span>
+                  </button>
 
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                      <div className="flex items-center gap-1 text-white">
-                        <i className="ri-heart-fill text-base sm:text-xl"></i>
-                        <span className="font-bold text-xs sm:text-sm">{item.likes || item.likes_count}</span>
+                  <button
+                    onClick={() => setActiveTab('reels')}
+                    className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'reels'
+                      ? 'text-gray-900 border-b-2 border-gray-900'
+                      : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                  >
+                    <i className="ri-movie-line text-base sm:text-lg"></i>
+                    <span className="hidden sm:inline text-xs sm:text-sm font-medium">Reels</span>
+                  </button>
+
+                  {isOwnProfile && (
+                    <button
+                      onClick={() => setActiveTab('saved')} // Only owner can see saved
+                      className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'saved'
+                        ? 'text-gray-900 border-b-2 border-gray-900'
+                        : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                      <i className="ri-bookmark-line text-base sm:text-lg"></i>
+                      <span className="hidden sm:inline text-xs sm:text-sm font-medium">Salvos</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setActiveTab('tagged')}
+                    className={`flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap ${activeTab === 'tagged'
+                      ? 'text-gray-900 border-b-2 border-gray-900'
+                      : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                  >
+                    <i className="ri-user-line text-base sm:text-lg"></i>
+                    <span className="hidden sm:inline text-xs sm:text-sm font-medium">Marcações</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Posts Grid */}
+              {
+                (activeTab === 'posts' ? posts : activeTab === 'reels' ? reels : activeTab === 'saved' ? savedPosts : []).length > 0 ? (
+                  <div className="grid grid-cols-3 gap-1 sm:gap-2">
+                    {(activeTab === 'posts' ? posts : activeTab === 'reels' ? reels : activeTab === 'saved' ? savedPosts : []).map((item: any) => (
+                      <div
+                        key={item.id}
+                        className="relative aspect-square bg-gray-100 rounded-sm sm:rounded-lg overflow-hidden group cursor-pointer"
+                        onClick={() => {
+                          // TODO: Handle click (open post/reel modal)
+                        }}
+                      >
+                        {activeTab === 'reels' ? (
+                          <video
+                            src={item.video_url}
+                            className="w-full h-full object-cover"
+                            muted
+                            playsInline
+                          />
+                        ) : (
+                          <img
+                            src={item.image || item.image_url}
+                            alt={`Post ${item.id}`}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                          <div className="flex items-center gap-1 text-white">
+                            <i className="ri-heart-fill text-base sm:text-xl"></i>
+                            <span className="font-bold text-xs sm:text-sm">{item.likes || item.likes_count}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-white">
+                            <i className={`ri-${activeTab === 'reels' ? 'play-circle-fill' : 'chat-3-fill'} text-base sm:text-xl`}></i>
+                            <span className="font-bold text-xs sm:text-sm">{activeTab === 'reels' ? item.views_count : item.comments}</span>
+                          </div>
+                        </div>
+                        {activeTab === 'reels' && (
+                          <div className="absolute top-2 right-2 text-white">
+                            <i className="ri-movie-fill drop-shadow-md"></i>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1 text-white">
-                        <i className={`ri-${activeTab === 'reels' ? 'play-circle-fill' : 'chat-3-fill'} text-base sm:text-xl`}></i>
-                        <span className="font-bold text-xs sm:text-sm">{activeTab === 'reels' ? item.views_count : item.comments}</span>
-                      </div>
-                    </div>
-                    {activeTab === 'reels' && (
-                      <div className="absolute top-2 right-2 text-white">
-                        <i className="ri-movie-fill drop-shadow-md"></i>
-                      </div>
-                    )}
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl p-12 text-center text-gray-500">
-                <i className={`ri-${activeTab === 'reels' ? 'movie' : 'camera-lens'}-line text-4xl mb-4 block opacity-20`}></i>
-                <p>Nenhuma {activeTab === 'reels' ? 'publicação (Reel)' : 'postagem'} ainda.</p>
-              </div>
-            )
-          }
+                ) : (
+                  <div className="bg-white rounded-xl p-12 text-center text-gray-500">
+                    <i className={`ri-${activeTab === 'reels' ? 'movie' : 'camera-lens'}-line text-4xl mb-4 block opacity-20`}></i>
+                    <p>Nenhuma {activeTab === 'reels' ? 'publicação (Reel)' : 'postagem'} ainda.</p>
+                  </div>
+                )
+              }
+            </>
+          )}
         </div>
       </div>
 
@@ -562,9 +552,9 @@ export default function ProfilePage() {
             <span className="text-[9px] sm:text-[10px] font-medium">Reels</span>
           </button>
           {isOwnProfile ? (
-            <button onClick={() => setShowMenu(true)} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
-              <i className="ri-menu-line text-xl sm:text-2xl"></i>
-              <span className="text-[9px] sm:text-[10px] font-medium">Menu</span>
+            <button onClick={() => navigate('/settings?tab=settings')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
+              <i className="ri-settings-3-line text-xl sm:text-2xl"></i>
+              <span className="text-[9px] sm:text-[10px] font-medium">Config</span>
             </button>
           ) : (
             // If viewing another user, maybe show 'Profile' link to go back to own profile? For now, stick to standard
@@ -576,45 +566,22 @@ export default function ProfilePage() {
             </button>
           )}
         </div>
-      </nav>
+      </nav >
 
       {/* Modals */}
+      {/* ProfileHubModal REMOVED - using SettingsPage */}
+
       {
-        showEditProfile && isOwnProfile && (
-          <EditProfileModal
-            userProfile={currentProfile}
-            onClose={() => setShowEditProfile(false)}
-            onUpdate={(updated) => setUserProfile(updated)}
+        userStories.length > 0 && showStoryViewer && (
+          <StoryViewer
+            stories={userStories}
+            onClose={() => setShowStoryViewer(false)}
           />
         )
       }
-      {userStories.length > 0 && showStoryViewer && (
-        <StoryViewer
-          stories={userStories}
-          onClose={() => setShowStoryViewer(false)}
-        />
-      )}
       {showNotifications && <NotificationsPanel onClose={() => setShowNotifications(false)} />}
       {showCreateMenu && <CreateMenu onClose={() => setShowCreateMenu(false)} onSelectOption={handleCreateOption} />}
       {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
-      {
-        showGamification && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowGamification(false)}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <GamificationWidget onClose={() => setShowGamification(false)} />
-            </div>
-          </div>
-        )
-      }
-      {
-        showWallet && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowWallet(false)}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <WalletWidget onClose={() => setShowWallet(false)} />
-            </div>
-          </div>
-        )
-      }
-    </div>
+    </div >
   );
 }

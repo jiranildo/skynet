@@ -3,11 +3,11 @@ import { supabase, updateUser, uploadAvatar, User as UserType } from '@/services
 
 interface EditProfileModalProps {
     userProfile: UserType;
-    onClose: () => void;
+    onClose?: () => void;
     onUpdate: (updatedUser: UserType) => void;
 }
 
-export default function EditProfileModal({ userProfile, onClose, onUpdate }: EditProfileModalProps) {
+export function EditProfileContent({ userProfile, onClose, onUpdate, isEmbedded = false }: EditProfileModalProps & { isEmbedded?: boolean }) {
     const [fullName, setFullName] = useState(userProfile.full_name || '');
     const [username, setUsername] = useState(userProfile.username || '');
     const [bio, setBio] = useState(userProfile.bio || '');
@@ -59,7 +59,7 @@ export default function EditProfileModal({ userProfile, onClose, onUpdate }: Edi
                 privacy_setting: privacySetting
             });
             onUpdate(updated);
-            onClose();
+            if (onClose) onClose();
         } catch (error) {
             console.error('Error updating profile:', error);
             alert('Erro ao atualizar perfil.');
@@ -69,9 +69,9 @@ export default function EditProfileModal({ userProfile, onClose, onUpdate }: Edi
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
-                {/* Header */}
+        <div className={`bg-white rounded-2xl shadow-2xl w-full ${!isEmbedded ? 'max-w-md' : 'h-full shadow-none rounded-none'} overflow-hidden flex flex-col`}>
+            {/* Header */}
+            {!isEmbedded && (
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
                         <i className="ri-close-line text-2xl"></i>
@@ -85,136 +85,157 @@ export default function EditProfileModal({ userProfile, onClose, onUpdate }: Edi
                         {isLoading ? <i className="ri-loader-4-line animate-spin"></i> : 'Salvar'}
                     </button>
                 </div>
+            )}
 
-                {/* Form Body */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* Avatar Section */}
-                    <div className="flex flex-col items-center">
-                        <div className="relative group">
-                            <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-gray-50 shadow-md">
-                                <img
-                                    src={avatarUrl || 'https://via.placeholder.com/150'}
-                                    alt="Avatar"
-                                    className="w-full h-full object-cover"
-                                />
-                                {(isUploading || isGenerating) && (
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                        <i className="ri-loader-4-line animate-spin text-white text-2xl"></i>
-                                    </div>
-                                )}
-                            </div>
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:bg-gray-50 transition-colors"
-                                title="Upload custom avatar"
-                            >
-                                <i className="ri-camera-line"></i>
-                            </button>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleAvatarUpload}
-                                className="hidden"
-                                accept="image/*"
+            {/* Form Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Avatar Section */}
+                <div className="flex flex-col items-center">
+                    <div className="relative group">
+                        <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-gray-50 shadow-md">
+                            <img
+                                src={avatarUrl || 'https://via.placeholder.com/150'}
+                                alt="Avatar"
+                                className="w-full h-full object-cover"
                             />
+                            {(isUploading || isGenerating) && (
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <i className="ri-loader-4-line animate-spin text-white text-2xl"></i>
+                                </div>
+                            )}
                         </div>
-
                         <button
-                            onClick={handleGenerateAvatar}
-                            disabled={isGenerating}
-                            className="mt-4 flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-95"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center text-blue-500 hover:bg-gray-50 transition-colors"
+                            title="Upload custom avatar"
                         >
-                            <i className="ri-magic-line"></i>
-                            Criar Avatar IA
+                            <i className="ri-camera-line"></i>
                         </button>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleAvatarUpload}
+                            className="hidden"
+                            accept="image/*"
+                        />
                     </div>
 
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome Completo</label>
-                            <input
-                                type="text"
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                className="w-full px-4 py-2 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none transition-all"
-                                placeholder="Seu nome"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome de Usuário</label>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                className="w-full px-4 py-2 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none transition-all"
-                                placeholder="username"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Website</label>
-                            <input
-                                type="text"
-                                value={website}
-                                onChange={(e) => setWebsite(e.target.value)}
-                                className="w-full px-4 py-2 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none transition-all"
-                                placeholder="https://exemplo.com"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Privacidade da Conta</label>
-                            <div className="grid grid-cols-3 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setPrivacySetting('public')}
-                                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${privacySetting === 'public'
-                                        ? 'bg-blue-50 border-blue-500 text-blue-600'
-                                        : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'
-                                        }`}
-                                >
-                                    <i className="ri-earth-line block text-lg mb-1"></i>
-                                    Público
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setPrivacySetting('private')}
-                                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${privacySetting === 'private'
-                                        ? 'bg-blue-50 border-blue-500 text-blue-600'
-                                        : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'
-                                        }`}
-                                >
-                                    <i className="ri-lock-2-line block text-lg mb-1"></i>
-                                    Privado
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setPrivacySetting('friends')}
-                                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${privacySetting === 'friends'
-                                        ? 'bg-blue-50 border-blue-500 text-blue-600'
-                                        : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'
-                                        }`}
-                                >
-                                    <i className="ri-group-line block text-lg mb-1"></i>
-                                    Amigos
-                                </button>
-                            </div>
-                            <p className="mt-2 text-[10px] text-gray-400 leading-tight">
-                                {privacySetting === 'public' && "Seu perfil será apresentado a toda a rede."}
-                                {privacySetting === 'private' && "Somente por convite e você precisa aprovar seguidores."}
-                                {privacySetting === 'friends' && "Somente seus amigos podem ver o perfil."}
-                            </p>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bio</label>
-                            <textarea
-                                value={bio}
-                                onChange={(e) => setBio(e.target.value)}
-                                className="w-full px-4 py-2 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none transition-all resize-none h-24"
-                                placeholder="Conte-nos sobre você..."
-                            />
-                        </div>
+                    <button
+                        onClick={handleGenerateAvatar}
+                        disabled={isGenerating}
+                        className="mt-4 flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-95"
+                    >
+                        <i className="ri-magic-line"></i>
+                        Criar Avatar IA
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome Completo</label>
+                        <input
+                            type="text"
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            className="w-full px-4 py-2 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none transition-all"
+                            placeholder="Seu nome"
+                        />
                     </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome de Usuário</label>
+                        <input
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            className="w-full px-4 py-2 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none transition-all"
+                            placeholder="username"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Website</label>
+                        <input
+                            type="text"
+                            value={website}
+                            onChange={(e) => setWebsite(e.target.value)}
+                            className="w-full px-4 py-2 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none transition-all"
+                            placeholder="https://exemplo.com"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Privacidade da Conta</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setPrivacySetting('public')}
+                                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${privacySetting === 'public'
+                                    ? 'bg-blue-50 border-blue-500 text-blue-600'
+                                    : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'
+                                    }`}
+                            >
+                                <i className="ri-earth-line block text-lg mb-1"></i>
+                                Público
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPrivacySetting('private')}
+                                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${privacySetting === 'private'
+                                    ? 'bg-blue-50 border-blue-500 text-blue-600'
+                                    : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'
+                                    }`}
+                            >
+                                <i className="ri-lock-2-line block text-lg mb-1"></i>
+                                Privado
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPrivacySetting('friends')}
+                                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${privacySetting === 'friends'
+                                    ? 'bg-blue-50 border-blue-500 text-blue-600'
+                                    : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'
+                                    }`}
+                            >
+                                <i className="ri-group-line block text-lg mb-1"></i>
+                                Amigos
+                            </button>
+                        </div>
+                        <p className="mt-2 text-[10px] text-gray-400 leading-tight">
+                            {privacySetting === 'public' && "Seu perfil será apresentado a toda a rede."}
+                            {privacySetting === 'private' && "Somente por convite e você precisa aprovar seguidores."}
+                            {privacySetting === 'friends' && "Somente seus amigos podem ver o perfil."}
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bio</label>
+                        <textarea
+                            value={bio}
+                            onChange={(e) => setBio(e.target.value)}
+                            className="w-full px-4 py-2 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-blue-500 outline-none transition-all resize-none h-24"
+                            placeholder="Conte-nos sobre você..."
+                        />
+                    </div>
+
+                    {/* Action Buttons for Embedded Mode */}
+                    {isEmbedded && (
+                        <div className="pt-4 flex justify-end">
+                            <button
+                                onClick={handleSubmit}
+                                disabled={isLoading}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-200 hover:shadow-blue-300 hover:bg-blue-700 transition-all active:scale-[0.98] w-full"
+                            >
+                                {isLoading ? <i className="ri-loader-4-line animate-spin"></i> : 'Salvar Alterações'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
+        </div>
+    );
+}
+
+export default function EditProfileModal(props: EditProfileModalProps) {
+    return (
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+            <EditProfileContent {...props} />
         </div>
     );
 }

@@ -24,6 +24,44 @@ export interface User {
   following_count?: number;
   posts_count?: number;
   privacy_setting?: 'public' | 'private' | 'friends';
+  // Settings
+  location?: string;
+  language?: string;
+  theme?: 'light' | 'dark' | 'system';
+  show_location?: boolean;
+  show_followers?: boolean;
+  show_following?: boolean;
+  allow_messages?: boolean;
+  allow_tagging?: boolean;
+  email_notifications?: boolean;
+  push_notifications?: boolean;
+  notification_channels?: {
+    likes?: boolean;
+    comments?: boolean;
+    new_followers?: boolean;
+    messages?: boolean;
+    trip_updates?: boolean;
+    marketing?: boolean;
+  };
+  sara_enabled?: boolean;
+  sara_config?: {
+    check_in_reminders?: boolean;
+    upcoming_activities?: boolean;
+    doc_expiration?: boolean;
+    weather_alerts?: boolean;
+    relevant_posts?: boolean;
+    post_suggestions?: boolean;
+    smart_suggestions?: boolean;
+    budget_alerts?: boolean;
+    itinerary_conflicts?: boolean;
+    custom_instructions?: string;
+  };
+  app_config?: {
+    sound_effects?: boolean;
+    autoplay?: boolean;
+    high_quality?: boolean;
+    data_saver?: boolean;
+  };
 }
 
 export interface Post {
@@ -58,9 +96,23 @@ export interface FeedPost {
   media_urls?: string[];
 }
 
+export interface TripMember {
+  id: string;
+  name: string;
+  avatar: string;
+  permission: 'view' | 'edit' | 'admin';
+  joinedAt: string;
+}
+
 export interface Trip {
   id: string;
   user_id: string;
+  owner?: {
+    id: string;
+    full_name: string;
+    avatar_url: string;
+    username: string;
+  };
   title: string;
   destination: string;
   start_date: string;
@@ -80,7 +132,6 @@ export interface Trip {
   sharedWith?: any[];
   pendingSuggestions?: any[];
   isShared?: boolean;
-  owner?: string;
   permissions?: string;
   visibility?: 'public' | 'followers' | 'private';
   marketplaceConfig?: {
@@ -458,6 +509,39 @@ export const addReelComment = async (reelId: string, userId: string, content: st
   return data;
 };
 
+// ==================== PERSONAL INFO TYPES ====================
+
+export interface UserDocument {
+  id?: string;
+  user_id?: string;
+  type: 'passport' | 'visa' | 'id_card' | 'driver_license' | 'other';
+  number: string;
+  country?: string;
+  expiry_date?: string;
+  image_url?: string;
+  created_at?: string;
+}
+
+export interface UserTravelProfile {
+  id?: string;
+  user_id?: string;
+  preference_type: 'seat' | 'meal' | 'frequent_flyer' | 'hotel' | 'car' | 'other';
+  value: string;
+  description?: string;
+  created_at?: string;
+}
+
+export interface UserHealthInfo {
+  id?: string;
+  user_id?: string;
+  category: 'blood_type' | 'condition' | 'medication' | 'vaccine' | 'allergy' | 'emergency_contact' | 'insurance';
+  name: string;
+  details?: string;
+  date_ref?: string;
+  expiry_date?: string;
+  created_at?: string;
+}
+
 export interface SavedPost {
   id?: string;
   user_id?: string;
@@ -575,6 +659,105 @@ export const updatePrivacySettings = async (userId: string, privacySetting: 'pub
 
   if (error) throw error;
   return data as User;
+};
+
+
+// ==================== PERSONAL INFO SERVICES ====================
+
+// --- Documents ---
+export const getUserDocuments = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('user_documents')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as UserDocument[];
+};
+
+export const addUserDocument = async (doc: UserDocument) => {
+  const { data, error } = await supabase
+    .from('user_documents')
+    .insert(doc)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as UserDocument;
+};
+
+export const deleteUserDocument = async (id: string) => {
+  const { error } = await supabase
+    .from('user_documents')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+};
+
+// --- Travel Profile ---
+export const getUserTravelProfile = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('user_travel_profile')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as UserTravelProfile[];
+};
+
+export const addUserTravelProfile = async (item: UserTravelProfile) => {
+  const { data, error } = await supabase
+    .from('user_travel_profile')
+    .insert(item)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as UserTravelProfile;
+};
+
+export const deleteUserTravelProfile = async (id: string) => {
+  const { error } = await supabase
+    .from('user_travel_profile')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+};
+
+// --- Health Info ---
+export const getUserHealthInfo = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('user_health_info')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as UserHealthInfo[];
+};
+
+export const addUserHealthInfo = async (item: UserHealthInfo) => {
+  const { data, error } = await supabase
+    .from('user_health_info')
+    .insert(item)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as UserHealthInfo;
+};
+
+export const deleteUserHealthInfo = async (id: string) => {
+  const { error } = await supabase
+    .from('user_health_info')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
 };
 
 // ==================== POSTS ====================
@@ -850,7 +1033,7 @@ export const getTrips = async (userId: string) => {
 
   const { data, error } = await supabase
     .from('trips')
-    .select('*')
+    .select('*, users:user_id(id, full_name, avatar_url, username)')
     // We want trips where (user_id = userId) OR (metadata->sharedWith @> '[{"id": "userId"}]')
     // Note: JSON containment operator @> requires correct spacing/formatting in raw SQL or filter
     .or(`user_id.eq.${userId},metadata->sharedWith.cs.[{"id": "${userId}"}]`)
@@ -859,12 +1042,13 @@ export const getTrips = async (userId: string) => {
   if (error) throw error;
 
   // Map metadata fields back to top-level for UI compatibility
-  return data.map((t: any) => ({
+  return (data || []).map((t: any) => ({
     ...t,
     sharedWith: t.metadata?.sharedWith,
     pendingSuggestions: t.metadata?.pendingSuggestions,
     marketplaceConfig: t.metadata?.marketplaceConfig,
-    isShared: t.user_id !== userId // Mark as shared if not owned by current user
+    isShared: t.user_id !== userId, // Mark as shared if not owned by current user
+    owner: t.users // Map joined user data to 'owner' prop
   })) as Trip[];
 };
 
@@ -894,17 +1078,20 @@ export const getMarketplaceTrips = async () => {
   if (error) throw error;
 
   // Map to Trip structure with injected marketplace info
-  return data.map((listing: any) => ({
-    ...listing.trip,
-    marketplaceConfig: {
-      isListed: true,
-      price: listing.price,
-      currency: listing.currency,
-      description: listing.description
-    },
-    seller: listing.trip.users,
-    listing_id: listing.id // Keep reference to listing ID
-  })) as (Trip & { seller: User, listing_id: string })[];
+  // Map to Trip structure with injected marketplace info
+  return (data || [])
+    .filter((listing: any) => listing.trip && listing.trip.users) // Filter out items where trip or user is hidden/missing
+    .map((listing: any) => ({
+      ...listing.trip,
+      marketplaceConfig: {
+        isListed: true,
+        price: listing.price,
+        currency: listing.currency,
+        description: listing.description
+      },
+      seller: listing.trip.users,
+      listing_id: listing.id // Keep reference to listing ID
+    })) as (Trip & { seller: User, listing_id: string })[];
 };
 
 export const createMarketplaceListing = async (listing: {
@@ -988,15 +1175,27 @@ export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
 
   let payload: any = { ...rest, updated_at: new Date().toISOString() };
 
-  // Fix: We must spread existingMeta FIRST, then override with new values.
-  // Otherwise, old metadata overwrites the new updates.
-  payload.metadata = {
-    ...existingMeta,
-  };
+  // Only touch metadata if we have updates for it
+  const hasMetadataUpdates =
+    sharedWith !== undefined ||
+    pendingSuggestions !== undefined ||
+    marketplaceConfig !== undefined ||
+    existingMeta !== undefined;
 
-  if (sharedWith !== undefined) payload.metadata.sharedWith = sharedWith;
-  if (pendingSuggestions !== undefined) payload.metadata.pendingSuggestions = pendingSuggestions;
-  if (marketplaceConfig !== undefined) payload.metadata.marketplaceConfig = marketplaceConfig;
+  if (hasMetadataUpdates) {
+    // Note: This still assumes 'existingMeta' contains the FULL existing metadata if we want to merge.
+    // If 'existingMeta' is partial, we might lose data. Ideally we should use jsonb_set or fetch-merge-update.
+    // For now, we strictly ensure we don't overwrite with empty object if no metadata args provided.
+    // If metadata is provided in updates (e.g. atomic update), use it.
+    // If we have existingMeta locally (e.g. from state), use it.
+    // Otherwise, we must be careful. For now, assume existingMeta is passed if we want to preserve.
+    payload.metadata = {
+      ...(existingMeta || {}),
+    };
+    if (sharedWith !== undefined) payload.metadata.sharedWith = sharedWith;
+    if (pendingSuggestions !== undefined) payload.metadata.pendingSuggestions = pendingSuggestions;
+    if (marketplaceConfig !== undefined) payload.metadata.marketplaceConfig = marketplaceConfig;
+  }
 
   const { data, error } = await supabase
     .from('trips')

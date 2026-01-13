@@ -64,15 +64,33 @@ export function useDestinationInfo(destination: string) {
             try {
                 // 1. Geocoding (Nominatim)
                 // We get lat, lon, and country_code
-                const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination)}&addressdetails=1&limit=1`);
-                const geoData = await geoRes.json();
+                // 1. Geocoding (Nominatim) -> Using a CORS proxy or handle error gracefully
+                // Nominatim requires User-Agent. Browser won't send custom User-Agent in fetch easily without CORS issues.
 
-                if (!geoData || geoData.length === 0) {
-                    throw new Error('Destino não encontrado');
+                let lat, lon, address, countryCode;
+
+                try {
+                    const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination)}&addressdetails=1&limit=1`, {
+                        headers: {
+                            'Accept-Language': 'pt-BR'
+                        }
+                    });
+
+                    if (!geoRes.ok) throw new Error(`Nominatim blocked: ${geoRes.status}`);
+
+                    const geoData = await geoRes.json();
+                    if (!geoData || geoData.length === 0) throw new Error('Destino não encontrado');
+
+                    lat = geoData[0].lat;
+                    lon = geoData[0].lon;
+                    address = geoData[0].address;
+                    countryCode = address.country_code?.toUpperCase();
+
+                } catch (geoErr) {
+                    console.warn('Geocoding failed (likely CORS/Auth), skipping destination info:', geoErr);
+                    setInfo(prev => ({ ...prev, loading: false }));
+                    return;
                 }
-
-                const { lat, lon, address } = geoData[0];
-                const countryCode = address.country_code?.toUpperCase();
 
                 if (!isMounted) return;
 

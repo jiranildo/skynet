@@ -1,15 +1,20 @@
 import { useUnreadCounts } from '../hooks/useUnreadCounts';
+import { useSystemNotifications } from '../hooks/useSystemNotifications';
 import { useAuth } from '../context/AuthContext';
 
 interface HeaderActionsProps {
     onShowNotifications: () => void;
     showMenu?: boolean;
     onShowMenu?: () => void;
+    menuIcon?: string;
 }
 
-export default function HeaderActions({ onShowNotifications, showMenu, onShowMenu }: HeaderActionsProps) {
+export default function HeaderActions({ onShowNotifications, showMenu, onShowMenu, menuIcon = 'ri-menu-3-line' }: HeaderActionsProps) {
     const { unreadMessages, unreadNotifications } = useUnreadCounts();
     const { signOut } = useAuth();
+
+    // Auto-check for system notifications (Passport, Trips)
+    useSystemNotifications();
 
     return (
         <div className="flex items-center gap-2 sm:gap-3">
@@ -30,7 +35,7 @@ export default function HeaderActions({ onShowNotifications, showMenu, onShowMen
             >
                 <i className="ri-message-3-line text-xl md:text-2xl text-gray-700"></i>
                 {unreadMessages > 0 && (
-                    <span className="absolute top-1 right-1 w-4 h-4 bg-green-500 rounded-full text-white text-[10px] flex items-center justify-center font-medium border border-white">
+                    <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center font-medium border border-white">
                         {unreadMessages}
                     </span>
                 )}
@@ -60,7 +65,7 @@ export default function HeaderActions({ onShowNotifications, showMenu, onShowMen
                     onClick={onShowMenu}
                     className="hover:scale-110 transition-transform md:hidden w-[40px] h-[40px] flex items-center justify-center rounded-full hover:bg-gray-100"
                 >
-                    <i className="ri-menu-3-line text-xl md:text-2xl text-gray-700"></i>
+                    <i className={`${menuIcon} text-xl md:text-2xl text-gray-700`}></i>
                 </button>
             )}
         </div>

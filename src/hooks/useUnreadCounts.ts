@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getUnreadMessagesCount, getUnreadNotificationsCount } from '../services/supabase';
+import { getUnreadMessagesCount, getUnreadNotificationsCount, supabase } from '../services/supabase';
 
 export const useUnreadCounts = () => {
     const { user } = useAuth();
@@ -25,6 +25,51 @@ export const useUnreadCounts = () => {
     useEffect(() => {
         if (user) {
             refreshCounts();
+
+            // Real-time subscription for messages
+            const messagesSubscription = supabase
+                .channel('unread-messages-count')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `receiver_id=eq.${user.id}`
+                    },
+                    (payload) => {
+                        console.log("🔔 Message change detected!", payload);
+                        refreshCounts(); // Refresh on any change to user's messages
+                    }
+                )
+                .subscribe((status) => {
+                    console.log("🔔 Message subscription status:", status);
+                });
+
+            // Real-time subscription for notifications
+            const notificationsSubscription = supabase
+                .channel('unread-notifications-count')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'notifications',
+                        filter: `user_id=eq.${user.id}`
+                    },
+                    (payload) => {
+                        console.log("🔔 Notification change detected!", payload);
+                        refreshCounts();
+                    }
+                )
+                .subscribe((status) => {
+                    console.log("🔔 Notification subscription status:", status);
+                });
+
+            return () => {
+                messagesSubscription.unsubscribe();
+                notificationsSubscription.unsubscribe();
+            };
         } else {
             setUnreadMessages(0);
             setUnreadNotifications(0);
