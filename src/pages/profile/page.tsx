@@ -444,7 +444,7 @@ export default function ProfilePage() {
                       }`}
                   >
                     <i className="ri-movie-line text-base sm:text-lg"></i>
-                    <span className="hidden sm:inline text-xs sm:text-sm font-medium">Reels</span>
+                    <span className="hidden sm:inline text-xs sm:text-sm font-medium">Reelss</span>
                   </button>
 
                   {isOwnProfile && (

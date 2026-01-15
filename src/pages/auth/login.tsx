@@ -41,7 +41,10 @@ export default function LoginPage() {
                     <div className="w-20 h-20 mx-auto mb-4 bg-white rounded-2xl shadow-2xl flex items-center justify-center">
                         <i className="ri-plane-fill text-4xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent"></i>
                     </div>
-                    <h1 className="text-3xl font-bold text-white mb-2">SARA Travel</h1>
+                    <h1 className="text-3xl font-bold text-white mb-2">S A R A Travel</h1>
+                    <p className="text-white/60 text-xs font-semibold tracking-widest uppercase mb-6">
+                        <span className="text-white font-extrabold">S</span>istema de <span className="text-white font-extrabold">A</span>ssistência <span className="text-white font-extrabold">R</span>acional <span className="text-white font-extrabold">A</span>vançado
+                    </p>
                     <p className="text-white/80">Faça login para continuar</p>
                 </div>
 

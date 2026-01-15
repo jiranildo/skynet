@@ -41,11 +41,9 @@ const RESEARCH_CATEGORIES = [
     { id: 'shopping', label: 'Compras', icon: 'ri-shopping-bag-line' },
     // New Categories
     { id: 'cruises', label: 'Cruzeiros', icon: 'ri-ship-line' },
-    { id: 'flights', label: 'Passagens', icon: 'ri-plane-line' },
     { id: 'disney', label: 'Disney', icon: 'ri-magic-line' },
     { id: 'universal', label: 'Universal', icon: 'ri-movie-line' },
     { id: 'parks', label: 'Parques', icon: 'ri-ticket-2-line' },
-    { id: 'transfers', label: 'Transfers', icon: 'ri-bus-line' },
     { id: 'currency', label: 'Câmbio', icon: 'ri-exchange-dollar-line' }
 ];
 
@@ -66,15 +64,7 @@ export default function AiResearchResultsModal({
 }: AiResearchResultsModalProps) {
     const [openMoveMenuId, setOpenMoveMenuId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [visibleCount, setVisibleCount] = useState(5);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-
-    // Reset pagination when results change or loading starts
-    React.useEffect(() => {
-        if (isLoading) {
-            setVisibleCount(5);
-        }
-    }, [isLoading, results]);
 
     const handleDeepResearch = () => {
         onSearch(searchQuery, selectedCategories);
@@ -88,11 +78,8 @@ export default function AiResearchResultsModal({
         );
     };
 
-    const handleShowMore = () => {
-        setVisibleCount(prev => prev + 5);
-    };
-
-    const visibleResults = results.slice(0, visibleCount);
+    // No client-side pagination anymore
+    const visibleResults = results;
 
     if (!isOpen) return null;
 
@@ -303,33 +290,21 @@ export default function AiResearchResultsModal({
                                     </div>
                                 ))}
 
-                                {visibleCount < results.length ? (
-                                    <div className="flex justify-center pt-4">
-                                        <button
-                                            onClick={handleShowMore}
-                                            className="px-6 py-3 bg-white text-indigo-600 font-bold rounded-full shadow-sm border border-indigo-100 hover:bg-indigo-50 hover:shadow-md transition-all flex items-center gap-2 group"
-                                        >
-                                            <i className="ri-add-circle-line text-xl group-hover:scale-110 transition-transform"></i>
-                                            Ver mais sugestões
-                                        </button>
-                                    </div>
-                                ) : (
-                                    /* AI Pagination Button */
-                                    <div className="flex justify-center pt-4">
-                                        <button
-                                            onClick={onLoadMore}
-                                            disabled={isLoading}
-                                            className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-full shadow-lg shadow-purple-200 hover:shadow-xl hover:scale-[1.02] transition-all flex items-center gap-2 group disabled:opacity-70 disabled:grayscale"
-                                        >
-                                            {isLoading ? (
-                                                <i className="ri-loader-4-line animate-spin text-xl"></i>
-                                            ) : (
-                                                <i className="ri-sparkling-fill text-yellow-300 text-xl group-hover:rotate-12 transition-transform"></i>
-                                            )}
-                                            {isLoading ? 'Processando...' : 'Carregar +5 Sugestões com IA'}
-                                        </button>
-                                    </div>
-                                )}
+                                {/* AI Pagination Button - Always visible to load more from API */}
+                                <div className="flex justify-center pt-4">
+                                    <button
+                                        onClick={onLoadMore}
+                                        disabled={isLoading}
+                                        className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-full shadow-lg shadow-purple-200 hover:shadow-xl hover:scale-[1.02] transition-all flex items-center gap-2 group disabled:opacity-70 disabled:grayscale"
+                                    >
+                                        {isLoading ? (
+                                            <i className="ri-loader-4-line animate-spin text-xl"></i>
+                                        ) : (
+                                            <i className="ri-sparkling-fill text-yellow-300 text-xl group-hover:rotate-12 transition-transform"></i>
+                                        )}
+                                        {isLoading ? 'Processando...' : 'Carregar +5 Sugestões com IA'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
