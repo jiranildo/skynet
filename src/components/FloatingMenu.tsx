@@ -524,15 +524,11 @@ export default function FloatingMenu() {
         onClick={() => setIsOpen(!isOpen)}
         className={`fixed bottom-24 right-6 w-16 h-16 rounded-full bg-gradient-to-r ${persona.gradient} text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all z-40 flex items-center justify-center group`}
       >
-        <div className="absolute inset-0 rounded-full bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
-        <i className={`${persona.icon} text-3xl drop-shadow-md group-hover:rotate-12 transition-transform duration-300`}></i>
-
         {!isOpen && (
-          <span className="absolute -top-1 -right-1 flex h-4 w-4">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white"></span>
-          </span>
+          <span className={`absolute inset-0 rounded-full bg-gradient-to-r ${persona.gradient} animate-ping opacity-75`}></span>
         )}
+        <div className="absolute inset-0 rounded-full bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
+        <i className={`${persona.icon} text-3xl drop-shadow-md group-hover:rotate-12 transition-transform duration-300 relative z-10`}></i>
       </button>
     </>
   );

@@ -4,6 +4,7 @@ import { AppRoutes } from "./router";
 import { I18nextProvider } from "react-i18next";
 import i18n from "./i18n";
 import FloatingMenu from "./components/FloatingMenu";
+import BetaLabel from "./components/BetaLabel";
 
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
           <AppRoutes />
         </Suspense>
         <FloatingMenu />
+        <BetaLabel />
       </BrowserRouter>
     </I18nextProvider>
   );
