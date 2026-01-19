@@ -1,5 +1,6 @@
 import React from 'react';
 
+
 export interface Recommendation {
     icon: string;
     name: string;
@@ -10,12 +11,38 @@ export interface Recommendation {
     duration: string;
     tags: string[];
     highlights: string[];
-    suggestedDayId?: number;
+    link?: string;
+    media?: string[];
+
+    // New Fields for Adaptive Layouts
+    category?: 'flight' | 'hotel' | 'general';
+
+    // General / Restaurant
+    googleRating?: number;
+    menuLink?: string;
+    parking?: string;
+    establishmentType?: string;
+    openHours?: string;
     address?: string;
     howToGetThere?: string;
     distanceFromHotel?: string;
     metadata?: { label: string; value: string }[];
+
+    // Flight Specific
+    airline?: string;
+    flightNumber?: string;
+    departureTime?: string;
+    arrivalTime?: string;
+    departureAirport?: string;
+    arrivalAirport?: string;
+    stops?: string; // "Direto", "1 parada"
+
+    // Hotel Specific
+    amenities?: string[]; // ["pool", "wifi", "gym"]
+    pricePerNight?: string;
+    stars?: number;
 }
+
 
 interface RecommendationCardProps {
     data: Recommendation;
@@ -25,148 +52,317 @@ interface RecommendationCardProps {
 }
 
 export function RecommendationCard({ data, onSelect, onView, onSave }: RecommendationCardProps) {
-    return (
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col h-full hover:shadow-md transition-shadow">
-            {/* Header */}
-            <div className="mb-4">
-                <div className="text-4xl mb-3"><i className={data.icon}></i></div>
-                <h3 className="text-xl font-bold text-gray-900 leading-tight mb-2">{data.name}</h3>
 
-                {/* Metadata Badges (Flights/Cruises/etc) */}
-                {data.metadata && data.metadata.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                        {data.metadata.map((item, idx) => (
-                            <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
-                                <span className="text-blue-400 font-normal">{item.label}:</span>
-                                {item.value}
-                            </span>
-                        ))}
+    // --- FLIGHT LAYOUT (Google Flights Style) ---
+    if (data.category === 'flight') {
+        return (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow relative overflow-hidden group">
+                <div className="flex justify-between items-center mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-lg">
+                            {data.icon || '✈️'}
+                        </div>
+                        <div>
+                            <div className="font-bold text-gray-900 text-sm">{data.airline}</div>
+                            <div className="text-[10px] text-gray-400">{data.flightNumber}</div>
+                        </div>
                     </div>
+                    <div className="text-right">
+                        <div className="font-bold text-lg text-gray-900">{data.estimatedCost}</div>
+                        <div className="text-[10px] text-gray-500">por passageiro</div>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between mb-4 px-2">
+                    <div className="text-center">
+                        <div className="font-bold text-gray-900 text-sm">{data.departureTime}</div>
+                        <div className="text-xs text-gray-500">{data.departureAirport}</div>
+                    </div>
+
+                    <div className="flex-1 px-4 flex flex-col items-center">
+                        <div className="text-[10px] text-gray-400 mb-1">{data.duration}</div>
+                        <div className="w-full h-[1px] bg-gray-300 relative">
+                            <i className="ri-plane-fill absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 text-gray-400 text-xs rotate-90"></i>
+                        </div>
+                        <div className="text-[10px] text-green-600 mt-1 font-medium">{data.stops}</div>
+                    </div>
+
+                    <div className="text-center">
+                        <div className="font-bold text-gray-900 text-sm">{data.arrivalTime}</div>
+                        <div className="text-xs text-gray-500">{data.arrivalAirport}</div>
+                    </div>
+                </div>
+
+                {data.link && (
+                    <a href={data.link} target="_blank" rel="noopener noreferrer" className="block text-center py-2 rounded-lg border border-blue-100 text-blue-600 text-sm font-semibold hover:bg-blue-50 transition-colors mb-3">
+                        Ver Voos no Google
+                    </a>
                 )}
 
-                <p className="text-gray-600 text-sm leading-relaxed line-clamp-3">
-                    {data.description}
-                </p>
-            </div>
+                {/* AI Reason (Collapsed) */}
+                <div className="bg-blue-50/50 rounded-lg p-3">
+                    <p className="text-blue-900/80 text-xs italic leading-relaxed">
+                        <i className="ri-sparkling-fill text-blue-600 mr-1"></i>
+                        {data.reason}
+                    </p>
+                </div>
 
-            {/* AI Reason Box */}
-            <div className="bg-purple-50 rounded-xl p-4 mb-4 border-l-4 border-purple-500">
-                <div className="flex items-start gap-2">
-                    <i className="ri-sparkling-fill text-purple-600 mt-0.5"></i>
-                    <div>
-                        <h4 className="text-purple-900 font-bold text-xs uppercase tracking-wide mb-1">Por que este destino?</h4>
-                        <p className="text-purple-800 text-sm italic leading-relaxed">
-                            {data.reason}
-                        </p>
+                {/* Footer Actions */}
+                <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                    {onSelect && <button onClick={onSelect} className="flex-1 text-xs font-bold text-gray-700 hover:text-gray-900">Selecionar</button>}
+                    {onSave && <button onClick={onSave} className="text-gray-400 hover:text-gray-600"><i className="ri-bookmark-line"></i></button>}
+                </div>
+            </div>
+        );
+    }
+
+    // --- HOTEL LAYOUT (Trivago Style) ---
+    if (data.category === 'hotel') {
+        return (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-all group flex flex-col h-full">
+                {/* Hero Image */}
+                <div className="h-40 relative bg-gray-100">
+                    {data.media && data.media.length > 0 ? (
+                        <div className="flex h-full overflow-x-auto snap-x scrollbar-hide">
+                            {data.media.map((url, idx) => (
+                                <img
+                                    key={idx}
+                                    src={url}
+                                    className="w-full h-full object-cover snap-center flex-shrink-0"
+                                    alt={data.name}
+                                    onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                    }}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300">
+                            <i className="ri-hotel-line text-4xl"></i>
+                        </div>
+                    )}
+                    <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-1 rounded-md shadow-sm">
+                        <div className="flex items-center gap-1">
+                            <span className="font-bold text-green-700 text-xs">{data.googleRating}</span>
+                            <i className="ri-star-fill text-yellow-400 text-[10px]"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-4 flex flex-col flex-1">
+                    <div className="flex justify-between items-start mb-2">
+                        <div>
+                            <h3 className="font-bold text-gray-900 text-base leading-tight mb-0.5">{data.name}</h3>
+                            <div className="flex items-center gap-0.5 text-yellow-400 text-xs">
+                                {[...Array(data.stars || 3)].map((_, i) => <i key={i} className="ri-star-fill"></i>)}
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <div className="font-bold text-lg text-gray-900">{data.estimatedCost}</div>
+                            <div className="text-[10px] text-gray-500">/noite</div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-3 text-gray-500 text-xs">
+                        <i className="ri-map-pin-line"></i>
+                        <span className="truncate">{data.address}</span>
+                    </div>
+
+                    {/* Amenities */}
+                    {data.amenities && (
+                        <div className="flex flex-wrap gap-2 mb-4">
+                            {data.amenities.slice(0, 4).map((amenity, idx) => (
+                                <span key={idx} className="text-[10px] px-2 py-0.5 bg-gray-50 text-gray-600 rounded-full border border-gray-100">
+                                    {amenity}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="mt-auto pt-3 border-t border-gray-50 flex flex-col gap-2">
+                        <div className="bg-purple-50 rounded-lg p-2.5">
+                            <p className="text-purple-900 text-xs italic">
+                                <i className="ri-sparkling-fill text-purple-600 mr-1.5"></i>
+                                {data.reason}
+                            </p>
+                        </div>
+
+                        <div className="flex gap-2">
+                            {data.link && (
+                                <a href={data.link} target="_blank" rel="noopener noreferrer" className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 rounded-lg text-center transition-colors">
+                                    Ver Oferta
+                                </a>
+                            )}
+                            {onSelect && (
+                                <button onClick={onSelect} className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors">
+                                    <i className="ri-add-line"></i>
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
+        );
+    }
 
-            {/* Location Details Box */}
-            {(data.address || data.howToGetThere || data.distanceFromHotel) && (
-                <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100 space-y-3">
+    // --- GENERAL LAYOUT (Existing Clean & Elegant) ---
+    return (
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col h-full hover:shadow-lg transition-all duration-300 group">
+            {/* Header Section - Clean & Elegant */}
+            <div className="mb-5">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <div className="text-3xl mb-2 opacity-90">{data.icon}</div>
+                        <h3 className="text-xl font-bold text-gray-900 leading-tight tracking-tight mb-1 group-hover:text-indigo-600 transition-colors">
+                            {data.name}
+                        </h3>
+                        {data.establishmentType && (
+                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">
+                                {data.establishmentType}
+                            </span>
+                        )}
+                    </div>
+                    {data.googleRating && (
+                        <div className="flex flex-col items-end">
+                            <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-lg border border-green-100">
+                                <span className="text-sm font-bold text-green-700">{data.googleRating}</span>
+                                <i className="ri-star-fill text-yellow-400 text-xs"></i>
+                            </div>
+                            <span className="text-[10px] text-gray-400 mt-1">Google</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Primary Actions (Link & Address) */}
+                <div className="flex flex-col gap-1 mt-2">
+                    {data.link && (
+                        <a href={data.link} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 w-fit">
+                            <span>Website Oficial</span>
+                            <i className="ri-arrow-right-up-line text-[10px]"></i>
+                        </a>
+                    )}
+
                     {data.address && (
-                        <div className="flex items-start gap-2.5">
-                            <i className="ri-map-pin-2-line text-gray-400 mt-0.5 shrink-0"></i>
-                            <div className="text-xs text-gray-600 break-words leading-relaxed">
-                                <span className="font-bold text-gray-700 block mb-0.5">Endereço:</span>
-                                {data.address}
-                            </div>
-                        </div>
+                        <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.name + ' ' + data.address)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-gray-500 hover:text-gray-900 transition-colors flex items-start gap-1.5 mt-1"
+                        >
+                            <i className="ri-map-pin-line mt-0.5 shrink-0 text-gray-400"></i>
+                            <span className="line-clamp-1">{data.address}</span>
+                        </a>
                     )}
+                </div>
+            </div>
 
-                    {data.distanceFromHotel && (
-                        <div className="flex items-start gap-2.5">
-                            <i className="ri-hotel-line text-indigo-400 mt-0.5 shrink-0"></i>
-                            <div className="text-xs text-gray-600 break-words leading-relaxed">
-                                <span className="font-bold text-gray-700 block mb-0.5">Do seu Hotel:</span>
-                                {data.distanceFromHotel}
-                            </div>
-                        </div>
-                    )}
-
-                    {data.howToGetThere && (
-                        <div className="flex items-start gap-2.5">
-                            <i className="ri-direction-line text-emerald-500 mt-0.5 shrink-0"></i>
-                            <div className="text-xs text-gray-600 break-words leading-relaxed">
-                                <span className="font-bold text-gray-700 block mb-0.5">Como chegar:</span>
-                                {data.howToGetThere}
-                            </div>
-                        </div>
-                    )}
+            {/* Media Carousel - Seamless Integration */}
+            {data.media && data.media.length > 0 && (
+                <div className="flex gap-3 overflow-x-auto pb-4 mb-4 scrollbar-hide snap-x -mx-2 px-2">
+                    {data.media.map((url, idx) => (
+                        <a
+                            key={idx}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-none w-32 h-24 rounded-xl overflow-hidden border border-gray-100 snap-start relative group/media shadow-sm"
+                            style={{ display: 'block' }}
+                        >
+                            <img
+                                src={url}
+                                alt={`Media ${idx + 1}`}
+                                className="w-full h-full object-cover transform group-hover/media:scale-105 transition-transform duration-500"
+                                onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    if (target.parentElement) target.parentElement.style.display = 'none';
+                                }}
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover/media:bg-black/10 transition-colors"></div>
+                        </a>
+                    ))}
                 </div>
             )}
 
-            {/* Info Badges */}
-            <div className="flex flex-wrap gap-2 mb-4">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100 text-xs font-medium text-gray-700">
-                    <i className="ri-sun-line text-orange-500"></i>
-                    {data.bestTime}
+            {/* Description */}
+            <p className="text-gray-600 text-sm leading-relaxed mb-6 font-light">
+                {data.description}
+            </p>
+
+            {/* Info Grid - Minimalist Badges */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <i className="ri-money-dollar-circle-line text-lg text-emerald-500"></i>
+                    <span>{data.estimatedCost}</span>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100 text-xs font-medium text-gray-700">
-                    <i className="ri-money-dollar-circle-line text-green-600"></i>
-                    {data.estimatedCost}
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <i className="ri-time-line text-lg text-blue-500"></i>
+                    <span>{data.openHours || data.duration}</span>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100 text-xs font-medium text-gray-700">
-                    <i className="ri-time-line text-blue-500"></i>
-                    {data.duration}
+
+                {data.parking && (
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                        <i className="ri-roadster-line text-lg text-gray-400"></i>
+                        <span>{data.parking}</span>
+                    </div>
+                )}
+
+                {data.menuLink && (
+                    <a href={data.menuLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-indigo-600 hover:underline">
+                        <i className="ri-restaurant-2-line text-lg"></i>
+                        <span>Ver Cardápio</span>
+                    </a>
+                )}
+            </div>
+
+            {/* AI Insight - The "Why" */}
+            <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl p-4 mb-6 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-white/40 rounded-full -mr-8 -mt-8 blur-xl"></div>
+                <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2">
+                        <i className="ri-sparkling-fill text-purple-600"></i>
+                        <span className="text-xs font-bold text-purple-900 uppercase tracking-widest">Opinião do Especialista</span>
+                    </div>
+                    <p className="text-purple-900/80 text-sm italic leading-relaxed">
+                        "{data.reason}"
+                    </p>
                 </div>
             </div>
 
-            {/* Tags */}
-            <div className="flex flex-wrap gap-2 mb-6">
-                {data.tags.map((tag, idx) => (
-                    <span key={idx} className="px-3 py-1 rounded-full border border-gray-200 text-xs font-medium text-gray-600 bg-white">
-                        {tag}
+            {/* Highlights/Tags - Chips */}
+            <div className="flex flex-wrap gap-2 mt-auto">
+                {data.highlights.slice(0, 3).map((item, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-50 border border-gray-100 text-[10px] uppercase font-bold text-gray-500 tracking-wide">
+                        <i className="ri-check-line text-green-500"></i>
+                        {item}
                     </span>
                 ))}
             </div>
 
-            {/* Highlights */}
-            <div className="mb-6 flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                    <i className="ri-star-smile-fill text-yellow-400"></i>
-                    <span className="font-bold text-gray-900 text-sm">Destaques:</span>
-                </div>
-                <ul className="space-y-1">
-                    {data.highlights.map((item, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
-                            <span className="text-blue-400 mt-1.5 text-[6px]">•</span>
-                            {item}
-                        </li>
-                    ))}
-                </ul>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 mt-auto">
+            {/* Action Buttons (Footer) */}
+            <div className="flex items-center gap-2 mt-6 pt-4 border-t border-gray-50">
                 {onSelect && (
                     <button
                         onClick={onSelect}
-                        className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-3 px-4 rounded-xl hover:shadow-lg hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
+                        className="flex-1 bg-gray-900 text-white font-medium py-3 px-4 rounded-xl hover:bg-black transition-colors flex items-center justify-center gap-2 shadow-lg shadow-gray-200"
                     >
-                        <i className="ri-check-line"></i>
-                        Escolher
+                        <span>Selecionar</span>
+                        <i className="ri-arrow-right-line"></i>
                     </button>
                 )}
-                {onView && (
-                    <button
-                        onClick={onView}
-                        className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-                        title="Ver detalhes"
-                    >
-                        <i className="ri-eye-line text-lg"></i>
-                    </button>
-                )}
-                {onSave && (
-                    <button
-                        onClick={onSave}
-                        className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-                        title="Salvar"
-                    >
-                        <i className="ri-bookmark-line text-lg"></i>
-                    </button>
-                )}
+                <div className="flex gap-1">
+                    {onView && (
+                        <button onClick={onView} className="p-3 rounded-xl hover:bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors">
+                            <i className="ri-eye-line text-lg"></i>
+                        </button>
+                    )}
+                    {onSave && (
+                        <button onClick={onSave} className="p-3 rounded-xl hover:bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors">
+                            <i className="ri-bookmark-line text-lg"></i>
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );

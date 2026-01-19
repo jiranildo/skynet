@@ -50,7 +50,6 @@ export default function TravelPage() {
 
   const tabs = [
     { id: 'search', label: 'Buscar', icon: 'ri-search-line' },
-    { id: 'ai-search', label: 'Pesquisa AI', icon: 'ri-sparkling-fill' },
     { id: 'mytrips', label: 'Minhas Viagens', icon: 'ri-map-pin-user-line' },
     { id: 'marketplace', label: 'Marketplace', icon: 'ri-store-line' },
     { id: 'flights', label: 'Voos', icon: 'ri-flight-takeoff-line' },
@@ -93,7 +92,7 @@ export default function TravelPage() {
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'search': return <SearchTab />;
+      case 'search': return <AISearchTab />;
       case 'ai-search': return <AISearchTab />;
       case 'flights': return <FlightsTab />;
       case 'hotels': return <HotelsTab />;

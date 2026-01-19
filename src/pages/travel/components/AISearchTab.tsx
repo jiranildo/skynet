@@ -380,30 +380,47 @@ export default function AISearchTab() {
                     )}
                 </div>
 
-                {/* Suggestions Grid */}
+                {/* Suggestions Carousel */}
                 {!aiResponse && !isAiLoading && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto animate-slideUp">
-                        {suggestions.map((suggestion, index) => (
-                            <button
-                                key={index}
-                                onClick={() => handleSuggestionClick(suggestion)}
-                                className="w-full h-full flex items-start gap-4 p-4 text-left hover:bg-gray-50 rounded-xl transition-all group border border-transparent hover:border-gray-100 hover:shadow-sm bg-white"
-                            >
-                                <div className={`min-w-[3rem] h-12 rounded-full flex items-center justify-center transition-colors ${suggestion.isSpecial ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
-                                    <i className={`${suggestion.icon} text-xl`}></i>
-                                </div>
-                                <div>
-                                    <span className={`block font-bold text-lg mb-1 leading-tight ${suggestion.isSpecial ? 'text-blue-700' : 'text-gray-900 group-hover:text-blue-600'}`}>
-                                        {suggestion.text}
-                                    </span>
-                                    {suggestion.description && (
-                                        <span className="text-sm text-gray-500 leading-snug block">
-                                            {suggestion.description}
+                    <div className="relative group/carousel max-w-6xl mx-auto animate-slideUp">
+                        <div
+                            className="flex overflow-x-auto gap-4 pb-6 px-2 snap-x snap-mandatory no-scrollbar"
+                            style={{
+                                WebkitOverflowScrolling: 'touch',
+                            }}
+                        >
+                            {suggestions.map((suggestion, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => handleSuggestionClick(suggestion)}
+                                    className="relative flex-none w-[150px] md:w-[180px] snap-start bg-white p-2.5 text-left rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-blue-100 hover:bg-blue-50/30 transition-all duration-300 group flex flex-col items-start gap-2 h-auto"
+                                >
+                                    <div className={`w-7 h-7 rounded-md flex items-center justify-center transition-all duration-300 ${suggestion.isSpecial ? 'bg-blue-100 text-blue-600 shadow-blue-100/50' : 'bg-gray-50 text-gray-500 group-hover:bg-blue-100 group-hover:text-blue-600'} shadow-sm group-hover:scale-110`}>
+                                        <i className={`${suggestion.icon} text-sm`}></i>
+                                    </div>
+                                    <div className="w-full pr-1">
+                                        <span className={`block font-bold text-xs mb-0.5 leading-tight ${suggestion.isSpecial ? 'text-blue-700' : 'text-gray-900 group-hover:text-blue-700'}`}>
+                                            {suggestion.text}
                                         </span>
-                                    )}
-                                </div>
-                            </button>
-                        ))}
+                                        <p className="text-[10px] text-gray-500 leading-relaxed font-light line-clamp-2">
+                                            {suggestion.description}
+                                        </p>
+                                    </div>
+
+                                    {/* Indicator that it's clickable/swipable - Absolute positioned to save height */}
+                                    <div className="absolute top-2.5 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <i className="ri-arrow-right-line text-blue-400 text-xs"></i>
+                                    </div>
+                                </button>
+                            ))}
+
+                            {/* Spacer for end of list */}
+                            <div className="flex-none w-4"></div>
+                        </div>
+
+                        {/* Fade gradients for scroll indication - optional but nice */}
+                        <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none md:hidden"></div>
+                        <div className="absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-white to-transparent pointer-events-none md:hidden"></div>
                     </div>
                 )}
 

@@ -321,11 +321,11 @@ export default function Post({ post, onEdit }: PostProps) {
       </div>
 
       {/* Post Image / Carousel */}
-      <div className="relative w-full aspect-square bg-gray-50 flex items-center justify-center group">
+      <div className="relative w-full bg-gray-50 flex items-center justify-center group p-2">
         <img
           src={media[currentMediaIndex]}
           alt={`Post ${currentMediaIndex + 1}`}
-          className="w-full h-full object-cover"
+          className="w-full h-auto max-h-[600px] object-contain rounded-lg"
         />
 
         {/* Carousel Controls */}
