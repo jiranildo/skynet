@@ -467,6 +467,12 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
              "bestTime": "Melhor hora (ex: Manhã, Pôr do sol)",
              "estimatedCost": "Preço estimado (R$ / USD)",
              "duration": "Duração estimada (ex: 3h)",
+             "visitDuration": "Tempo EXATO estimado. PROIBIDO 'Variável'. Use rangos: '3-4 dias', '2 horas'.",
+             "bestVisitTime": "Melhor mês/época específica (Ex: 'Maio a Setembro'). PROIBIDO vazio.",
+             "reservationStatus": "'required' | 'recommended' | 'not_needed' | 'unknown'",
+             "michelin": "Se restaurante: '3 Estrelas Michelin', 'Bib Gourmand' (ou null)",
+             "tripAdvisorRating": "Se hotel: Nota 0-5 (ex: 4.5)",
+             "bookingRating": "Se hotel: Nota 0-10 (ex: 9.3)",
              "tags": ["Tipo 1", "Tipo 2"],
              "highlights": ["Destaque 1", "Destaque 2"],
              "suggestedDayId": number,
@@ -498,12 +504,18 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
           bestTime: item.bestTime,
           estimatedCost: item.estimatedCost,
           duration: item.duration,
+          visitDuration: item.visitDuration,
+          bestVisitTime: item.bestVisitTime || item.bestTime, // Fallback if AI uses bestTime
+          reservationStatus: item.reservationStatus,
           tags: item.tags || [],
           highlights: item.highlights || [],
           suggestedDayId: item.suggestedDayId,
           address: item.address,
           howToGetThere: item.howToGetThere,
           distanceFromHotel: item.distanceFromHotel,
+          michelin: item.michelin,
+          tripAdvisorRating: item.tripAdvisorRating,
+          bookingRating: item.bookingRating,
           metadata: item.metadata || []
         }));
 

@@ -214,6 +214,9 @@ export default function AISearchTab() {
                     "reason": "Explicação personalizada do porquê este destino é perfeito para o pedido do usuário (Ex: Perfeito porque combina x e y...)",
                     "bestTime": "Melhor época/horário",
                     "estimatedCost": "Custo estimado (Ex: R$ 150, $$$, Gratuito)",
+                    "michelin": "Se restaurante: '3 Estrelas Michelin', 'Bib Gourmand' (ou null)",
+                    "tripAdvisorRating": "Se hotel: Nota 0-5 (ex: 4.5)",
+                    "bookingRating": "Se hotel: Nota 0-10 (ex: 9.3)",
                     "duration": "Duração sugerida (Ex: 3 dias, 2 horas)",
                     "tags": ["tag1", "tag2", "tag3"],
                     "highlights": ["Destaque 1", "Destaque 2", "Destaque 3"]

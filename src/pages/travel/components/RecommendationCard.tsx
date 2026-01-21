@@ -14,6 +14,12 @@ export interface Recommendation {
     link?: string;
     media?: string[];
 
+    // New Fields for Enhanced AI Search
+    visitDuration?: string; // e.g., "3 horas", "2 dias"
+    bestVisitTime?: string; // e.g., "Manhãs de semana", "Abril a Setembro"
+    reservationStatus?: 'required' | 'recommended' | 'not_needed' | 'unknown';
+    michelin?: string; // e.g., "1 Estrela Michelin", "Bib Gourmand"
+
     // New Fields for Adaptive Layouts
     category?: 'flight' | 'hotel' | 'general';
 
@@ -41,6 +47,8 @@ export interface Recommendation {
     amenities?: string[]; // ["pool", "wifi", "gym"]
     pricePerNight?: string;
     stars?: number;
+    tripAdvisorRating?: number | string;
+    bookingRating?: number | string;
 }
 
 
@@ -142,11 +150,30 @@ export function RecommendationCard({ data, onSelect, onView, onSave }: Recommend
                             <i className="ri-hotel-line text-4xl"></i>
                         </div>
                     )}
-                    <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-1 rounded-md shadow-sm">
+                    <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-1 rounded-md shadow-sm flex flex-col gap-1 items-end">
                         <div className="flex items-center gap-1">
                             <span className="font-bold text-green-700 text-xs">{data.googleRating}</span>
                             <i className="ri-star-fill text-yellow-400 text-[10px]"></i>
+                            <span className="text-[8px] text-gray-500">Google</span>
                         </div>
+                        {data.tripAdvisorRating && (
+                            <div className="flex items-center gap-1 border-t border-gray-100 pt-0.5 mt-0.5">
+                                <span className="font-bold text-emerald-600 text-xs">{data.tripAdvisorRating}</span>
+                                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex items-center justify-center">
+                                    <i className="ri-owl-fill text-white text-[6px]"></i>
+                                </div>
+                                <span className="text-[8px] text-gray-500">TripAdv.</span>
+                            </div>
+                        )}
+                        {data.bookingRating && (
+                            <div className="flex items-center gap-1 border-t border-gray-100 pt-0.5 mt-0.5">
+                                <span className="font-bold text-blue-700 text-xs">{data.bookingRating}</span>
+                                <div className="w-2.5 h-2.5 rounded-sm bg-blue-600 flex items-center justify-center">
+                                    <span className="text-white text-[6px] font-bold">B.</span>
+                                </div>
+                                <span className="text-[8px] text-gray-500">Booking</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -296,9 +323,59 @@ export function RecommendationCard({ data, onSelect, onView, onSave }: Recommend
                     <i className="ri-money-dollar-circle-line text-lg text-emerald-500"></i>
                     <span>{data.estimatedCost}</span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-600">
-                    <i className="ri-time-line text-lg text-blue-500"></i>
-                    <span>{data.openHours || data.duration}</span>
+                {/* Smart Time Display Logic */}
+                <div className="space-y-1 mt-2">
+                    {/* Primary Time Info: Visit Duration OR Open Hours */}
+                    {/* Primary Time Info: Visit Duration OR Open Hours */}
+                    {(() => {
+                        // Priority: VisitDuration > OpenHours > Duration (only if flight)
+                        let rawText = data.visitDuration || data.openHours;
+
+                        if (!rawText) {
+                            // Generic fallback or just null
+                        }
+
+                        // Clean up text
+                        if (!rawText || typeof rawText !== 'string') return null;
+                        const cleanText = rawText.trim();
+                        if (cleanText === '' || cleanText === 'undefined' || cleanText === 'null') return null;
+
+                        const isVisitDuration = !!data.visitDuration;
+                        const finalText = isVisitDuration ? `Tempo ideal: ${cleanText}` : cleanText;
+
+                        return (
+                            <div className="flex items-center gap-2 text-xs text-gray-600">
+                                <i className={`${isVisitDuration ? 'ri-hourglass-2-line text-orange-500' : 'ri-time-line text-blue-500'} text-lg`}></i>
+                                <span>{finalText}</span>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Best Visit Time (New Row) */}
+                    {data.bestVisitTime && (
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                            <i className="ri-sun-cloudy-line text-lg text-yellow-500"></i>
+                            <span>Melhor época: {data.bestVisitTime}</span>
+                        </div>
+                    )}
+
+                    {/* Michelin Rating (New Row) */}
+                    {data.michelin && (
+                        <div className="flex items-center gap-2 text-xs text-red-700 bg-red-50 p-1.5 rounded-lg border border-red-100 w-fit">
+                            <i className="ri-award-fill text-lg text-red-600"></i>
+                            <span className="font-bold">{data.michelin}</span>
+                        </div>
+                    )}
+
+                    {/* Reservation Status */}
+                    {data.reservationStatus && data.reservationStatus !== 'not_needed' && data.reservationStatus !== 'unknown' && (
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                            <i className={`ri-calendar-check-line text-lg ${data.reservationStatus === 'required' ? 'text-red-500' : 'text-gray-400'}`}></i>
+                            <span className={data.reservationStatus === 'required' ? 'text-red-600 font-medium' : ''}>
+                                {data.reservationStatus === 'required' ? 'Reserva Obrigatória' : 'Reserva Recomendada'}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {data.parking && (

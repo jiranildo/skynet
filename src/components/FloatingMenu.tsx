@@ -4,10 +4,14 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { useSmartTravelAgent } from '@/pages/travel/hooks/useSmartTravelAgent';
 import { RecommendationCard, Recommendation } from '@/pages/travel/components/RecommendationCard';
+import { CATEGORIES, Category } from '@/pages/travel/components/CategorySelectionModal';
 
 export default function FloatingMenu() {
   const persona = useContextualPersona();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Navigation State
+  const [viewMode, setViewMode] = useState<'suggestions' | 'categories'>('suggestions');
 
   // AI Search State
   const [query, setQuery] = useState('');
@@ -57,6 +61,7 @@ export default function FloatingMenu() {
     setRecommendations([]);
     setDisplayedResponse('');
     setIsAiLoading(false);
+    setViewMode('suggestions'); // Reset view mode
   }, [persona.type]);
 
   const handleToggleLocation = () => {
@@ -68,14 +73,30 @@ export default function FloatingMenu() {
   };
 
   const handleSuggestionClick = (suggestion: any) => {
-    // Construct a richer query using description and keywords if available
-    if (suggestion.keywords) {
-      // Specialized prompt construction akin to AISearchTab
+    if (suggestion.isSpecial) {
+      // Switch to category view inline
+      setViewMode('categories');
+
+      // Ensure location is ready/requested since this is a "Nearby" feature
+      if (!useLocation) {
+        handleToggleLocation();
+      }
+    } else if (suggestion.keywords) {
+      // Construct a richer query using description and keywords if available
       const richQuery = `Quero recomendações sobre: "${suggestion.text}". ${suggestion.description || ''}. (Palavras-chave: ${suggestion.keywords.join(', ')}).`;
       handleSearch(richQuery);
     } else {
       handleSearch(suggestion.text);
     }
+  };
+
+  const handleCategorySelect = (category: Category) => {
+    // Return to suggestions view but with results
+    setViewMode('suggestions');
+
+    const locationText = userLocation?.name ? ` em ${userLocation.name}` : '';
+    const promptText = `Quero recomendações de ${category.label} (${category.description})${locationText}. Por favor, liste as melhores opções com detalhes.`;
+    handleSearch(promptText);
   };
 
   const handleSearch = async (text: string = query) => {
@@ -102,6 +123,8 @@ export default function FloatingMenu() {
     setAiResponse(null);
     setRecommendations([]);
     setDisplayedResponse('');
+    // Ensure we are in suggestions view to see results
+    setViewMode('suggestions');
 
     try {
       const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
@@ -135,6 +158,7 @@ export default function FloatingMenu() {
         3. Se pedir "restaurantes", retorne APENAS category: "general" com establishmentType de restaurante.
         4. NÃO misture categorias a menos que o usuário peça explicitamente um "roteiro completo", "planejamento de viagem" ou "dicas gerais".
         5. Se a pergunta for específica (ex: "hotéis baratos"), qualquer outro tipo de resposta (voo, passeio) será considerado ERRO.
+        6. Para CIDADES, PAÍSES, REGIÕES, ILHAS ou PRAIAS: NUNCA retorne "openHours". OBRIGATÓRIO preencher "visitDuration" (Ex: "3 dias") e "bestVisitTime".
         
         IMPORTANTE SOBRE IMAGENS E LINKS:
         1. OBRIGATÓRIO: Use o GOOGLE SEARCH para encontrar URLs de imagens. Pesquise por "Nome do Local photos" ou "Nome do Local official site".
@@ -156,11 +180,17 @@ export default function FloatingMenu() {
                 "category": "Obrigatório: 'flight', 'hotel' ou 'general'",
                 "icon": "Emoji representative",
                 "name": "Nome",
+                "description": "Descrição curta e atraente (2 linhas)",
                 
                 // Campos Universais
                 "link": "URL of website/deal",
                 "estimatedCost": "Preço (Ex: R$ 500 ou R$ 1.200/noite)",
                 "reason": "Why this choice?",
+
+                // NOVOS CAMPOS (OBRIGATÓRIOS PARA TODOS)
+                "visitDuration": "OBRIGATÓRIO. Tempo exato ideal. Use rangos: '3-4 dias', '2 horas'. (NUNCA 'Variável')",
+                "bestVisitTime": "OBRIGATÓRIO. Melhor mês/época. (Ex: 'Maio a Setembro').",
+                "reservationStatus": "'required' | 'recommended' | 'not_needed' | 'unknown'",
                 
                 // Campos Específicos para 'flight'
                 "airline": "Nome da Cia Aérea",
@@ -177,10 +207,13 @@ export default function FloatingMenu() {
                 "amenities": ["Piscina", "Wi-Fi", "Academia"],
                 "media": ["URL_IMAGEM_HOTEL"], // Importante: Imagem para o layout Trivago
                 "address": "Endereço do hotel",
+                "tripAdvisorRating": "Nota 0-5 (Ex: 4.5)",
+                "bookingRating": "Nota 0-10 (Ex: 9.2)",
 
                 // Campos Específicos para 'general' (Restaurantes, Pontos Turísticos)
                 "googleRating": 4.8,
                 "establishmentType": "Tipo (Ex: Restaurante Italiano)",
+                "michelin": "Opcional. Ex: '3 Estrelas Michelin', 'Bib Gourmand'. Só preencher se tiver.",
                 "openHours": "Horário func.",
                 "menuLink": "Link do menu",
                 "parking": "Info estacionamento",
@@ -270,6 +303,9 @@ export default function FloatingMenu() {
         
         FILTRO OBRIGATÓRIO DE CONTEÚDO:
         1. Siga as mesmas restrições da busca original (só hotéis se for hotel, etc).
+        2. Para CIDADES, PAÍSES, REGIÕES, ILHAS ou PRAIAS: NUNCA retorne "openHours". OBRIGATÓRIO preencher "visitDuration" e "bestVisitTime".
+        3. Para ATRAÇÕES (Museus, Parques): Priorize "visitDuration" (tempo de visita) ao invés de apenas "Aberto 24h".
+        4. O campo "description" é OBRIGATÓRIO (resumo curto e atraente).
 
         ${locationContext}
         
@@ -281,9 +317,16 @@ export default function FloatingMenu() {
                 "category": "Obrigatório: 'flight', 'hotel' ou 'general'",
                 "icon": "Emoji representative",
                 "name": "Nome",
-                "link": "URL",
+                "description": "Descrição curta e atraente (2 linhas)",
+                
+                // Campos Universais
+                "link": "URL of website/deal",
+                "estimatedCost": "Preço",
                 "estimatedCost": "Preço",
                 "reason": "Why?",
+                "visitDuration": "OBRIGATÓRIO. Tempo exato ideal. Use rangos: '3-4 dias', '2 horas'.",
+                "bestVisitTime": "OBRIGATÓRIO. Melhor mês/época. (Ex: 'Maio a Setembro').",
+                "reservationStatus": "required|recommended|not_needed|unknown",
                 "airline": "...",
                 "flightNumber": "...",
                 "departureTime": "...",
@@ -296,8 +339,11 @@ export default function FloatingMenu() {
                 "amenities": ["..."],
                 "media": ["..."],
                 "address": "...",
+                "tripAdvisorRating": 4.5,
+                "bookingRating": 9.2,
                 "googleRating": 4.8,
                 "establishmentType": "...",
+                "michelin": "Opcional. Ex: '3 Estrelas Michelin', 'Bib Gourmand'. Só preencher se tiver.",
                 "openHours": "...",
                 "menuLink": "...",
                 "parking": "...",
@@ -370,35 +416,65 @@ export default function FloatingMenu() {
             {/* Content Area (Scrollable) */}
             <div className="flex-1 overflow-y-auto p-4 bg-gray-50 scrollbar-thin scrollbar-thumb-gray-200">
 
-              {/* Initial State: Suggestions */}
+              {/* Initial State: Suggestions OR Categories */}
               {!aiResponse && !isAiLoading && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between mb-2 px-1">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Sugestões do Especialista</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      {viewMode === 'categories' ? 'Selecione uma categoria' : 'Sugestões do Especialista'}
+                    </p>
+                    {viewMode === 'categories' && (
+                      <button
+                        onClick={() => setViewMode('suggestions')}
+                        className="text-[10px] items-center gap-1 flex text-gray-500 hover:text-indigo-600 transition-colors"
+                      >
+                        <i className="ri-arrow-left-line"></i> Voltar
+                      </button>
+                    )}
                   </div>
 
-                  {/* Carousel Container */}
-                  <div className="flex overflow-x-auto gap-3 pb-4 -mx-4 px-4 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                    {persona.suggestions.map((suggestion, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handleSuggestionClick(suggestion)}
-                        className="flex-none w-40 snap-start flex flex-col items-start p-3 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all group text-left h-32"
-                      >
-                        <div className={`w-8 h-8 rounded-lg mb-3 flex items-center justify-center transition-colors ${suggestion.icon.includes('map-pin') ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-500 group-hover:bg-indigo-50 group-hover:text-indigo-600'}`}>
-                          <i className={`${suggestion.icon} text-lg`}></i>
-                        </div>
-                        <span className="font-semibold text-xs text-gray-800 leading-tight mb-1 group-hover:text-indigo-700 block">
-                          {suggestion.text}
-                        </span>
-                        {suggestion.description && (
-                          <span className="text-[10px] text-gray-400 leading-snug line-clamp-2">
-                            {suggestion.description}
+                  {viewMode === 'suggestions' ? (
+                    /* Standard Suggestions Carousel */
+                    <div className="flex overflow-x-auto gap-3 pb-4 -mx-4 px-4 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                      {persona.suggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleSuggestionClick(suggestion)}
+                          className="flex-none w-40 snap-start flex flex-col items-start p-3 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all group text-left h-32"
+                        >
+                          <div className={`w-8 h-8 rounded-lg mb-3 flex items-center justify-center transition-colors ${suggestion.icon.includes('map-pin') ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-500 group-hover:bg-indigo-50 group-hover:text-indigo-600'}`}>
+                            <i className={`${suggestion.icon} text-lg`}></i>
+                          </div>
+                          <span className="font-semibold text-xs text-gray-800 leading-tight mb-1 group-hover:text-indigo-700 block">
+                            {suggestion.text}
                           </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                          {suggestion.description && (
+                            <span className="text-[10px] text-gray-400 leading-snug line-clamp-2">
+                              {suggestion.description}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    /* In-Menu Categories Carousel */
+                    <div className="grid grid-cols-2 gap-2">
+                      {CATEGORIES.map((category) => (
+                        <button
+                          key={category.id}
+                          onClick={() => handleCategorySelect(category)}
+                          className="flex flex-col items-center p-3 rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all text-center group bg-white"
+                        >
+                          <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-lg mb-2 group-hover:scale-110 transition-transform">
+                            <i className={category.icon}></i>
+                          </div>
+                          <span className="font-bold text-xs text-gray-900 group-hover:text-blue-700">
+                            {category.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

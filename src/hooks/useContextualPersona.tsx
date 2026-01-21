@@ -39,6 +39,12 @@ export const personas: Record<PersonaType, PersonaConfig> = {
                 isSpecial: true
             },
             {
+                icon: 'ri-calendar-check-line',
+                text: 'O melhor de cada mês',
+                description: "Descubra o destino ideal para cada época",
+                keywords: ["calendar", "best time", "seasons", "months"]
+            },
+            {
                 icon: 'ri-hearts-line',
                 text: 'Viagens Românticas',
                 description: "Destinos perfeitos para casais",
