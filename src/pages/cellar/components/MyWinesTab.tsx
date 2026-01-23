@@ -110,12 +110,11 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
   });
 
   // Logic for "Wines to Drink Soon": Wines older than 3 years with good rating, or explicitly short aging potential
-  const drinkSoonWines = wines.filter(w => {
-    const currentYear = new Date().getFullYear();
-    const age = currentYear - (w.vintage || currentYear);
-    const isReady = age >= 3 && (w.rating || 0) >= 4.0;
-    return isReady;
-  }).slice(0, 5); // Limit to 5 for the carousel
+  // Logic for "Wines to Drink Soon": Simply the oldest vintages currently in stock
+  const drinkSoonWines = wines
+    .filter(w => (w.quantity || 0) > 0 && typeof w.vintage === 'number')
+    .sort((a, b) => (a.vintage || 0) - (b.vintage || 0))
+    .slice(0, 5);
 
   if (loading) {
     return (

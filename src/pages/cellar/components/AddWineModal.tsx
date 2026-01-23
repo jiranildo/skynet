@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CellarWine } from '../../../services/supabase';
+import { CellarWine, cellarService } from '../../../services/supabase';
 
 interface AddWineModalProps {
   onClose: () => void;
@@ -32,13 +32,25 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
     image_url: ''
   });
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.name || !formData.type) {
       alert('Por favor, preencha os campos obrigatórios');
       return;
     }
 
-    onAdd(formData);
+    try {
+      setIsProcessing(true);
+      // Ensure we're sending a valid object for creation (removing id and internal seq if present)
+      const { id, seq, ...wineData } = formData as any;
+      await cellarService.create(wineData);
+
+      onAdd(formData); // Notify parent of success
+    } catch (error) {
+      console.error('Error saving wine:', error);
+      alert(`Erro ao salvar vinho: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const simulateRecognition = (wineData: Partial<CellarWine>) => {

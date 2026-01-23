@@ -1802,7 +1802,13 @@ export const cellarService = {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    console.log('Fetching wines for user:', user.id);
+
+
+    if (error) {
+      console.error('Error fetching wines:', JSON.stringify(error, null, 2));
+      throw error;
+    }
     return data as CellarWine[];
   },
 
@@ -1849,7 +1855,10 @@ export const cellarService = {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error creating wine:', JSON.stringify(error, null, 2));
+      throw error;
+    }
     return data as CellarWine;
   },
 

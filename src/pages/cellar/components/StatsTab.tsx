@@ -24,8 +24,8 @@ export default function StatsTab() {
   const totalWines = wines.length;
   const totalBottles = wines.reduce((sum, wine) => sum + (wine.quantity || 0), 0);
   const totalValue = wines.reduce((sum, wine) => sum + ((wine.price || 0) * (wine.quantity || 0)), 0);
-  const avgRating = wines.length > 0 
-    ? wines.reduce((sum, wine) => sum + (wine.rating || 0), 0) / wines.length 
+  const avgRating = wines.length > 0
+    ? wines.reduce((sum, wine) => sum + (wine.rating || 0), 0) / wines.length
     : 0;
 
   const typeDistribution = wines.reduce((acc, wine) => {
@@ -56,200 +56,244 @@ export default function StatsTab() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <i className="ri-loader-4-line text-4xl text-orange-500 animate-spin"></i>
-          <p className="mt-4 text-gray-600">Carregando estatísticas...</p>
+          <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <i className="ri-loader-4-line text-2xl text-gray-400 animate-spin"></i>
+          </div>
+          <p className="text-gray-500 font-medium tracking-wide text-sm">Atualizando dashboard...</p>
         </div>
       </div>
     );
   }
 
+  // Helper for progress bars
+  const ProgressBar = ({ percentage, colorClass }: { percentage: number, colorClass: string }) => (
+    <div className="w-full bg-gray-50 rounded-full h-1.5 overflow-hidden">
+      <div
+        className={`h-full rounded-full transition-all duration-1000 ease-out ${colorClass}`}
+        style={{ width: `${percentage}%` }}
+      ></div>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-orange-500 to-pink-500 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-2">
-            <i className="ri-wine-bottle-line text-3xl opacity-80"></i>
-            <span className="text-sm opacity-80">Total</span>
-          </div>
-          <div className="text-3xl font-bold mb-1">{totalWines}</div>
-          <div className="text-sm opacity-90">Vinhos Diferentes</div>
-        </div>
+    <div className="space-y-6 animate-fade-in pb-20">
 
-        <div className="bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-2">
-            <i className="ri-stack-line text-3xl opacity-80"></i>
-            <span className="text-sm opacity-80">Estoque</span>
-          </div>
-          <div className="text-3xl font-bold mb-1">{totalBottles}</div>
-          <div className="text-sm opacity-90">Garrafas Total</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-500 to-teal-500 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-2">
-            <i className="ri-money-dollar-circle-line text-3xl opacity-80"></i>
-            <span className="text-sm opacity-80">Valor</span>
-          </div>
-          <div className="text-3xl font-bold mb-1">R$ {totalValue.toLocaleString('pt-BR')}</div>
-          <div className="text-sm opacity-90">Valor Estimado</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-yellow-500 to-orange-500 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-2">
-            <i className="ri-star-line text-3xl opacity-80"></i>
-            <span className="text-sm opacity-80">Média</span>
-          </div>
-          <div className="text-3xl font-bold mb-1">{avgRating.toFixed(1)}</div>
-          <div className="text-sm opacity-90">Avaliação Média</div>
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-2">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Visão Geral</h2>
+          <p className="text-gray-500 text-sm">Análise detalhada da sua coleção</p>
         </div>
       </div>
 
-      {/* Distribution Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Type Distribution */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <i className="ri-pie-chart-line text-orange-500"></i>
-            Distribuição por Tipo
-          </h3>
-          <div className="space-y-3">
-            {Object.entries(typeDistribution).map(([type, count]) => {
-              const percentage = (count / totalBottles) * 100;
-              return (
-                <div key={type}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700">{type}</span>
-                    <span className="text-sm text-gray-600">{count} ({percentage.toFixed(1)}%)</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full ${
-                        type === 'Tinto' ? 'bg-red-500' :
-                        type === 'Branco' ? 'bg-yellow-500' :
-                        type === 'Rosé' ? 'bg-pink-500' :
-                        type === 'Espumante' ? 'bg-blue-500' :
-                        'bg-purple-500'
-                      }`}
-                      style={{ width: `${percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              );
-            })}
+      {/* Main Stats Cards - Premium Style */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Wines */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500">
+              <i className="ri-wine-fill text-xl"></i>
+            </div>
+            <span className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Rótulos</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-bold text-gray-900 tracking-tight">{totalWines}</span>
+            <span className="text-sm text-gray-400">vinhos</span>
           </div>
         </div>
 
-        {/* Country Distribution */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <i className="ri-global-line text-orange-500"></i>
-            Distribuição por País
-          </h3>
-          <div className="space-y-3">
-            {Object.entries(countryDistribution)
-              .sort(([, a], [, b]) => b - a)
-              .slice(0, 5)
-              .map(([country, count]) => {
-                const percentage = (count / totalBottles) * 100;
-                return (
-                  <div key={country}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-700">{country}</span>
-                      <span className="text-sm text-gray-600">{count} ({percentage.toFixed(1)}%)</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full bg-gradient-to-r from-orange-500 to-pink-500"
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* Total Bottles */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-500">
+              <i className="ri-stack-fill text-xl"></i>
+            </div>
+            <span className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Estoque</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-bold text-gray-900 tracking-tight">{totalBottles}</span>
+            <span className="text-sm text-gray-400">garrafas</span>
           </div>
         </div>
 
-        {/* Vintage Distribution */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <i className="ri-calendar-line text-orange-500"></i>
-            Distribuição por Safra
-          </h3>
-          <div className="space-y-3">
-            {Object.entries(vintageDistribution)
-              .sort(([a], [b]) => parseInt(b) - parseInt(a))
-              .slice(0, 5)
-              .map(([vintage, count]) => {
-                const percentage = (count / totalBottles) * 100;
-                return (
-                  <div key={vintage}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-700">{vintage}</span>
-                      <span className="text-sm text-gray-600">{count} ({percentage.toFixed(1)}%)</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500"
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* Total Value */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
+              <i className="ri-money-dollar-circle-fill text-xl"></i>
+            </div>
+            <span className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Valor Total</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-bold text-gray-900 tracking-tight">
+              <span className="text-lg text-gray-500 mr-1">R$</span>
+              {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </span>
           </div>
         </div>
 
-        {/* Most Valuable Wines */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <i className="ri-trophy-line text-orange-500"></i>
-            Vinhos Mais Valiosos
-          </h3>
-          <div className="space-y-3">
-            {mostValuableWines.map((wine, index) => (
-              <div key={wine.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <div className="w-8 h-8 flex items-center justify-center bg-gradient-to-br from-orange-500 to-pink-500 text-white rounded-full font-bold text-sm flex-shrink-0">
-                  {index + 1}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 truncate">{wine.name}</div>
-                  <div className="text-sm text-gray-600">{wine.vintage}</div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="font-semibold text-gray-900">
-                    R$ {((wine.price || 0) * (wine.quantity || 0)).toLocaleString('pt-BR')}
-                  </div>
-                  <div className="text-xs text-gray-600">{wine.quantity}x R$ {(wine.price || 0).toLocaleString('pt-BR')}</div>
-                </div>
+        {/* Rating */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
+              <i className="ri-star-fill text-xl"></i>
+            </div>
+            <span className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Qualidade</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-3xl font-bold text-gray-900 tracking-tight">{avgRating.toFixed(1)}</span>
+            <div className="flex text-amber-400 text-sm">
+              {[1, 2, 3, 4, 5].map(star => (
+                <i key={star} className={`${avgRating >= star ? 'ri-star-fill' : avgRating >= star - 0.5 ? 'ri-star-half-fill' : 'ri-star-line'}`}></i>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* Left Column - Charts */}
+        <div className="lg:col-span-2 space-y-6">
+
+          {/* Detailed Distribution Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            {/* By Type */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+              <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <i className="ri-contrast-drop-2-line text-gray-400"></i>
+                Por Tipo
+              </h3>
+              <div className="space-y-5">
+                {Object.entries(typeDistribution).sort(([, a], [, b]) => b - a).map(([type, count]) => {
+                  const percentage = (count / totalBottles) * 100;
+                  const colorClass =
+                    type === 'red' ? 'bg-red-500' :
+                      type === 'white' ? 'bg-amber-200' :
+                        type === 'rose' ? 'bg-rose-300' :
+                          type === 'sparkling' ? 'bg-sky-300' : 'bg-purple-400';
+                  const label = type === 'red' ? 'Tinto' : type === 'white' ? 'Branco' : type === 'rose' ? 'Rosé' : type === 'sparkling' ? 'Espumante' : type;
+
+                  return (
+                    <div key={type}>
+                      <div className="flex justify-between text-sm mb-1.5">
+                        <span className="font-medium text-gray-700">{label}</span>
+                        <span className="text-gray-500">{count} ({percentage.toFixed(0)}%)</span>
+                      </div>
+                      <ProgressBar percentage={percentage} colorClass={colorClass} />
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
+            </div>
 
-      {/* Collection Growth */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <i className="ri-line-chart-line text-orange-500"></i>
-          Valorização da Coleção
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="text-center p-6 bg-gradient-to-br from-green-50 to-teal-50 rounded-xl">
-            <i className="ri-arrow-up-line text-3xl text-green-600 mb-2"></i>
-            <div className="text-2xl font-bold text-gray-900 mb-1">+{((totalValue / (totalBottles || 1)) * 0.15).toFixed(0)}%</div>
-            <div className="text-sm text-gray-600">Valorização Média Anual</div>
+            {/* By Country */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+              <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <i className="ri-earth-line text-gray-400"></i>
+                Por País
+              </h3>
+              <div className="space-y-5">
+                {Object.entries(countryDistribution)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 5)
+                  .map(([country, count]) => {
+                    const percentage = (count / totalBottles) * 100;
+                    return (
+                      <div key={country}>
+                        <div className="flex justify-between text-sm mb-1.5">
+                          <span className="font-medium text-gray-700">{country}</span>
+                          <span className="text-gray-500">{count} ({percentage.toFixed(0)}%)</span>
+                        </div>
+                        <ProgressBar percentage={percentage} colorClass="bg-indigo-500" />
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
           </div>
-          <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl">
-            <i className="ri-funds-line text-3xl text-blue-600 mb-2"></i>
-            <div className="text-2xl font-bold text-gray-900 mb-1">R$ {(totalValue / (totalBottles || 1)).toFixed(0)}</div>
-            <div className="text-sm text-gray-600">Valor Médio por Garrafa</div>
-          </div>
-          <div className="text-center p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl">
-            <i className="ri-time-line text-3xl text-purple-600 mb-2"></i>
-            <div className="text-2xl font-bold text-gray-900 mb-1">{wines.filter(w => w.aging_potential).length}</div>
-            <div className="text-sm text-gray-600">Vinhos com Potencial de Guarda</div>
+
+          {/* Value Analysis */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <i className="ri-vip-diamond-line text-gray-400"></i>
+                Jóias da Coleção
+              </h3>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-xs text-gray-400 uppercase tracking-wider border-b border-gray-50">
+                    <th className="pb-3 pl-2">Rank</th>
+                    <th className="pb-3">Vinho</th>
+                    <th className="pb-3 text-right">Preço Unit.</th>
+                    <th className="pb-3 text-right pr-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {mostValuableWines.map((wine, index) => (
+                    <tr key={wine.id} className="group hover:bg-gray-50 transition-colors">
+                      <td className="py-4 pl-2 text-gray-400 font-medium text-sm w-12">#{index + 1}</td>
+                      <td className="py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 text-gray-400">
+                            <i className="ri-wine-fill"></i>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-gray-900 text-sm group-hover:text-red-600 transition-colors">{wine.name}</div>
+                            <div className="text-xs text-gray-500">{wine.producer} • {wine.vintage}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 text-right text-sm text-gray-600">
+                        R$ {wine.price?.toLocaleString('pt-BR')}
+                      </td>
+                      <td className="py-4 text-right pr-2 text-sm font-bold text-gray-900">
+                        R$ {((wine.price || 0) * (wine.quantity || 0)).toLocaleString('pt-BR')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
+
+        {/* Right Column - Insights */}
+        <div className="space-y-6">
+          {/* Smart Insights */}
+          <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-6 text-white shadow-xl shadow-indigo-200">
+            <h3 className="font-bold text-lg mb-1 flex items-center gap-2">
+              <i className="ri-magic-line"></i>
+              Insights
+            </h3>
+            <p className="text-indigo-100 text-sm mb-6">Baseado na sua coleção</p>
+
+            <div className="space-y-6">
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                <div className="text-xs text-indigo-200 uppercase tracking-widest font-semibold mb-1">Média de Preço</div>
+                <div className="text-2xl font-bold">R$ {(totalValue / (totalBottles || 1)).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</div>
+                <div className="text-xs text-indigo-200 mt-1">por garrafa</div>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                <div className="text-xs text-indigo-200 uppercase tracking-widest font-semibold mb-1">Potencial de Guarda</div>
+                <div className="text-2xl font-bold">{wines.filter(w => w.aging_potential).length}</div>
+                <div className="text-xs text-indigo-200 mt-1">vinhos identificados</div>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                <div className="text-xs text-indigo-200 uppercase tracking-widest font-semibold mb-1">Valorização Estimada</div>
+                <div className="text-2xl font-bold text-emerald-300">+12%</div>
+                <div className="text-xs text-indigo-200 mt-1">últimos 12 meses</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );

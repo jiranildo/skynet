@@ -21,6 +21,7 @@ export default function CellarPage() {
   const [showFloatingMenu, setShowFloatingMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const { refreshCounts } = useUnreadCounts();
 
   const tabs = [
@@ -137,7 +138,7 @@ export default function CellarPage() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-[128px] md:pt-6">
-        {activeTab === 'my-wines' && <MyWinesTab searchQuery="" onAddWine={() => setShowAddModal(true)} />}
+        {activeTab === 'my-wines' && <MyWinesTab key={refreshKey} searchQuery="" onAddWine={() => setShowAddModal(true)} />}
         {activeTab === 'explore' && <ExploreTab />}
         {activeTab === 'scan' && <ScanBottleTab />}
         {activeTab === 'sommelier' && <SommelierTab />}
@@ -203,7 +204,13 @@ export default function CellarPage() {
 
       {/* Add Wine Modal */}
       {showAddModal && (
-        <AddWineModal onClose={() => setShowAddModal(false)} onAdd={() => setShowAddModal(false)} />
+        <AddWineModal
+          onClose={() => setShowAddModal(false)}
+          onAdd={() => {
+            setShowAddModal(false);
+            setRefreshKey(prev => prev + 1);
+          }}
+        />
       )}
 
       {/* Create Menu */}
