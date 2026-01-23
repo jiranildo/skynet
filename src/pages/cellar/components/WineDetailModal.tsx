@@ -1,6 +1,4 @@
-
 import { useState } from 'react';
-
 import { CellarWine } from '../../../services/supabase';
 
 interface WineDetailModalProps {
@@ -12,254 +10,363 @@ interface WineDetailModalProps {
   onAddBottle?: () => void;
 }
 
-export default function WineDetailModal({ wine, onClose, onConsumeBottle, onAddBottle }: WineDetailModalProps) {
-  const [quantity, setQuantity] = useState(wine.quantity || 0);
-  const [showEditLocation, setShowEditLocation] = useState(false);
+export default function WineDetailModal({
+  wine,
+  onClose,
+  onUpdate,
+  onDelete,
+  onConsumeBottle,
+  onAddBottle
+}: WineDetailModalProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<CellarWine>(wine);
 
-  const handleConsume = () => {
-    if (quantity > 0) {
-      onConsumeBottle?.();
-      setQuantity(q => q - 1);
-      alert('🍷 Garrafa consumida! Aproveite!');
+  const handleSave = () => {
+    if (onUpdate) {
+      onUpdate(editForm);
+      setIsEditing(false);
     }
   };
 
-  const handleAddBottle = () => {
-    onAddBottle?.();
-    setQuantity(q => q + 1);
-    alert('✅ Garrafa adicionada ao estoque!');
+  const handleConsume = () => {
+    if (onConsumeBottle && (wine.quantity || 0) > 0) {
+      onConsumeBottle();
+    }
   };
 
-  return (
-    <>
-      <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
-        onClick={onClose}
-      />
+  const handleAdd = () => {
+    if (onAddBottle) {
+      onAddBottle();
+    }
+  };
 
-      <div className="fixed inset-0 z-50 overflow-y-auto">
-        <div className="min-h-screen px-4 flex items-center justify-center py-8">
-          <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl">
-            <div className="bg-gradient-to-r from-purple-600 via-red-600 to-pink-600 text-white p-6 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                    <i className="ri-wine-glass-line text-2xl"></i>
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold">Detalhes do Vinho</h2>
-                    <p className="text-sm text-white/80">Informações completas</p>
-                  </div>
-                </div>
-                <button
-                  onClick={onClose}
-                  className="w-10 h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
-                >
-                  <i className="ri-close-line text-2xl"></i>
-                </button>
+  if (isEditing) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end md:items-center justify-center pt-10 md:pt-0 md:p-4" onClick={onClose}>
+        <div className="bg-white w-full h-full md:h-auto md:max-h-[90vh] md:max-w-2xl md:rounded-3xl shadow-2xl overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+            <h2 className="text-xl font-bold text-gray-900">Editar Vinho</h2>
+            <button
+              onClick={() => setIsEditing(false)}
+              className="w-10 h-10 flex items-center justify-center bg-gray-50 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
+            >
+              <i className="ri-close-line text-2xl"></i>
+            </button>
+          </div>
+
+          <div className="p-6 space-y-4 flex-1 overflow-y-auto">
+            <div>
+              <label className="block text-sm font-bold text-gray-900 mb-2">Nome</label>
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Produtor</label>
+                <input
+                  type="text"
+                  value={editForm.producer || ''}
+                  onChange={e => setEditForm({ ...editForm, producer: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Safra</label>
+                <input
+                  type="number"
+                  value={editForm.vintage || ''}
+                  onChange={e => setEditForm({ ...editForm, vintage: parseInt(e.target.value) })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                />
               </div>
             </div>
 
-            <div className="p-6 max-h-[70vh] overflow-y-auto">
-              <div className="flex flex-col md:flex-row gap-6">
-                {/* Wine Image */}
-                <div className="w-full md:w-80 flex-shrink-0">
-                  <div className="aspect-[3/4] rounded-xl overflow-hidden mb-4">
-                    <img
-                      src={wine.image_url || `https://readdy.ai/api/search-image?query=${wine.name}&width=320&height=427&seq=wine-detail-${wine.id}&orientation=portrait`}
-                      alt={wine.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Preço (R$)</label>
+                <input
+                  type="number"
+                  value={editForm.price || 0}
+                  onChange={e => setEditForm({ ...editForm, price: parseFloat(e.target.value) })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Quantidade</label>
+                <input
+                  type="number"
+                  value={editForm.quantity || 0}
+                  onChange={e => setEditForm({ ...editForm, quantity: parseInt(e.target.value) })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+            </div>
 
-                  {/* Quick Actions */}
-                  <div className="space-y-3">
-                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-semibold text-gray-700">Estoque Atual</span>
-                        <span className="text-3xl font-bold text-purple-600">{quantity}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleConsume}
-                          disabled={quantity === 0}
-                          className="flex-1 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all whitespace-nowrap"
-                        >
-                          <i className="ri-wine-glass-line mr-2"></i>
-                          Consumir
-                        </button>
-                        <button
-                          onClick={handleAddBottle}
-                          className="flex-1 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-all whitespace-nowrap"
-                        >
-                          <i className="ri-add-line mr-2"></i>
-                          Adicionar
-                        </button>
-                      </div>
-                    </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-900 mb-2">Notas</label>
+              <textarea
+                value={editForm.notes || ''}
+                onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                rows={4}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none resize-none"
+              />
+            </div>
 
-                    <button
-                      onClick={() => setShowEditLocation(!showEditLocation)}
-                      className="w-full px-4 py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all whitespace-nowrap"
-                    >
-                      <i className="ri-edit-line mr-2"></i>
-                      Editar Localização
-                    </button>
+            {/* Location Fields */}
+            <div>
+              <label className="block text-sm font-bold text-gray-900 mb-2">Localização</label>
+              <div className="grid grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  placeholder="Seção"
+                  value={editForm.section || ''}
+                  onChange={e => setEditForm({ ...editForm, section: e.target.value })}
+                  className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-center"
+                />
+                <input
+                  type="text"
+                  placeholder="Prat."
+                  value={editForm.shelf || ''}
+                  onChange={e => setEditForm({ ...editForm, shelf: e.target.value })}
+                  className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-center"
+                />
+                <input
+                  type="text"
+                  placeholder="Pos."
+                  value={editForm.position || ''}
+                  onChange={e => setEditForm({ ...editForm, position: e.target.value })}
+                  className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-center"
+                />
+              </div>
+            </div>
 
-                    {showEditLocation && (
-                      <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">Seção</label>
-                          <input
-                            type="text"
-                            defaultValue={wine.section}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">Prateleira</label>
-                          <input
-                            type="text"
-                            defaultValue={wine.shelf}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">Posição</label>
-                          <input
-                            type="text"
-                            defaultValue={wine.position}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                          />
-                        </div>
-                        <button className="w-full px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-all whitespace-nowrap">
-                          Salvar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+            <div className="pt-4 flex gap-3 pb-safe-area md:pb-0">
+              <button
+                onClick={() => setIsEditing(false)}
+                className="flex-1 py-3 border border-gray-200 rounded-xl font-bold text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-bold shadow-lg shadow-purple-200 hover:bg-purple-700"
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-                {/* Wine Info */}
-                <div className="flex-1 space-y-4">
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">{wine.name}</h2>
-                    <p className="text-lg text-gray-600 mb-3">{wine.producer}</p>
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4" onClick={onClose}>
+      <div
+        className="bg-white w-full h-full md:h-auto md:max-h-[90vh] md:max-w-4xl md:rounded-3xl shadow-2xl overflow-y-auto animate-slide-up md:animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex flex-col md:flex-row h-full md:h-auto">
+          {/* Image Section */}
+          <div className="w-full md:w-2/5 bg-gray-50 relative flex-shrink-0">
+            <div className="sticky top-0 h-72 md:h-full md:min-h-[500px] flex items-center justify-center p-8">
+              <button
+                onClick={onClose}
+                className="absolute top-4 right-4 z-10 w-10 h-10 bg-black/20 backdrop-blur-md rounded-full text-white flex items-center justify-center md:hidden"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
 
-                    <div className="flex items-center gap-3 mb-4 flex-wrap">
-                      <span className="px-3 py-1 bg-purple-100 text-purple-700 text-sm font-bold rounded-full">
-                        {wine.type}
-                      </span>
-                      <span className="px-3 py-1 bg-orange-100 text-orange-700 text-sm font-bold rounded-full">
-                        Safra {wine.vintage}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {[...Array(5)].map((_, i) => (
-                          <i
-                            key={i}
-                            className={`${i < wine.rating ? 'ri-star-fill text-yellow-400' : 'ri-star-line text-gray-300'
-                              }`}
-                          ></i>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+              <img
+                src={wine.image_url || `https://readdy.ai/api/search-image?query=${wine.name} wine bottle&width=400&height=600&orientation=portrait`}
+                alt={wine.name}
+                className="h-full w-auto object-contain drop-shadow-2xl"
+              />
+            </div>
+          </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <p className="text-xs text-gray-600 mb-1">Região</p>
-                      <p className="font-bold text-gray-900">{wine.region}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <p className="text-xs text-gray-600 mb-1">País</p>
-                      <p className="font-bold text-gray-900">{wine.country}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <p className="text-xs text-gray-600 mb-1">Preço</p>
-                      <p className="font-bold text-gray-900">{wine.price?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || '-'}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <p className="text-xs text-gray-600 mb-1">Data de Compra</p>
-                      <p className="font-bold text-gray-900">
-                        {wine.created_at ? new Date(wine.created_at).toLocaleDateString('pt-BR') : '-'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
-                    <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-                      <i className="ri-archive-line text-purple-600"></i>
-                      Localização na Adega
-                    </h3>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <p className="text-xs text-gray-600 mb-1">Seção</p>
-                        <p className="text-2xl font-bold text-purple-600">{wine.section}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-600 mb-1">Prateleira</p>
-                        <p className="text-2xl font-bold text-purple-600">{wine.shelf}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-600 mb-1">Posição</p>
-                        <p className="text-2xl font-bold text-purple-600">{wine.position}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {wine.notes && (
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-                        <i className="ri-file-text-line text-gray-600"></i>
-                        Minhas Notas
-                      </h3>
-                      <p className="text-gray-700 text-sm leading-relaxed">{wine.notes}</p>
-                    </div>
+          {/* Content Section */}
+          <div className="flex-1 flex flex-col h-full md:h-auto bg-white rounded-t-3xl -mt-6 md:mt-0 md:rounded-none relative z-10 md:min-h-[600px]">
+            {/* Header */}
+            <div className="p-6 md:p-8 border-b border-gray-100 flex items-start justify-between bg-white md:rounded-tr-3xl sticky top-0 z-20 md:static">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${wine.type === 'red' ? 'bg-red-100 text-red-700' :
+                      wine.type === 'white' ? 'bg-amber-100 text-amber-700' :
+                        wine.type === 'rose' ? 'bg-pink-100 text-pink-700' :
+                          wine.type === 'sparkling' ? 'bg-blue-100 text-blue-700' :
+                            'bg-purple-100 text-purple-700'
+                    }`}>
+                    {wine.type === 'red' ? 'Tinto' :
+                      wine.type === 'white' ? 'Branco' :
+                        wine.type === 'rose' ? 'Rosé' :
+                          wine.type === 'sparkling' ? 'Espumante' :
+                            wine.type === 'fortified' ? 'Fortificado' :
+                              wine.type === 'dessert' ? 'Sobremesa' :
+                                wine.type}
+                  </span>
+                  {wine.vintage && (
+                    <span className="text-sm font-semibold text-gray-500">
+                      {wine.vintage}
+                    </span>
                   )}
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight mb-1">
+                  {wine.name}
+                </h2>
+                <p className="text-lg text-gray-600">
+                  {wine.producer}
+                </p>
+              </div>
 
-                  <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-4 border border-yellow-200">
-                    <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                      <i className="ri-lightbulb-line text-yellow-600"></i>
-                      Dicas de Degustação
-                    </h3>
-                    <div className="space-y-2 text-sm text-gray-700">
-                      <div className="flex items-start gap-2">
-                        <i className="ri-temp-cold-line text-blue-600 mt-0.5"></i>
-                        <div>
-                          <span className="font-semibold">Temperatura:</span> 16-18°C
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <i className="ri-time-line text-purple-600 mt-0.5"></i>
-                        <div>
-                          <span className="font-semibold">Decantação:</span> 1-2 horas recomendado
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <i className="ri-restaurant-line text-orange-600 mt-0.5"></i>
-                        <div>
-                          <span className="font-semibold">Harmonização:</span> Carnes vermelhas, queijos maturados
-                        </div>
-                      </div>
+              <button
+                onClick={onClose}
+                className="hidden md:flex w-10 h-10 items-center justify-center bg-gray-50 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
+                title="Fechar"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+
+            {/* Scrollable Details */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 pb-32 md:pb-8">
+              {/* Quick Stats */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 bg-gray-50 rounded-2xl text-center">
+                  <i className="ri-money-dollar-circle-line text-2xl text-emerald-600 mb-1 block"></i>
+                  <span className="text-sm text-gray-500 block">Preço</span>
+                  <span className="font-bold text-gray-900">
+                    {wine.price ? `R$ ${wine.price}` : '-'}
+                  </span>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-2xl text-center">
+                  <i className="ri-star-fill text-2xl text-amber-400 mb-1 block"></i>
+                  <span className="text-sm text-gray-500 block">Avaliação</span>
+                  <span className="font-bold text-gray-900">
+                    {wine.rating ? wine.rating.toFixed(1) : '-'}
+                  </span>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-2xl text-center">
+                  <i className="ri-map-pin-line text-2xl text-red-500 mb-1 block"></i>
+                  <span className="text-sm text-gray-500 block">Região</span>
+                  <span className="font-bold text-gray-900 truncate px-2 block">
+                    {wine.country || '-'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Detailed Info */}
+              <div className="space-y-4">
+                {wine.region && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                      <i className="ri-map-2-line text-red-600"></i>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">Região</h4>
+                      <p className="text-gray-600">{wine.region}</p>
                     </div>
                   </div>
+                )}
 
-                  <div className="flex gap-3 pt-4">
-                    <button className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all whitespace-nowrap">
-                      <i className="ri-share-line mr-2"></i>
-                      Compartilhar
-                    </button>
-                    <button className="px-6 py-3 bg-red-50 text-red-600 font-semibold rounded-xl hover:bg-red-100 transition-all whitespace-nowrap">
-                      <i className="ri-delete-bin-line mr-2"></i>
-                      Remover
-                    </button>
+                {wine.grapes && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center flex-shrink-0">
+                      <i className="ri-plant-line text-purple-600"></i>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">Uvas</h4>
+                      <p className="text-gray-600">{wine.grapes}</p>
+                    </div>
                   </div>
+                )}
+
+                {wine.food_pairing && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center flex-shrink-0">
+                      <i className="ri-restaurant-line text-orange-600"></i>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">Harmonização</h4>
+                      <p className="text-gray-600">{wine.food_pairing}</p>
+                    </div>
+                  </div>
+                )}
+
+                {wine.notes && (
+                  <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100">
+                    <h4 className="font-bold text-yellow-800 mb-2 flex items-center gap-2">
+                      <i className="ri-sticky-note-line"></i>
+                      Notas Pessoais
+                    </h4>
+                    <p className="text-yellow-900/80 italic">{wine.notes}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Location */}
+              <div className="pt-4 border-t border-gray-100">
+                <h4 className="font-bold text-gray-900 mb-4">Localização</h4>
+                <div className="flex gap-4">
+                  <span className="px-4 py-2 bg-gray-100 rounded-lg font-mono font-bold text-gray-600 text-sm">Seção: {wine.section || '-'}</span>
+                  <span className="px-4 py-2 bg-gray-100 rounded-lg font-mono font-bold text-gray-600 text-sm">Prat: {wine.shelf || '-'}</span>
+                  <span className="px-4 py-2 bg-gray-100 rounded-lg font-mono font-bold text-gray-600 text-sm">Pos: {wine.position || '-'}</span>
                 </div>
+              </div>
+            </div>
+
+            {/* Sticky Bottom Actions */}
+            <div className="p-6 md:p-8 bg-white border-t border-gray-100 flex flex-col gap-3 fixed bottom-0 left-0 right-0 md:static md:bottom-auto">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-500 font-medium">Estoque Atual</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleConsume}
+                    className="w-10 h-10 rounded-xl bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!wine.quantity || wine.quantity <= 0}
+                    title="Consumir uma garrafa"
+                  >
+                    <i className="ri-subtract-line text-xl"></i>
+                  </button>
+                  <span className="text-2xl font-bold text-gray-900 w-8 text-center">{wine.quantity}</span>
+                  <button
+                    onClick={handleAdd}
+                    className="w-10 h-10 rounded-xl bg-gray-100 hover:bg-emerald-100 text-gray-600 hover:text-emerald-600 flex items-center justify-center transition-colors"
+                    title="Adicionar uma garrafa"
+                  >
+                    <i className="ri-add-line text-xl"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="py-3.5 rounded-xl border-2 border-gray-100 text-gray-700 font-bold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <i className="ri-pencil-line"></i>
+                  Editar
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm('Tem certeza que deseja apagar este vinho?')) {
+                      if (onDelete) onDelete();
+                    }
+                  }}
+                  className="py-3.5 rounded-xl bg-red-50 text-red-600 font-bold hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+                >
+                  <i className="ri-delete-bin-line"></i>
+                  Apagar
+                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
