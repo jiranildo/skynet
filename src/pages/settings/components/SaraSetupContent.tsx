@@ -36,6 +36,22 @@ export default function SaraSetupContent({ userProfile, onUpdate }: SaraSetupCon
         }
     }, [userProfile]);
 
+    const [availableVoices, setAvailableVoices] = useState<any[]>([]);
+
+    useEffect(() => {
+        const loadVoices = () => {
+            const voices = window.speechSynthesis.getVoices();
+            // Filter primarily for PT-BR, but allow others if needed or empty
+            const ptVoices = voices.filter(v => v.lang.includes('pt-BR'));
+            setAvailableVoices(ptVoices.length > 0 ? ptVoices : voices);
+        };
+
+        loadVoices();
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+    }, []);
+
     // Load Real Stats
     useEffect(() => {
         const loadStats = async () => {
@@ -292,6 +308,103 @@ export default function SaraSetupContent({ userProfile, onUpdate }: SaraSetupCon
                                 </div>
                             </div>
                         ))}
+                    </div>
+                </div>
+
+
+                {/* 5.5. Personalization Section - NEW */}
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <div className="flex items-center gap-3 mb-4">
+                        <i className="ri-palette-line text-pink-500 text-lg"></i>
+                        <div>
+                            <h3 className="font-bold text-gray-900">Personalização</h3>
+                            <p className="text-xs text-gray-500">Aparência e voz da SARA</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        {/* Avatar Type */}
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Estilo do Avatar</label>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleConfigChange('avatar_type', 'icon')}
+                                    className={`flex-1 py-2 rounded-xl text-sm font-bold border transition-all flex items-center justify-center gap-2 ${(!config.avatar_type || config.avatar_type === 'icon')
+                                        ? 'bg-pink-50 border-pink-500 text-pink-600'
+                                        : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <i className="ri-sparkling-fill"></i>
+                                    Ícone
+                                </button>
+                                <button
+                                    onClick={() => handleConfigChange('avatar_type', 'image')}
+                                    className={`flex-1 py-2 rounded-xl text-sm font-bold border transition-all flex items-center justify-center gap-2 ${(config.avatar_type === 'image')
+                                        ? 'bg-pink-50 border-pink-500 text-pink-600'
+                                        : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <i className="ri-image-line"></i>
+                                    Imagem
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Avatar URL (Conditional) */}
+                        {config.avatar_type === 'image' && (
+                            <div className="animate-fadeIn">
+                                <label className="block text-sm font-bold text-gray-700 mb-2">URL da Imagem</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={config.avatar_url || ''}
+                                        onChange={(e) => handleConfigChange('avatar_url', e.target.value)}
+                                        placeholder="https://..."
+                                        className="flex-1 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none"
+                                    />
+                                    {config.avatar_url && (
+                                        <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 shrink-0">
+                                            <img src={config.avatar_url} alt="Preview" className="w-full h-full object-cover" />
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-1">Cole a URL de uma imagem pública (JPG, PNG).</p>
+                            </div>
+                        )}
+
+                        {/* Voice Selector */}
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Voz da Assistente</label>
+                            <div className="flex gap-2">
+                                <select
+                                    value={config.voice_uri || ''}
+                                    onChange={(e) => handleConfigChange('voice_uri', e.target.value)}
+                                    className="flex-1 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-pink-500 focus:ring-2 focus:ring-pink-100 outline-none appearance-none"
+                                >
+                                    <option value="">Padrão (Automático)</option>
+                                    {availableVoices.map(v => (
+                                        <option key={v.voiceURI} value={v.voiceURI}>
+                                            {v.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={() => {
+                                        const text = "Olá! Eu sou a Sara, sua assistente virtual.";
+                                        const utterance = new SpeechSynthesisUtterance(text);
+                                        if (config.voice_uri) {
+                                            const voice = window.speechSynthesis.getVoices().find(v => v.voiceURI === config.voice_uri);
+                                            if (voice) utterance.voice = voice;
+                                        }
+                                        window.speechSynthesis.cancel();
+                                        window.speechSynthesis.speak(utterance);
+                                    }}
+                                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl font-medium transition-colors"
+                                >
+                                    <i className="ri-volume-up-line"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

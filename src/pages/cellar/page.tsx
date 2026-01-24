@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import MyWinesTab from './components/MyWinesTab';
 import ExploreTab from './components/ExploreTab';
 import StatsTab from './components/StatsTab';
-import ScanBottleTab from './components/ScanBottleTab';
 import AddWineModal from './components/AddWineModal';
 import SommelierTab from './components/SommelierTab';
 import CellarIcon from '../../components/CellarIcon';
@@ -27,7 +26,6 @@ export default function CellarPage() {
   const tabs = [
     { id: 'my-wines', label: 'Minha Adega', icon: 'custom' },
     { id: 'explore', label: 'Explorar', icon: 'ri-compass-3-line' },
-    { id: 'scan', label: 'Escanear', icon: 'ri-qr-scan-2-line' },
     { id: 'sommelier', label: 'Dicas do Sommelier', icon: 'ri-lightbulb-line' },
     { id: 'stats', label: 'Estatísticas', icon: 'ri-bar-chart-box-line' },
   ];
@@ -77,7 +75,7 @@ export default function CellarPage() {
       {/* Header */}
       <div className="bg-white/80 backdrop-blur-md border-b border-purple-100 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-14">
             <button
               onClick={() => navigate('/')}
               className="hover:scale-110 transition-transform"
@@ -112,14 +110,14 @@ export default function CellarPage() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white/60 backdrop-blur-sm border-b border-purple-100 sticky top-16 z-30">
+      <div className="bg-white/60 backdrop-blur-sm border-b border-purple-100 sticky top-14 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex gap-1 overflow-x-auto scrollbar-hide">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-all duration-300 border-b-2 ${activeTab === tab.id
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 border-b-2 ${activeTab === tab.id
                   ? 'text-purple-600 border-purple-600'
                   : 'text-gray-500 border-transparent hover:text-purple-600'
                   }`}
@@ -137,10 +135,9 @@ export default function CellarPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-[128px] md:pt-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1 pb-24 md:pt-6">
         {activeTab === 'my-wines' && <MyWinesTab key={refreshKey} searchQuery="" onAddWine={() => setShowAddModal(true)} />}
         {activeTab === 'explore' && <ExploreTab />}
-        {activeTab === 'scan' && <ScanBottleTab />}
         {activeTab === 'sommelier' && <SommelierTab />}
         {activeTab === 'stats' && <StatsTab />}
       </div>
@@ -149,7 +146,7 @@ export default function CellarPage() {
       {activeTab === 'my-wines' && (
         <button
           onClick={() => setShowAddModal(true)}
-          className="sm:hidden fixed bottom-20 right-4 w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center z-30"
+          className="sm:hidden fixed bottom-24 right-24 w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center z-30"
         >
           <i className="ri-add-line text-2xl"></i>
         </button>
@@ -182,14 +179,6 @@ export default function CellarPage() {
               <i className="ri-add-line text-xl sm:text-2xl text-white"></i>
             </div>
             <span className="text-[9px] sm:text-[10px] font-medium">Criar</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('scan')}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 transition-colors text-gray-600"
-          >
-            <i className="ri-qr-scan-2-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Escanear</span>
           </button>
 
           <button

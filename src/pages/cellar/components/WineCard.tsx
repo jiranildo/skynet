@@ -6,22 +6,10 @@ interface WineCardProps {
     onClick: () => void;
     onConsume: (e: React.MouseEvent) => void;
     onAdd: (e: React.MouseEvent) => void;
+    compact?: boolean;
 }
 
-export default function WineCard({ wine, onClick, onConsume, onAdd }: WineCardProps) {
-    const isRed = wine.type === 'red';
-    const isWhite = wine.type === 'white';
-    const isRose = wine.type === 'rose';
-    const isSparkling = wine.type === 'sparkling';
-
-    const getTypeColor = () => {
-        if (isRed) return 'bg-red-50 text-red-700 border-red-100';
-        if (isWhite) return 'bg-amber-50 text-amber-700 border-amber-100';
-        if (isRose) return 'bg-pink-50 text-pink-700 border-pink-100';
-        if (isSparkling) return 'bg-blue-50 text-blue-700 border-blue-100';
-        return 'bg-purple-50 text-purple-700 border-purple-100'; // fortified/dessert/other
-    };
-
+export default function WineCard({ wine, onClick, onConsume, onAdd, compact = false }: WineCardProps) {
     const getTypeLabel = () => {
         switch (wine.type) {
             case 'red': return 'Tinto';
@@ -37,14 +25,17 @@ export default function WineCard({ wine, onClick, onConsume, onAdd }: WineCardPr
     return (
         <div
             onClick={onClick}
-            className="group relative bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer active:scale-95 touch-manipulation"
+            className={`group relative bg-white/80 backdrop-blur-sm rounded-xl border border-white/20 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer active:scale-95 touch-manipulation`}
         >
             {/* Image Container */}
-            <div className="relative aspect-[3/4] overflow-hidden bg-gray-50">
+            <div className={`relative ${compact ? 'aspect-square' : 'aspect-[3/4]'} overflow-hidden bg-gray-50`}>
                 <img
-                    src={wine.image_url || `https://readdy.ai/api/search-image?query=${wine.name} wine bottle&width=300&height=400&orientation=portrait`}
+                    src={wine.image_url || "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
+                    onError={(e) => {
+                        e.currentTarget.src = "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop";
+                    }}
                     alt={wine.name}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    className="w-full h-full object-contain p-1 transition-transform duration-700 group-hover:scale-110"
                     loading="lazy"
                 />
 
@@ -52,10 +43,10 @@ export default function WineCard({ wine, onClick, onConsume, onAdd }: WineCardPr
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
 
                 {/* Quantity Badge */}
-                <div className="absolute top-3 right-3">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold shadow-lg backdrop-blur-md ${wine.quantity > 0
-                            ? 'bg-white/90 text-gray-900'
-                            : 'bg-red-500/90 text-white'
+                <div className={`absolute ${compact ? 'top-2 right-2' : 'top-3 right-3'}`}>
+                    <span className={`px-2 py-0.5 rounded-full ${compact ? 'text-[10px]' : 'text-xs'} font-bold shadow-lg backdrop-blur-md ${wine.quantity > 0
+                        ? 'bg-white/90 text-gray-900'
+                        : 'bg-red-500/90 text-white'
                         }`}>
                         {wine.quantity > 0 ? `${wine.quantity}x` : 'Esgotado'}
                     </span>
@@ -63,49 +54,52 @@ export default function WineCard({ wine, onClick, onConsume, onAdd }: WineCardPr
 
                 {/* Rating Badge */}
                 {wine.rating ? (
-                    <div className="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 rounded-full bg-white/90 backdrop-blur-md shadow-lg">
-                        <i className="ri-star-fill text-amber-400 text-xs"></i>
-                        <span className="text-xs font-bold text-gray-900">{wine.rating}</span>
+                    <div className={`absolute ${compact ? 'top-2 left-2' : 'top-3 left-3'} flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/90 backdrop-blur-md shadow-lg`}>
+                        <i className={`ri-star-fill text-amber-400 ${compact ? 'text-[10px]' : 'text-xs'}`}></i>
+                        <span className={`${compact ? 'text-[10px]' : 'text-xs'} font-bold text-gray-900`}>{wine.rating}</span>
                     </div>
                 ) : null}
 
+
                 {/* Content on Image (Mobile style) */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/20 backdrop-blur-md border border-white/10`}>
+                <div className={`absolute bottom-0 left-0 right-0 ${compact ? 'p-1.5' : 'p-4'} text-white`}>
+                    <div className="flex items-center gap-2 mb-0.5">
+                        <span className={`px-1 py-0.5 rounded text-[7px] font-bold uppercase tracking-wider bg-white/20 backdrop-blur-md border border-white/10`}>
                             {getTypeLabel()}
                         </span>
-                        {wine.vintage && (
+                        {!compact && wine.vintage && (
                             <span className="text-xs font-medium text-white/90">
                                 {wine.vintage}
                             </span>
                         )}
                     </div>
-                    <h3 className="font-bold text-lg leading-tight mb-0.5 line-clamp-1 text-shadow-sm">
+                    <h3 className={`font-bold ${compact ? 'text-[10px]' : 'text-lg'} leading-tight mb-0 line-clamp-1 text-shadow-sm`}>
                         {wine.name}
                     </h3>
-                    <p className="text-xs text-white/80 line-clamp-1">
-                        {wine.producer}
-                    </p>
+                    {!compact && (
+                        <p className="text-xs text-white/80 line-clamp-1">
+                            {wine.producer}
+                        </p>
+                    )}
                 </div>
             </div>
 
             {/* Quick Actions (Visible on cards, especially mobile friendly) */}
-            <div className="p-3 bg-white/50 backdrop-blur-sm border-t border-gray-100 flex items-center gap-2">
+            <div className={`${compact ? 'p-1 h-8' : 'p-3'} bg-white/50 backdrop-blur-sm border-t border-gray-100 flex items-center gap-1`}>
                 <button
                     onClick={onConsume}
                     disabled={!wine.quantity}
-                    className="flex-1 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex-1 h-full flex items-center justify-center rounded bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                    <i className="ri-subtract-line text-lg"></i>
+                    <i className={`${compact ? 'text-xs' : 'text-lg'} ri-subtract-line`}></i>
                     <span className="sr-only">Consumir</span>
                 </button>
-                <div className="w-px h-6 bg-gray-200" />
+                <div className="w-px h-3 bg-gray-200" />
                 <button
                     onClick={onAdd}
-                    className="flex-1 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-600 transition-colors"
+                    className="flex-1 h-full flex items-center justify-center rounded bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-600 transition-colors"
                 >
-                    <i className="ri-add-line text-lg"></i>
+                    <i className={`${compact ? 'text-xs' : 'text-lg'} ri-add-line`}></i>
                     <span className="sr-only">Adicionar</span>
                 </button>
             </div>

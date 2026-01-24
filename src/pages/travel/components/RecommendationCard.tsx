@@ -21,7 +21,7 @@ export interface Recommendation {
     michelin?: string; // e.g., "1 Estrela Michelin", "Bib Gourmand"
 
     // New Fields for Adaptive Layouts
-    category?: 'flight' | 'hotel' | 'general';
+    category?: 'flight' | 'hotel' | 'general' | 'wine';
 
     // General / Restaurant
     googleRating?: number;
@@ -49,6 +49,20 @@ export interface Recommendation {
     stars?: number;
     tripAdvisorRating?: number | string;
     bookingRating?: number | string;
+
+    // Wine Specific (New)
+    producer?: string;
+    wineType?: string; // Tinto, Branco, Rose...
+    vintage?: string; // Safra 2016
+    region?: string;
+    country?: string;
+    grapes?: string;
+    alcohol?: string;
+    pairing?: string;
+    temperature?: string;
+    decanting?: string;
+    agingPotential?: string;
+    reviewsCount?: number;
 }
 
 
@@ -60,6 +74,129 @@ interface RecommendationCardProps {
 }
 
 export function RecommendationCard({ data, onSelect, onView, onSave }: RecommendationCardProps) {
+
+    // --- WINE LAYOUT (Special Custom Design) ---
+    if (data.category === 'wine') {
+        return (
+            <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col hover:shadow-lg transition-all duration-300 group">
+                {/* Header */}
+                <div className="mb-4">
+                    <h3 className="text-2xl font-bold text-gray-900 leading-tight tracking-tight mb-1">{data.name}</h3>
+                    {data.producer && (
+                        <p className="text-sm text-gray-500 font-medium">{data.producer}</p>
+                    )}
+                </div>
+
+                {/* Badges Row */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                    {data.wineType && (
+                        <span className="px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-bold uppercase tracking-wide">
+                            {data.wineType}
+                        </span>
+                    )}
+                    {data.vintage && (
+                        <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-bold">
+                            {data.vintage}
+                        </span>
+                    )}
+                    {data.stars && (
+                        <div className="flex items-center gap-1 px-2 py-1">
+                            <i className="ri-star-fill text-yellow-500 text-sm"></i>
+                            <span className="font-bold text-gray-900 text-sm">{data.stars}</span>
+                            {data.reviewsCount && (
+                                <span className="text-gray-400 text-xs">({data.reviewsCount} avaliações)</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Info Grid */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="bg-gray-50 rounded-xl p-3">
+                        <span className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Região</span>
+                        <div className="text-sm font-semibold text-gray-800">{data.region || '-'}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3">
+                        <span className="text-[10px] text-gray-400 uppercase font-bold block mb-1">País</span>
+                        <div className="text-sm font-semibold text-gray-800">{data.country || '-'}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3">
+                        <span className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Uvas</span>
+                        <div className="text-sm font-semibold text-gray-800 leading-tight">{data.grapes || '-'}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3">
+                        <span className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Teor Alcoólico</span>
+                        <div className="text-sm font-semibold text-gray-800">{data.alcohol || '-'}</div>
+                    </div>
+                </div>
+
+                {/* Description */}
+                {data.description && (
+                    <div className="mb-4">
+                        <h4 className="text-sm font-bold text-gray-900 mb-1">Descrição</h4>
+                        <p className="text-xs text-gray-600 leading-relaxed font-light text-justify">
+                            {data.description}
+                        </p>
+                    </div>
+                )}
+
+                {/* Details List */}
+                <div className="space-y-3 mb-5">
+                    {data.pairing && (
+                        <div>
+                            <h4 className="text-xs font-bold text-gray-900 mb-1">Harmonização</h4>
+                            <p className="text-xs text-gray-600 leading-relaxed">{data.pairing}</p>
+                        </div>
+                    )}
+                    {data.temperature && (
+                        <div>
+                            <h4 className="text-xs font-bold text-gray-900 mb-1">Temperatura</h4>
+                            <p className="text-xs text-gray-600">{data.temperature}</p>
+                        </div>
+                    )}
+                    {data.decanting && (
+                        <div>
+                            <h4 className="text-xs font-bold text-gray-900 mb-1">Decantação</h4>
+                            <p className="text-xs text-gray-600">{data.decanting}</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer (Price & Aging) */}
+                <div className="mt-auto bg-purple-50 rounded-2xl p-4 flex items-center justify-between border border-purple-100">
+                    <div>
+                        <span className="text-[10px] text-gray-500 block mb-0.5">Preço Estimado</span>
+                        <span className="text-xl font-bold text-gray-900">{data.estimatedCost}</span>
+                    </div>
+                    {data.agingPotential && (
+                        <div className="text-right">
+                            <span className="text-[10px] text-gray-500 block mb-0.5">Potencial de Guarda</span>
+                            <span className="text-sm font-bold text-purple-700">{data.agingPotential}</span>
+                        </div>
+                    )}
+                </div>
+                {/* Action Buttons (Footer) */}
+                <div className="flex items-center gap-2 mt-4 pt-1">
+                    {onSelect && (
+                        <button
+                            onClick={onSelect}
+                            className="flex-1 bg-gray-900 text-white font-medium py-2.5 px-4 rounded-xl hover:bg-black transition-colors flex items-center justify-center gap-2 shadow-lg shadow-gray-200"
+                        >
+                            <span>Adicionar à Adega</span>
+                            <i className="ri-add-line"></i>
+                        </button>
+                    )}
+                    <div className="flex gap-1">
+                        {onSave && (
+                            <button onClick={onSave} className="p-2.5 rounded-xl hover:bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors border border-gray-100">
+                                <i className="ri-heart-line text-lg"></i>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // --- FLIGHT LAYOUT (Google Flights Style) ---
     if (data.category === 'flight') {
@@ -409,7 +546,7 @@ export function RecommendationCard({ data, onSelect, onView, onSave }: Recommend
 
             {/* Highlights/Tags - Chips */}
             <div className="flex flex-wrap gap-2 mt-auto">
-                {data.highlights.slice(0, 3).map((item, idx) => (
+                {data.highlights && data.highlights.slice(0, 3).map((item, idx) => (
                     <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-50 border border-gray-100 text-[10px] uppercase font-bold text-gray-500 tracking-wide">
                         <i className="ri-check-line text-green-500"></i>
                         {item}

@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { ensureUserProfile, User as UserProfile } from '@/services/supabase';
 import { useContextualPersona } from '@/hooks/useContextualPersona';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -26,14 +28,38 @@ export default function FloatingMenu() {
   const [lastQuery, setLastQuery] = useState("");
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
+  // Wine Location Options State
+  const [showWineLocationOptions, setShowWineLocationOptions] = useState(false);
+
   // Location Context
   const { userLocation, detectUserLocation } = useSmartTravelAgent();
   const [useLocation, setUseLocation] = useState(false);
+
+  // Voice Interaction State
+  const [isListening, setIsListening] = useState(false);
+  const pressTimer = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const wasListeningRef = useRef(false); // To track if we just finished a voice session
+
+  const { user: authUser } = useAuth();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  // Load User Profile for SARA Config
+  useEffect(() => {
+    if (authUser) {
+      ensureUserProfile().then(profile => {
+        if (profile) setUserProfile(profile);
+      });
+    }
+  }, [authUser]);
 
   // Auto-detect location on first open if in travel mode or generally helpful
   useEffect(() => {
     if (isOpen && !userLocation.coords) {
       // Optional: auto-detect logic could go here
+    }
+    if (!isOpen) {
+      window.speechSynthesis.cancel();
     }
   }, [isOpen]);
 
@@ -62,6 +88,8 @@ export default function FloatingMenu() {
     setDisplayedResponse('');
     setIsAiLoading(false);
     setViewMode('suggestions'); // Reset view mode
+    setShowWineLocationOptions(false); // Reset options
+    window.speechSynthesis.cancel(); // Stop talking on nav change
   }, [persona.type]);
 
   const handleToggleLocation = () => {
@@ -72,7 +100,141 @@ export default function FloatingMenu() {
     }
   };
 
+  // Text to Speech Function
+  const speakResponse = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+
+    // Cancel any current speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'pt-BR';
+    utterance.rate = 1.0; // Normal speed
+    utterance.pitch = 1.0;
+
+    // Try to find preferred voice first (from config), then fallback
+    const voices = window.speechSynthesis.getVoices();
+    let preferredVoice = null;
+
+    // 1. User selected voice
+    if (userProfile?.sara_config?.voice_uri) {
+      preferredVoice = voices.find(v => v.voiceURI === userProfile.sara_config?.voice_uri);
+    }
+
+    // 2. Fallback to nice female voices
+    if (!preferredVoice) {
+      preferredVoice = voices.find(voice =>
+        voice.lang.includes('pt-BR') &&
+        (voice.name.includes('Google') || voice.name.includes('Luciana') || voice.name.includes('Joana'))
+      );
+    }
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Voice Interaction Logic
+  const startListening = () => {
+    if (!('webkitSpeechRecognition' in window)) {
+      alert('Seu navegador não suporta reconhecimento de voz.');
+      return;
+    }
+
+    setIsListening(true);
+    wasListeningRef.current = true;
+
+    // @ts-ignore
+    const recognition = new window.webkitSpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      if (transcript) {
+        setIsOpen(true); // Force open
+        handleSearch(transcript, true);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error', event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      // wasListeningRef stays true briefly to prevent click handler
+      setTimeout(() => {
+        wasListeningRef.current = false;
+      }, 500);
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+  };
+
+  const handlePressStart = (e: any) => {
+    // Prevent default context menu on long press
+    // e.preventDefault(); 
+    wasListeningRef.current = false;
+    pressTimer.current = setTimeout(() => {
+      startListening();
+    }, 500); // 500ms hold to start listening
+  };
+
+  const handlePressEnd = (e: any) => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+
+    // Only toggle if we were NOT listening
+    if (!isListening && !wasListeningRef.current) {
+      setIsOpen(!isOpen);
+    }
+
+    // If was listening, we do nothing here interaction-wise regarding menu state
+    // The recognition.onend handles the cleanup
+  };
+
+  const handlePressCancel = (e: any) => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (pressTimer.current) clearTimeout(pressTimer.current);
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+
   const handleSuggestionClick = (suggestion: any) => {
+    if (suggestion.id === 'wine-location-choice') {
+      // Special Wine Flow
+      if (!useLocation) handleToggleLocation(); // Ensure location is on
+      setAiResponse("Ótima ideia! Para ser mais precisa: você procura **locais para comprar vinho** (adegas, lojas) aqui perto, ou quer recomendações dos **melhores rótulos produzidos nesta região**?");
+      setShowWineLocationOptions(true); // Trigger UI change
+      if (userProfile?.sara_config?.voice_enabled !== false) {
+        speakResponse("Você procura locais para comprar ou prefere conhecer os vinhos típicos produzidos nesta região?");
+      }
+      return;
+    }
+
     if (suggestion.isSpecial) {
       // Switch to category view inline
       setViewMode('categories');
@@ -90,6 +252,17 @@ export default function FloatingMenu() {
     }
   };
 
+  const resolveWineOption = (type: 'shops' | 'wines') => {
+    setShowWineLocationOptions(false);
+    const locName = userLocation?.name || "minha localização atual";
+
+    if (type === 'shops') {
+      handleSearch(`Encontre adegas, lojas de vinho especializadas e wine bars próximos a ${locName}. Liste as melhores opções com avaliações e distância.`);
+    } else {
+      handleSearch(`Quais são os vinhos mais famosos e premiados produzidos na região de ${locName} (ou no país/estado se a cidade não for produtora)? Liste rótulos típicos.`);
+    }
+  };
+
   const handleCategorySelect = (category: Category) => {
     // Return to suggestions view but with results
     setViewMode('suggestions');
@@ -99,8 +272,10 @@ export default function FloatingMenu() {
     handleSearch(promptText);
   };
 
-  const handleSearch = async (text: string = query) => {
+  const handleSearch = async (text: string = query, isVoiceTriggered: boolean = false) => {
     if (!text.trim()) return;
+
+    setShowWineLocationOptions(false); // Close options if manual search starts
 
     // Auto-enable location logic similar to AISearchTab
     const lowerText = text.toLowerCase();
@@ -150,22 +325,15 @@ export default function FloatingMenu() {
         ATUE COMO: "${persona.title}" - ${persona.role}.
         CONTEXTO ATUAL: O usuário está navegando na seção "${persona.type}" do aplicativo.
         
-        SUA MISSÃO: Fornecer um resumo introdutório útil E uma lista estruturada de recomendações de viagem no formato JSON. (Estilo Concierge/Especialista).
+        SUA MISSÃO: Responder a QUALQUER pergunta do usuário.
+        1. Se for sobre viagens/turismo/vinhos: Forneça um resumo útil E uma lista estruturada de recomendações no formato JSON.
+        2. Se NÃO for sobre viagens (ex: "Qual a temperatura no Canadá?", "Conte uma piada"): Responda de forma útil, simpática e completa no campo "intro". Retorne uma lista vazia "[]" em "recommendations" se não houver locais físicos para sugerir.
         
-        FILTRO OBRIGATÓRIO DE CONTEÚDO:
-        1. Analise o pedido do usuário com rigor. Se ele pedir "hotéis", retorne APENAS recomendações com category: "hotel".
-        2. Se pedir "voos" ou "passagens", retorne APENAS recomendações com category: "flight".
-        3. Se pedir "restaurantes", retorne APENAS category: "general" com establishmentType de restaurante.
-        4. NÃO misture categorias a menos que o usuário peça explicitamente um "roteiro completo", "planejamento de viagem" ou "dicas gerais".
-        5. Se a pergunta for específica (ex: "hotéis baratos"), qualquer outro tipo de resposta (voo, passeio) será considerado ERRO.
-        6. Para CIDADES, PAÍSES, REGIÕES, ILHAS ou PRAIAS: NUNCA retorne "openHours". OBRIGATÓRIO preencher "visitDuration" (Ex: "3 dias") e "bestVisitTime".
+        INSTRUÇÃO ESPECIAL DE ÁUDIO: O campo "intro" será LIDO em voz alta para o usuário. Mantenha-o conversacional, empático e informativo.
         
-        IMPORTANTE SOBRE IMAGENS E LINKS:
-        1. OBRIGATÓRIO: Use o GOOGLE SEARCH para encontrar URLs de imagens. Pesquise por "Nome do Local photos" ou "Nome do Local official site".
+        IMPORTANT SOBRE IMAGENS E LINKS (Apenas se houver recomendações):
+        1. OBRIGATÓRIO: Use o GOOGLE SEARCH para encontrar URLs de imagens.
         2. Priorize imagens da WIKIPEDIA (upload.wikimedia.org), TRIPADVISOR ou sites oficiais.
-        3. Tente encontrar ao menos UMA imagem para cada item.
-        4. Se o link parecer uma imagem (.jpg, .png, .webp) e for de uma fonte pública, USE-O.
-        5. Se realmente não encontrar nada, deixe vazio, mas ESFORCE-SE para achar.
         
         ${locationContext}
 
@@ -174,57 +342,29 @@ export default function FloatingMenu() {
         FORMATO DE RESPOSTA OBRIGATÓRIO:
         Você deve retornar UM ÚNICO objeto JSON com a seguinte estrutura estrita:
         {
-            "intro": "Um texto curto (max 3 parágrafos) introdutório de alto nível, estilo especialista, respondendo diretamente ao usuário com formatação Markdown.",
+            "intro": "Texto conversacional para ser lido em voz alta (TTS). Se a pergunta for geral, responda aqui.",
             "recommendations": [
             {
-                "category": "Obrigatório: 'flight', 'hotel' ou 'general'",
-                "icon": "Emoji representative",
+                "category": "flight|hotel|general|wine",
+                "icon": "Emoji",
                 "name": "Nome",
-                "description": "Descrição curta e atraente (2 linhas)",
-                
-                // Campos Universais
-                "link": "URL of website/deal",
-                "estimatedCost": "Preço (Ex: R$ 500 ou R$ 1.200/noite)",
-                "reason": "Why this choice?",
-
-                // NOVOS CAMPOS (OBRIGATÓRIOS PARA TODOS)
-                "visitDuration": "OBRIGATÓRIO. Tempo exato ideal. Use rangos: '3-4 dias', '2 horas'. (NUNCA 'Variável')",
-                "bestVisitTime": "OBRIGATÓRIO. Melhor mês/época. (Ex: 'Maio a Setembro').",
-                "reservationStatus": "'required' | 'recommended' | 'not_needed' | 'unknown'",
-                
-                // Campos Específicos para 'flight'
-                "airline": "Nome da Cia Aérea",
-                "flightNumber": "Nº Voo (Ex: LA3042)",
-                "departureTime": "Horário Saída (Ex: 08:30)",
-                "arrivalTime": "Horário Chegada (Ex: 11:45)",
-                "departureAirport": "Aeroporto Saída (Ex: GRU)",
-                "arrivalAirport": "Aeroporto Chegada (Ex: GIG)",
-                "duration": "Duração (Ex: 1h 15m)",
-                "stops": "Ex: Direto, 1 parada",
-                
-                // Campos Específicos para 'hotel'
-                "stars": 4, // Número de estrelas
-                "amenities": ["Piscina", "Wi-Fi", "Academia"],
-                "media": ["URL_IMAGEM_HOTEL"], // Importante: Imagem para o layout Trivago
-                "address": "Endereço do hotel",
-                "tripAdvisorRating": "Nota 0-5 (Ex: 4.5)",
-                "bookingRating": "Nota 0-10 (Ex: 9.2)",
-
-                // Campos Específicos para 'general' (Restaurantes, Pontos Turísticos)
-                "googleRating": 4.8,
-                "establishmentType": "Tipo (Ex: Restaurante Italiano)",
-                "michelin": "Opcional. Ex: '3 Estrelas Michelin', 'Bib Gourmand'. Só preencher se tiver.",
-                "openHours": "Horário func.",
-                "menuLink": "Link do menu",
-                "parking": "Info estacionamento",
-                
-                "tags": ["tag1", "tag2"],
-                "highlights": ["highlight1"]
+                "description": "Descrição curta e atraente",
+                "link": "URL",
+                "estimatedCost": "Preço",
+                "reason": "Why?",
+                "visitDuration": "Tempo (Ex: 3 dias)",
+                "bestVisitTime": "Melhor época",
+                "reservationStatus": "required|recommended|not_needed",
+                // Specific fields as defined previously...
+                "airline": "...", "flightNumber": "...", "departureTime": "...", "arrivalTime": "...", "departureAirport": "...", "arrivalAirport": "...", "duration": "...", "stops": "...",
+                "stars": 4, "amenities": ["..."], "media": ["..."], "address": "...", "tripAdvisorRating": 4.5, "bookingRating": 9.2,
+                "googleRating": 4.8, "establishmentType": "...", "openHours": "...", "menuLink": "...", "parking": "...", "tags": ["..."], "highlights": ["..."],
+                // WINE SPECIFIC
+                "producer": "...", "wineType": "...", "vintage": "...", "region": "...", "country": "...", "grapes": "...", "alcohol": "...", "pairing": "...", "temperature": "...", "decanting": "...", "agingPotential": "...", "reviewsCount": 100
             }
             ]
         }
-
-        Retorne apenas o JSON puro, sem blocos de código.
+        Retorne apenas o JSON puro.
         `;
 
       const result = await model.generateContent(prompt);
@@ -239,8 +379,16 @@ export default function FloatingMenu() {
           const jsonString = textResponse.substring(start, end + 1);
           const parsed = JSON.parse(jsonString);
           console.log("📦 Parsed Recommendations:", parsed); // Debug log
-          setAiResponse(parsed.intro || "Aqui está o que encontrei:");
+
+          const introText = parsed.intro || "Aqui está o que encontrei:";
+          setAiResponse(introText);
           setRecommendations(parsed.recommendations || []);
+
+          // Trigger TTS ONLY if triggered by voice
+          if (isVoiceTriggered) {
+            speakResponse(introText);
+          }
+
         } else {
           throw new Error("No JSON found");
         }
@@ -249,13 +397,16 @@ export default function FloatingMenu() {
         // Fallback or explicit error if JSON is strictly required
         setAiResponse(textResponse);
         setRecommendations([]);
+        if (isVoiceTriggered) {
+          speakResponse(textResponse.substring(0, 150)); // Read start of raw text if fallback
+        }
       }
 
     } catch (error: any) {
       console.error("AI Error:", error);
 
       // Strict Parity: Specific error messages
-      let userMsg = `Desculpe, tive um problema ao processar sua solicitação. (${error.message || 'Erro desconhecido'})`;
+      let userMsg = `Desculpe, tive um problema ao processar sua solicitação.`;
 
       if (error.message?.includes('404')) {
         userMsg = "O modelo de IA não está disponível ou a chave de API é inválida.";
@@ -264,6 +415,9 @@ export default function FloatingMenu() {
       }
 
       setAiResponse(userMsg);
+      if (isVoiceTriggered) {
+        speakResponse(userMsg);
+      }
     } finally {
       setIsAiLoading(false);
     }
@@ -287,7 +441,7 @@ export default function FloatingMenu() {
       // @ts-ignore
       const effectiveUseLocation = useLocation; // Re-use logic or simplicity
       if (useLocation && userLocation && userLocation.name) {
-        locationContext = `CONTEXTO DE LOCALIZAÇÃO: O usuário está atualmente em ${userLocation.name}, ${userLocation.country}. Use essa informação para fornecer recomendações locais, distâncias e opções relevantes a essa área.`;
+        locationContext = `CONTEXTO DE LOCALIZAÇÃO: O usuário está atualmente em ${userLocation.name}, ${userLocation.country}.`;
       }
 
       const prompt = `
@@ -314,7 +468,7 @@ export default function FloatingMenu() {
         {
             "recommendations": [
             {
-                "category": "Obrigatório: 'flight', 'hotel' ou 'general'",
+                "category": "Obrigatório: 'flight', 'hotel', 'general' ou 'wine'",
                 "icon": "Emoji representative",
                 "name": "Nome",
                 "description": "Descrição curta e atraente (2 linhas)",
@@ -327,31 +481,27 @@ export default function FloatingMenu() {
                 "visitDuration": "OBRIGATÓRIO. Tempo exato ideal. Use rangos: '3-4 dias', '2 horas'.",
                 "bestVisitTime": "OBRIGATÓRIO. Melhor mês/época. (Ex: 'Maio a Setembro').",
                 "reservationStatus": "required|recommended|not_needed|unknown",
-                "airline": "...",
-                "flightNumber": "...",
-                "departureTime": "...",
-                "arrivalTime": "...",
-                "departureAirport": "...",
-                "arrivalAirport": "...",
-                "duration": "...",
-                "stops": "...",
-                "stars": 4,
-                "amenities": ["..."],
-                "media": ["..."],
-                "address": "...",
-                "tripAdvisorRating": 4.5,
-                "bookingRating": 9.2,
-                "googleRating": 4.8,
-                "establishmentType": "...",
-                "michelin": "Opcional. Ex: '3 Estrelas Michelin', 'Bib Gourmand'. Só preencher se tiver.",
-                "openHours": "...",
-                "menuLink": "...",
-                "parking": "...",
-                "tags": ["..."],
-                "highlights": ["..."]
-            }
-            ]
-        }
+                
+                // Variantes...
+                "airline": "...", "flightNumber": "...", "departureTime": "...", "arrivalTime": "...",
+                
+                // WINE SPECIFIC FIELDS (Obrigatório se category="wine")
+                "producer": "Nome do produtor",
+                "wineType": "Tinto, Branco, Rosé, Espumante",
+                "vintage": "Safra (Ex: Safra 2018)",
+                "region": "Região, Cidade de Origem",
+                "country": "País",
+                "grapes": "Castas (Ex: Cabernet Sauvignon 80%, Merlot 20%)",
+                "alcohol": "Teor Alcoólico (Ex: 13.5%)",
+                "pairing": "Sugestão de Harmonização",
+                "temperature": "Temp. de Serviço (Ex: 16-18°C)",
+                "decanting": "Tempo de Decantação (Ex: 30 min)",
+                "agingPotential": "Potencial de Guarda (Ex: 10-15 anos)",
+                "reviewsCount": 120,
+                
+                // ... outros campos genéricos
+                "stars": 4, "amenities": ["..."], "media": ["..."], "address": "...", "tripAdvisorRating": 4.5, "bookingRating": 9.2,
+                "googleRating": 4.8, "establishmentType": "...", "openHours": "...", "menuLink": "...", "parking": "...", "tags": ["..."], "highlights": ["..."],
       `;
 
       const result = await model.generateContent(prompt);
@@ -499,6 +649,40 @@ export default function FloatingMenu() {
                       {displayedResponse}
                       {isTyping && <span className="inline-block w-1.5 h-4 bg-blue-500 ml-1 animate-blink"></span>}
                     </div>
+
+                    {/* WINE CHOICE BUTTONS */}
+                    {showWineLocationOptions && !isTyping && (
+                      <div className="flex flex-col gap-2 mt-4 animate-fadeIn">
+                        <button
+                          onClick={() => resolveWineOption('shops')}
+                          className="w-full p-4 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl flex items-center gap-3 transition-all group text-left"
+                        >
+                          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform shadow-sm">
+                            <i className="ri-store-2-line text-xl"></i>
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-gray-900">Buscar Adegas e Lojas</h4>
+                            <p className="text-xs text-gray-600">Encontrar lugares para comprar vinho perto de mim</p>
+                          </div>
+                          <i className="ri-arrow-right-line ml-auto text-purple-300 group-hover:text-purple-600"></i>
+                        </button>
+
+                        <button
+                          onClick={() => resolveWineOption('wines')}
+                          className="w-full p-4 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl flex items-center gap-3 transition-all group text-left"
+                        >
+                          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-red-600 group-hover:scale-110 transition-transform shadow-sm">
+                            <i className="ri-goblet-line text-xl"></i>
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-gray-900">Vinhos da Região</h4>
+                            <p className="text-xs text-gray-600">Descobrir vinhos produzidos neste local/país</p>
+                          </div>
+                          <i className="ri-arrow-right-line ml-auto text-red-300 group-hover:text-red-600"></i>
+                        </button>
+                      </div>
+                    )}
+
                   </div>
 
                   {/* Recommendations */}
@@ -567,7 +751,7 @@ export default function FloatingMenu() {
                   {/* Nova Consulta (Reset) Button - Only show if there is a response */}
                   {aiResponse && (
                     <button
-                      onClick={() => { setAiResponse(null); setRecommendations([]); setQuery(''); setDisplayedResponse(''); }}
+                      onClick={() => { setAiResponse(null); setRecommendations([]); setQuery(''); setDisplayedResponse(''); window.speechSynthesis.cancel(); setShowWineLocationOptions(false); }}
                       className="w-8 h-8 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-colors"
                       title="Nova Consulta"
                     >
@@ -597,14 +781,43 @@ export default function FloatingMenu() {
       </AnimatePresence>
 
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-24 right-6 w-16 h-16 rounded-full bg-gradient-to-r ${persona.gradient} text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all z-40 flex items-center justify-center group`}
+        onMouseDown={handlePressStart}
+        onMouseUp={handlePressEnd}
+        onMouseLeave={handlePressCancel}
+        onTouchStart={handlePressStart}
+        onTouchEnd={handlePressEnd}
+        onTouchCancel={handlePressCancel}
+        className={`fixed bottom-24 right-6 w-14 h-14 rounded-full bg-gradient-to-r ${persona.gradient} text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all z-40 flex items-center justify-center group select-none`}
       >
-        {!isOpen && (
-          <span className={`absolute inset-0 rounded-full bg-gradient-to-r ${persona.gradient} animate-ping opacity-75`}></span>
+        {!isOpen && !isListening && (
+          <motion.div
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+            className={`absolute inset-0 rounded-full bg-gradient-to-r ${persona.gradient} opacity-50`}
+          />
         )}
+        {isListening ? (
+          <motion.div
+            animate={{ scale: [1, 1.3, 1] }}
+            transition={{ duration: 0.5, repeat: Infinity }}
+            className="absolute inset-0 rounded-full bg-red-500 opacity-60"
+          />
+        ) : null}
+
         <div className="absolute inset-0 rounded-full bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
-        <i className={`${persona.icon} text-3xl drop-shadow-md group-hover:rotate-12 transition-transform duration-300 relative z-10`}></i>
+        {isListening ? (
+          <i className="ri-mic-line text-2xl relative z-10 animate-pulse"></i>
+        ) : (
+          userProfile?.sara_config?.avatar_type === 'image' && userProfile.sara_config.avatar_url ? (
+            <img
+              src={userProfile.sara_config.avatar_url}
+              alt="SARA"
+              className="w-full h-full rounded-full object-cover relative z-10 border-2 border-white/20"
+            />
+          ) : (
+            <i className={`${persona.icon} text-2xl drop-shadow-md group-hover:rotate-12 transition-transform duration-300 relative z-10`}></i>
+          )
+        )}
       </button>
     </>
   );

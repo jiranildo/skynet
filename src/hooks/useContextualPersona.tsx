@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 export type PersonaType = 'travel' | 'sommelier' | 'chef' | 'assistant';
 
 export interface SuggestionItem {
+    id?: string;
     text: string;
     icon: string;
     description?: string;
@@ -109,6 +110,12 @@ export const personas: Record<PersonaType, PersonaConfig> = {
         gradient: 'from-purple-600 to-red-500',
         greeting: 'Olá! Buscando a harmonização perfeita ou informações sobre um rótulo específico?',
         suggestions: [
+            {
+                id: 'wine-location-choice',
+                icon: 'ri-map-pin-2-line',
+                text: 'Buscar vinhos próximos de mim',
+                // keywords removed to use special handling
+            },
             { icon: 'ri-restaurant-line', text: 'Harmonizar com Jantar', keywords: ['harmonização', 'jantar', 'pairing'] },
             { icon: 'ri-star-line', text: 'Avaliar este vinho', keywords: ['avaliação', 'review', 'tasting'] },
             { icon: 'ri-gift-line', text: 'Sugerir Presente', keywords: ['presente', 'gift', 'especial'] }

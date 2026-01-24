@@ -55,6 +55,9 @@ export interface User {
     budget_alerts?: boolean;
     itinerary_conflicts?: boolean;
     custom_instructions?: string;
+    voice_uri?: string;
+    avatar_type?: 'icon' | 'image';
+    avatar_url?: string;
   };
   app_config?: {
     sound_effects?: boolean;
@@ -293,6 +296,7 @@ export interface CellarWine {
   decant_time?: string;
   aging_potential?: string;
   food_pairing?: string;
+  description?: string;
   created_at?: string;
   updated_at?: string;
 }

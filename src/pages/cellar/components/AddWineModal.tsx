@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CellarWine, cellarService } from '../../../services/supabase';
+import { analyzeWineLabel } from '../../../services/gemini';
 
 interface AddWineModalProps {
   onClose: () => void;
@@ -53,23 +54,69 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
     }
   };
 
+  const handleAIAnalysis = async (file: File) => {
+    setIsProcessing(true);
+
+    try {
+      // 1. Convert to Base64 for the AI
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64String = reader.result as string;
+
+        // 2. Analyze with Gemini
+        const analysis = await analyzeWineLabel(base64String);
+
+        if (analysis) {
+          // 3. Map to CellarWine
+          const wine: CellarWine = {
+            name: analysis.name || '',
+            producer: analysis.producer || '',
+            vintage: analysis.vintage || new Date().getFullYear(),
+            type: analysis.type || 'red',
+            region: analysis.region || '',
+            country: analysis.country || '',
+            grapes: analysis.grapes || '',
+            alcohol_content: analysis.alcohol_content || 0,
+            description: analysis.description || '',
+            food_pairing: analysis.food_pairing || '',
+            serving_temp: analysis.serving_temp || '',
+            decant_time: analysis.decant_time || '',
+            aging_potential: analysis.aging_potential || '',
+
+            section: '',
+            shelf: '',
+            position: '',
+            quantity: 1,
+            price: 0,
+            rating: 0,
+            notes: '',
+            image_url: base64String // Keep the original photo
+          };
+
+          setScanResult(wine);
+          setFormData(wine);
+          setStep('details');
+        } else {
+          alert('Não foi possível identificar o vinho. Tente novamente com uma foto mais clara.');
+        }
+        setIsProcessing(false);
+      };
+
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('AI Analysis failed:', error);
+      setIsProcessing(false);
+      alert('Erro ao processar imagem. Tente novamente.');
+    }
+  };
+
+  // Keep for manual flow simulation if needed, but not used in scan/upload anymore
   const simulateRecognition = (wineData: Partial<CellarWine>) => {
     setIsProcessing(true);
     setTimeout(() => {
-      const wine = {
-        ...wineData,
-        section: '',
-        shelf: '',
-        position: '',
-        notes: '',
-        quantity: 1
-      } as CellarWine;
-
-      setScanResult(wine);
-      setFormData(wine);
+      // ... unused fallback
       setIsProcessing(false);
-      setStep('details');
-    }, 1500);
+    }, 1000);
   };
 
   return (
@@ -177,28 +224,25 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
                     </div>
                     <h3 className="text-2xl font-bold text-gray-900 mb-3">Posicione o rótulo</h3>
                     <p className="text-gray-600 mb-8 max-w-md mx-auto px-4">Centralize o rótulo do vinho na câmera para identificação automática</p>
-                    <button
-                      onClick={() => simulateRecognition({
-                        name: 'Château Margaux',
-                        producer: 'Château Margaux',
-                        vintage: 2015,
-                        type: 'red',
-                        region: 'Margaux, Bordeaux',
-                        country: 'França',
-                        grapes: 'Cabernet Sauvignon, Merlot',
-                        food_pairing: 'Carnes vermelhas, queijos maturados',
-                        serving_temp: '16-18°C',
-                        decant_time: 'Recomendado 1-2 horas',
-                        aging_potential: '20-30 anos',
-                        rating: 5,
-                        price: 2500,
-                        image_url: 'https://readdy.ai/api/search-image?query=chateau%20margaux%20wine%20bottle%20elegant%20bordeaux%20red%20wine%20premium%20french%20wine%20on%20white%20background%20studio%20photography&width=400&height=600&seq=margaux-scan&orientation=portrait'
-                      })}
-                      className="w-full md:w-auto px-8 py-4 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+
+                    <input
+                      type="file"
+                      id="camera-input"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleAIAnalysis(file);
+                      }}
+                    />
+                    <label
+                      htmlFor="camera-input"
+                      className="w-full md:w-auto px-8 py-4 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <i className="ri-scan-line text-xl"></i>
                       Escanear Agora
-                    </button>
+                    </label>
                   </>
                 ) : (
                   <>
@@ -208,8 +252,8 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
                         <i className="ri-scan-line text-4xl text-white animate-pulse"></i>
                       </div>
                     </div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-3">Identificando...</h3>
-                    <p className="text-gray-600">Analisando o rótulo e buscando informações</p>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-3">SARA está analisando...</h3>
+                    <p className="text-gray-600">Identificando rótulo e buscando informações de sommelier...</p>
                   </>
                 )}
               </div>
@@ -239,24 +283,8 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
                       type="file"
                       accept="image/*"
                       onChange={(e) => {
-                        if (e.target.files?.[0]) {
-                          simulateRecognition({
-                            name: 'Sassicaia',
-                            producer: 'Tenuta San Guido',
-                            vintage: 2018,
-                            type: 'red',
-                            region: 'Bolgheri, Toscana',
-                            country: 'Itália',
-                            grapes: 'Cabernet Sauvignon, Cabernet Franc',
-                            food_pairing: 'Carnes grelhadas, massas com molho de carne',
-                            serving_temp: '16-18°C',
-                            decant_time: 'Recomendado 1 hora',
-                            aging_potential: '15-25 anos',
-                            rating: 5,
-                            price: 1800,
-                            image_url: 'https://readdy.ai/api/search-image?query=sassicaia%20wine%20bottle%20italian%20super%20tuscan%20red%20wine%20premium%20bolgheri%20on%20white%20background%20studio%20photography&width=400&height=600&seq=sassicaia-upload&orientation=portrait'
-                          });
-                        }
+                        const file = e.target.files?.[0];
+                        if (file) handleAIAnalysis(file);
                       }}
                       className="hidden"
                       id="upload-input"
@@ -274,11 +302,11 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
                     <div className="relative w-32 h-32 mx-auto mb-6">
                       <div className="absolute inset-0 bg-gradient-to-r from-amber-600 to-orange-600 rounded-full animate-ping opacity-20"></div>
                       <div className="relative w-32 h-32 bg-gradient-to-r from-amber-600 to-orange-600 rounded-full flex items-center justify-center">
-                        <i className="ri-image-line text-4xl text-white animate-pulse"></i>
+                        <i className="ri-magic-line text-4xl text-white animate-pulse"></i>
                       </div>
                     </div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-3">Processando...</h3>
-                    <p className="text-gray-600">Analisando a imagem</p>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-3">SARA está analisando...</h3>
+                    <p className="text-gray-600">Processando sua imagem com inteligência artificial</p>
                   </>
                 )}
               </div>
@@ -323,17 +351,17 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
                   <button
                     key={index}
                     onClick={() => {
-                      simulateRecognition({
-                        ...wine,
-                        grapes: 'Syrah',
-                        food_pairing: 'Carnes vermelhas',
-                        serving_temp: '16-18°C',
-                        decant_time: 'Recomendado',
-                        aging_potential: '15-20 anos',
-                        rating: 5,
-                        price: 1500,
+                      setFormData({
+                        ...formData,
+                        name: wine.name,
+                        producer: wine.producer,
+                        vintage: wine.vintage,
+                        type: wine.type,
+                        region: wine.region,
+                        country: wine.country,
                         image_url: `https://readdy.ai/api/search-image?query=$%7Bwine.name.toLowerCase%28%29.replace%28%2F%5Cs%2Fg%2C%20-%29%7D-wine-bottle-premium-red-wine-on-white-background-studio-photography&width=400&height=600&seq=${wine.seq}-manual&orientation=portrait`
                       });
+                      setStep('details');
                     }}
                     className="w-full p-4 border border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all text-left group bg-white shadow-sm"
                   >
@@ -365,34 +393,213 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
               </button>
 
               <div className="space-y-6">
-                {/* Wine Info Card */}
-                {scanResult && (
-                  <div className="bg-gradient-to-br from-red-50 via-rose-50 to-pink-50 rounded-2xl p-4 border border-red-100 flex items-start gap-4">
-                    <div className="w-20 h-28 flex-shrink-0 bg-white rounded-xl overflow-hidden shadow-sm border border-white/50">
-                      <img
-                        src={scanResult.image_url}
-                        alt={scanResult.name}
-                        className="w-full h-full object-contain p-2"
+                {/* Wine Image & Upload */}
+                <div className="flex justify-center mb-6">
+                  <div className="relative group">
+                    <div className="w-32 h-44 bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 flex items-center justify-center relative shadow-sm">
+                      {formData.image_url ? (
+                        <img
+                          src={formData.image_url}
+                          alt={formData.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center p-2">
+                          <i className="ri-image-add-line text-3xl text-gray-400 mb-1"></i>
+                          <p className="text-xs text-gray-500 font-medium leading-tight">Adicionar Foto</p>
+                        </div>
+                      )}
+
+                      {/* Overlay for hover/edit */}
+                      <label
+                        htmlFor="detail-image-upload"
+                        className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer backdrop-blur-[2px]"
+                      >
+                        <i className="ri-pencil-line text-white text-3xl"></i>
+                      </label>
+                      <input
+                        type="file"
+                        id="detail-image-upload"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setFormData({ ...formData, image_url: reader.result as string });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
                       />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-gray-900 text-lg leading-tight mb-1">{scanResult.name}</h4>
-                      <p className="text-sm text-gray-600 mb-2 truncate">{scanResult.producer}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="px-2 py-1 bg-white/60 rounded-md text-xs font-semibold text-gray-700">
-                          {scanResult.vintage}
-                        </span>
-                        <span className="px-2 py-1 bg-white/60 rounded-md text-xs font-semibold text-gray-700">
-                          {scanResult.type === 'red' ? 'Tinto' :
-                            scanResult.type === 'white' ? 'Branco' :
-                              scanResult.type === 'rose' ? 'Rosé' :
-                                scanResult.type === 'sparkling' ? 'Espumante' :
-                                  'Outro'}
-                        </span>
+                    {/* Badge showing origin */}
+                    {scanResult && formData.image_url === scanResult.image_url && (
+                      <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm border border-white">
+                        IA
                       </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Main Info Fields */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-2">Nome do Vinho</label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-semibold text-lg"
+                      placeholder="Ex: Château Margaux"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-900 mb-2">Produtor</label>
+                    <input
+                      type="text"
+                      value={formData.producer}
+                      onChange={(e) => setFormData({ ...formData, producer: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="Ex: Margaux"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-900 mb-2">Safra</label>
+                      <input
+                        type="number"
+                        value={formData.vintage}
+                        onChange={(e) => setFormData({ ...formData, vintage: parseInt(e.target.value) || 0 })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-900 mb-2">Tipo</label>
+                      <select
+                        value={formData.type}
+                        onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent appearance-none bg-white"
+                      >
+                        <option value="red">Tinto</option>
+                        <option value="white">Branco</option>
+                        <option value="rose">Rosé</option>
+                        <option value="sparkling">Espumante</option>
+                        <option value="fortified">Fortificado</option>
+                        <option value="dessert">Sobremesa</option>
+                      </select>
                     </div>
                   </div>
-                )}
+                </div>
+
+                {/* Description - AI Generated */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-2 flex items-center justify-between">
+                    <span>Descrição (IA)</span>
+                    <i className="ri-sparkling-fill text-purple-500"></i>
+                  </label>
+                  <textarea
+                    value={formData.description || ''}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={4}
+                    placeholder="Descrição do vinho..."
+                    className="w-full px-4 py-3 border-2 border-purple-100 bg-purple-50/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm text-gray-700 leading-relaxed"
+                  ></textarea>
+                </div>
+
+                {/* Technical Details Grid */}
+                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                  <h3 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wide opacity-70">Ficha Técnica</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Região</label>
+                      <input
+                        type="text"
+                        value={formData.region}
+                        onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">País</label>
+                      <input
+                        type="text"
+                        value={formData.country}
+                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Uvas</label>
+                      <input
+                        type="text"
+                        value={formData.grapes}
+                        onChange={(e) => setFormData({ ...formData, grapes: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Teor Alcoólico (%)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={formData.alcohol_content || ''}
+                        onChange={(e) => setFormData({ ...formData, alcohol_content: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sommelier Info */}
+                <div className="bg-purple-50 rounded-2xl p-4 border border-purple-100">
+                  <h3 className="text-sm font-bold text-purple-900 mb-4 uppercase tracking-wide flex items-center gap-2">
+                    <i className="ri-lightbulb-flash-line"></i>
+                    Sommelier Tips
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-purple-700/70 mb-1">Harmonização</label>
+                      <input
+                        type="text"
+                        value={formData.food_pairing || ''}
+                        onChange={(e) => setFormData({ ...formData, food_pairing: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-purple-700/70 mb-1">Temperatura</label>
+                        <input
+                          type="text"
+                          value={formData.serving_temp || ''}
+                          onChange={(e) => setFormData({ ...formData, serving_temp: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-purple-700/70 mb-1">Decantação</label>
+                        <input
+                          type="text"
+                          value={formData.decant_time || ''}
+                          onChange={(e) => setFormData({ ...formData, decant_time: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-purple-700/70 mb-1">Potencial de Guarda</label>
+                      <input
+                        type="text"
+                        value={formData.aging_potential || ''}
+                        onChange={(e) => setFormData({ ...formData, aging_potential: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Storage Location */}
                 <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
