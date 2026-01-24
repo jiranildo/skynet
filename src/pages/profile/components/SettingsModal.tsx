@@ -7,7 +7,7 @@ interface SettingsModalProps {
     onUpdate: (updatedUser: UserType) => void;
 }
 
-type SettingsTab = 'account' | 'privacy' | 'notifications' | 'sara' | 'app';
+type SettingsTab = 'account' | 'privacy' | 'notifications' | 'app';
 
 
 export function SettingsContent({ userProfile, onUpdate, onClose, isEmbedded = false }: SettingsModalProps & { isEmbedded?: boolean }) {
@@ -135,7 +135,7 @@ export function SettingsContent({ userProfile, onUpdate, onClose, isEmbedded = f
                 <TabButton id="account" label="Conta" icon="ri-user-line" />
                 <TabButton id="privacy" label="Privacidade" icon="ri-shield-user-line" />
                 <TabButton id="notifications" label="Notificações" icon="ri-notification-3-line" />
-                <TabButton id="sara" label="SARA" icon="ri-magic-line" />
+
                 <TabButton id="app" label="App" icon="ri-global-line" />
             </div>
 
@@ -488,169 +488,7 @@ export function SettingsContent({ userProfile, onUpdate, onClose, isEmbedded = f
                         </div>
                     )}
 
-                    {activeTab === 'sara' && (
-                        <div className="space-y-6 animate-fadeIn pb-12">
-                            {/* Sara Content... reused from before */}
-                            {/* Header / Activation */}
-                            <div className="rounded-2xl overflow-hidden shadow-lg relative">
-                                <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6 text-white pb-12">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                                            <i className="ri-magic-line text-2xl"></i>
-                                        </div>
-                                        <div>
-                                            <h2 className="text-xl font-bold">SARA Assistente</h2>
-                                            <p className="opacity-90 text-xs">Configure sua assistente Inteligente</p>
-                                        </div>
-                                    </div>
-                                </div>
 
-                                <div className="bg-white p-5 pt-12 relative">
-                                    <div className="absolute -top-8 left-5 right-5 bg-white/95 backdrop-blur-md rounded-xl p-4 shadow-lg border border-white/50 flex items-center justify-between">
-                                        <div>
-                                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">Status da SARA</p>
-                                            <p className="text-gray-700 text-xs leading-tight">SARA está monitorando suas viagens e enviando notificações úteis</p>
-                                        </div>
-                                        <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">Ativa</div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between mt-4 mb-2">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-white">
-                                                <i className="ri-flashlight-line"></i>
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-gray-900">Ativar SARA</h4>
-                                                <p className="text-xs text-gray-500">Assistente inteligente em background</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => handleInputChange('sara_enabled', !formData.sara_enabled)}
-                                            className={`w-12 h-6 rounded-full transition-colors relative ${formData.sara_enabled ? 'bg-pink-500' : 'bg-gray-200'}`}
-                                        >
-                                            <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${formData.sara_enabled ? 'left-6.5 translate-x-1' : 'left-0.5'}`} />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Stats Component */}
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="bg-white p-4 rounded-xl shadow-sm text-center">
-                                    <div className="text-2xl font-bold text-gray-900">0</div>
-                                    <div className="text-[10px] text-gray-500 uppercase font-bold">Roteiros Ativos</div>
-                                </div>
-                                <div className="bg-white p-4 rounded-xl shadow-sm text-center">
-                                    <div className="text-2xl font-bold text-gray-900">0</div>
-                                    <div className="text-[10px] text-gray-500 uppercase font-bold">Alertas Enviados</div>
-                                </div>
-                                <div className="bg-white p-4 rounded-xl shadow-sm text-center">
-                                    <div className="text-lg font-bold text-green-600">13:10</div>
-                                    <div className="text-[10px] text-gray-500 uppercase font-bold">Última Verificação</div>
-                                </div>
-                            </div>
-
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                                <h4 className="font-bold text-sm text-gray-900 flex items-center gap-2 mb-3">
-                                    <i className="ri-information-line text-blue-500"></i>
-                                    O que SARA monitora
-                                </h4>
-                                <div className="space-y-2">
-                                    {['Voos e hotéis não reservados quando viagem está próxima', 'Clima em tempo real e previsões', 'Notícias sobre voos e aeroportos', 'Lembretes 2h antes de cada atividade', 'Alertas de orçamento ultrapassado', 'Verificação automática a cada 15 minutos'].map((item, idx) => (
-                                        <div key={idx} className="flex items-start gap-2 text-xs text-gray-600">
-                                            <i className="ri-checkbox-circle-line text-green-500 mt-0.5"></i>
-                                            <span>{item}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Sections */}
-                            {[
-                                {
-                                    id: 'travel_alerts', title: 'Alertas de Viagem', icon: 'ri-calendar-event-line', color: 'text-blue-500',
-                                    items: [
-                                        { key: 'check_in_reminders', label: 'Lembretes de Check-in', sub: 'Voos e hotéis (24h antes)' },
-                                        { key: 'upcoming_activities', label: 'Próximas Atividades', sub: 'Alertas 1h antes do horário' },
-                                        { key: 'doc_expiration', label: 'Documentos', sub: 'Alertas de expiração e requisitos' },
-                                        { key: 'weather_alerts', label: 'Clima e Avisos', sub: 'Condições adversas no destino' }
-                                    ]
-                                },
-                                {
-                                    id: 'social', title: 'Social & Comunidade', icon: 'ri-group-line', color: 'text-purple-500',
-                                    items: [
-                                        { key: 'relevant_posts', label: 'Posts Relevantes', sub: 'Notificar sobre posts de destinos similares' },
-                                        { key: 'post_suggestions', label: 'Sugestões de Posts', sub: 'Ideias de conteúdo baseado nas viagens' }
-                                    ]
-                                },
-                                {
-                                    id: 'opportunities', title: 'Oportunidades', icon: 'ri-line-chart-line', color: 'text-green-500',
-                                    items: [
-                                        { key: 'smart_suggestions', label: 'Sugestões Inteligentes', sub: 'Lugares e atividades próximas' },
-                                        { key: 'budget_alerts', label: 'Alertas de Orçamento', sub: 'Avisos quando próximo do limite' }
-                                    ]
-                                },
-                                {
-                                    id: 'risk', title: 'Alertas de Risco', icon: 'ri-shield-flash-line', color: 'text-red-500',
-                                    items: [
-                                        { key: 'itinerary_conflicts', label: 'Conflitos no Roteiro', sub: 'Atividades muito próximas ou impossíveis' }
-                                    ]
-                                }
-                            ].map(section => (
-                                <div key={section.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <i className={`${section.icon} ${section.color} text-lg`}></i>
-                                        <h3 className="font-bold text-gray-900">{section.title}</h3>
-                                    </div>
-
-                                    <div className="divide-y divide-gray-50">
-                                        {section.items.map(item => (
-                                            <div key={item.key} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
-                                                <div>
-                                                    <h4 className="text-sm font-bold text-gray-800">{item.label}</h4>
-                                                    <p className="text-xs text-gray-500">{item.sub}</p>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleNestedChange('sara_config', item.key, !(formData.sara_config as any)[item.key])}
-                                                    className={`w-12 h-6 rounded-full transition-colors relative ${formData.sara_config?.[item.key as keyof typeof formData.sara_config] ? 'bg-pink-500' : 'bg-gray-200'}`}
-                                                >
-                                                    <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${formData.sara_config?.[item.key as keyof typeof formData.sara_config] ? 'left-6.5 translate-x-1' : 'left-0.5'}`} />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-
-                            <button className="w-full py-4 bg-gray-50 rounded-xl border border-gray-100 text-purple-600 font-bold text-sm flex items-center justify-center gap-2 hover:bg-purple-50 transition-colors">
-                                <i className="ri-message-3-line"></i> Testar SARA (Enviar Notificação de Teste)
-                            </button>
-
-                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <i className="ri-robot-2-line text-indigo-500 text-lg"></i>
-                                    <div>
-                                        <h3 className="font-bold text-gray-900">Personalidade & Instruções</h3>
-                                        <p className="text-xs text-gray-500">Defina como SARA deve se comportar</p>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-700 mb-2">Prompt do Sistema (Instruções)</label>
-                                    <textarea
-                                        value={formData.sara_config?.custom_instructions || ''}
-                                        onChange={(e) => handleNestedChange('sara_config', 'custom_instructions', e.target.value)}
-                                        placeholder="Você é SARA, uma assistente de viagens..."
-                                        className="w-full h-64 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-xs font-mono leading-relaxed resize-none"
-                                    ></textarea>
-                                    <p className="text-[10px] text-gray-400 mt-2 flex items-center gap-1">
-                                        <i className="ri-information-line"></i>
-                                        Use este espaço para colar as definições de comportamento, objetivos e notificações da SARA.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
                     {activeTab === 'app' && (
                         <div className="space-y-6 animate-fadeIn pb-8">

@@ -272,7 +272,7 @@ export default function ProfilePage() {
             <HeaderActions
               onShowNotifications={() => setShowNotifications(true)}
               showMenu={isOwnProfile} // Still show the button
-              onShowMenu={() => navigate('/settings?tab=settings')} // Direct navigation
+              onShowMenu={() => navigate('/settings')} // Go to unified menu
               menuIcon="ri-settings-3-line"
             />
           </div>
@@ -318,27 +318,18 @@ export default function ProfilePage() {
                     {isOwnProfile ? (
                       <>
                         <button
-                          onClick={() => navigate('/settings?tab=wallet')}
-                          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl flex items-center gap-2 font-medium hover:bg-gray-200 transition-all text-sm"
-                          title="Carteira"
-                        >
-                          <i className="ri-wallet-3-line text-lg"></i>
-                          <span className="hidden lg:inline">Carteira</span>
-                        </button>
-                        <button
-                          onClick={() => navigate('/settings?tab=gamification')}
-                          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl flex items-center gap-2 font-medium hover:bg-gray-200 transition-all text-sm"
-                          title="Conquistas"
-                        >
-                          <i className="ri-trophy-line text-lg"></i>
-                          <span className="hidden lg:inline">Conquistas</span>
-                        </button>
-                        <button
                           onClick={() => navigate('/settings?tab=edit')}
-                          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl flex items-center gap-2 font-medium hover:bg-gray-200 transition-all text-sm"
+                          className="bg-gray-100 text-gray-900 px-6 py-2 rounded-xl flex items-center gap-2 font-bold hover:bg-gray-200 transition-all text-sm w-full sm:w-auto justify-center"
                         >
                           <i className="ri-edit-line text-lg"></i>
-                          <span className="hidden sm:inline">Editar Perfil</span>
+                          <span>Editar Perfil</span>
+                        </button>
+                        <button
+                          onClick={() => navigate('/settings')}
+                          className="bg-gray-100 text-gray-700 w-10 h-10 flex items-center justify-center rounded-xl hover:bg-gray-200 transition-all"
+                          title="Mais Opções"
+                        >
+                          <i className="ri-menu-add-line text-lg"></i>
                         </button>
                       </>
                     ) : (
@@ -552,9 +543,9 @@ export default function ProfilePage() {
             <span className="text-[9px] sm:text-[10px] font-medium">Reels</span>
           </button>
           {isOwnProfile ? (
-            <button onClick={() => navigate('/settings?tab=settings')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
-              <i className="ri-settings-3-line text-xl sm:text-2xl"></i>
-              <span className="text-[9px] sm:text-[10px] font-medium">Config</span>
+            <button onClick={() => navigate('/settings')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
+              <i className="ri-user-settings-line text-xl sm:text-2xl"></i>
+              <span className="text-[9px] sm:text-[10px] font-medium">Menu</span>
             </button>
           ) : (
             // If viewing another user, maybe show 'Profile' link to go back to own profile? For now, stick to standard
