@@ -142,16 +142,6 @@ export default function CellarPage() {
         {activeTab === 'stats' && <StatsTab />}
       </div>
 
-      {/* Floating Add Button (Mobile) */}
-      {activeTab === 'my-wines' && (
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="sm:hidden fixed bottom-24 right-24 w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center z-30"
-        >
-          <i className="ri-add-line text-2xl"></i>
-        </button>
-      )}
-
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-40">
         <div className="flex items-center justify-around px-2 py-2 sm:py-3">
@@ -179,6 +169,15 @@ export default function CellarPage() {
               <i className="ri-add-line text-xl sm:text-2xl text-white"></i>
             </div>
             <span className="text-[9px] sm:text-[10px] font-medium">Criar</span>
+          </button>
+
+          {/* New Add Wine Button */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+          >
+            <i className="ri-add-circle-line text-xl sm:text-2xl text-purple-600"></i>
+            <span className="text-[9px] sm:text-[10px] font-medium text-purple-600">Adicionar</span>
           </button>
 
           <button
