@@ -1,295 +1,606 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { FoodExperience } from '../../../services/supabase';
+import Webcam from 'react-webcam';
+import { motion } from 'framer-motion';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface AddExperienceModalProps {
-  onClose: () => void;
-  onAdd: (experience: FoodExperience) => void;
+    onClose: () => void;
+    onAdd: (experience: FoodExperience) => void;
 }
 
+type Step = 'location' | 'capture' | 'details' | 'share';
+
 export default function AddExperienceModal({ onClose, onAdd }: AddExperienceModalProps) {
-  const [selectedType, setSelectedType] = useState<'restaurant' | 'wine' | 'dish' | 'drink'>('restaurant');
-  const [imagePreview, setImagePreview] = useState<string>('');
-  const [formData, setFormData] = useState<FoodExperience>({
-    type: 'restaurant',
-    name: '',
-    location: '',
-    date: new Date().toISOString().split('T')[0],
-    price: '',
-    rating: 0,
-    description: '',
-    image_url: ''
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+    const [step, setStep] = useState<Step>('location');
+    const [formData, setFormData] = useState<FoodExperience>({
+        type: 'restaurant',
+        name: '',
+        location: '',
+        date: new Date().toISOString().split('T')[0],
+        price: '',
+        rating: 0,
+        description: '',
+        image_url: ''
+    });
 
-  const types = [
-    { id: 'restaurant' as const, label: 'Restaurante', icon: 'ri-restaurant-line', color: 'from-orange-500 to-pink-500' },
-    { id: 'wine' as const, label: 'Vinho', icon: 'ri-goblet-line', color: 'from-purple-500 to-pink-500' },
-    { id: 'dish' as const, label: 'Prato', icon: 'ri-cake-3-line', color: 'from-green-500 to-teal-500' },
-    { id: 'drink' as const, label: 'Drink', icon: 'ri-cup-line', color: 'from-blue-500 to-cyan-500' }
-  ];
+    // Location State
+    const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+    const [nearbyPlaces, setNearbyPlaces] = useState<any[]>([]);
+    const [customLocation, setCustomLocation] = useState('');
+    const [detectedAddress, setDetectedAddress] = useState<string>('');
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setImagePreview(result);
-        setFormData({ ...formData, image_url: result });
-      };
-      reader.readAsDataURL(file);
+    // Media State
+    const [imagePreview, setImagePreview] = useState<string>('');
+    const [isRecording, setIsRecording] = useState(false);
+    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const [recordingTime, setRecordingTime] = useState(0);
+
+    // UI State
+    const [showGamification, setShowGamification] = useState(false);
+    const webcamRef = useRef<Webcam>(null);
+
+    // 1. Auto-Trigger Location on Mount
+    useEffect(() => {
+        if (step === 'location') {
+            detectLocation();
+        }
+    }, []);
+
+    const [locationError, setLocationError] = useState<string>('');
+
+    const detectLocation = () => {
+        setIsLoadingLocation(true);
+        setDetectedAddress('');
+        setLocationError('');
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude, longitude } = position.coords;
+                    identifyAddressWithSara(latitude, longitude);
+                    await fetchNearbyPlacesWithSara(latitude, longitude);
+                },
+                (error) => {
+                    console.error(error);
+                    setIsLoadingLocation(false);
+                    let msg = "Não foi possível obter sua localização.";
+                    if (error.code === 1) msg = "Permissão de localização negada.";
+                    if (error.code === 2) msg = "Sinal de GPS indisponível.";
+                    if (error.code === 3) msg = "Tempo limite esgotado.";
+                    setLocationError(msg);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 20000,
+                    maximumAge: 0
+                }
+            );
+        } else {
+            setIsLoadingLocation(false);
+            setLocationError("Seu navegador não suporta geolocalização.");
+        }
+    };
+
+    const identifyAddressWithSara = async (lat: number, lng: number) => {
+        try {
+            const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+            if (!apiKey) return;
+
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const modelWithTools = genAI.getGenerativeModel({
+                model: "gemini-2.0-flash",
+                // @ts-ignore
+                tools: [{ googleSearch: {} }]
+            });
+
+            // Prompt otimizado para evitar recusas/desculpas
+            const prompt = `
+            Atue como um serviço de Geocodificação Reversa.
+            Tarefa: Identifique o endereço mais próximo para as coordenadas: ${lat}, ${lng}.
+            Use o Google Search para verificar a localização.
+            
+            REGRAS OBRIGATÓRIAS:
+            1. Retorne APENAS o texto: "Nome da Rua, Bairro".
+            2. Se não identificar a rua exata, retorne "Bairro, Cidade".
+            3. Analise o contexto da região para ser preciso.
+            4. NÃO peça desculpas. NÃO diga "não consigo". NÃO dê explicações.
+            5. Se falhar totalmente, retorne apenas "Localização Detectada".
+            `;
+
+            const result = await modelWithTools.generateContent(prompt);
+            const text = result.response.text();
+
+            // Limpeza extra caso o modelo ainda seja verboso
+            let cleanText = text.replace(/\n/g, '').trim();
+            if (cleanText.length > 50 || cleanText.includes("Infelizmente") || cleanText.includes("não consigo")) {
+                cleanText = "Localização Detectada";
+            }
+
+            setDetectedAddress(cleanText);
+        } catch (e) {
+            console.error("Address identify failed", e);
+            setDetectedAddress("Localização via Satélite");
+        }
     }
-  };
 
-  const handleSubmit = async () => {
-    if (!formData.name || !formData.rating) {
-      alert('Por favor, preencha o nome e a avaliação');
-      return;
-    }
+    const fetchNearbyPlacesWithSara = async (lat: number, lng: number) => {
+        try {
+            const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+            if (!apiKey) {
+                console.warn("No Google API Key found");
+                throw new Error("No API Key");
+            }
 
-    setIsSubmitting(true);
-    try {
-      await onAdd({ ...formData, type: selectedType });
-    } catch (error) {
-      console.error('Erro ao adicionar:', error);
-      alert('Erro ao adicionar experiência. Tente novamente.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({
+                model: "gemini-2.0-flash",
+                // @ts-ignore
+                tools: [{ googleSearch: {} }]
+            });
 
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-slideUp">
-        <div className="sticky top-0 bg-white border-b border-gray-100 p-6 z-10">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">✨ Nova Experiência</h2>
-              <p className="text-sm text-gray-600 mt-1">Registre seus momentos gastronômicos</p>
-            </div>
-            <button 
-              onClick={onClose} 
-              className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all"
-            >
-              <i className="ri-close-line text-2xl"></i>
-            </button>
-          </div>
-        </div>
+            const prompt = `
+            Você é SARA, uma IA especialista em gastronomia.
+            Tarefa: Identifique os 4 estabelecimentos gastronômicos (restaurantes, bares, adegas, cafeterias) MAIS PRÓXIMOS das coordenadas: ${lat}, ${lng}.
+            Use o Google Search para garantir dados reais e atuais dessa localização exata.
+            
+            Retorne APENAS um JSON array puro com este formato (sem markdown):
+            [
+              { "id": 1, "name": "Nome do Local", "address": "Endereço", "type": "restaurant|wine|drink|dish" }
+            ]
+            `;
 
-        <div className="p-6">
-          {/* Type Selection */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-900 mb-3">
-              Tipo de Experiência *
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {types.map((type) => (
-                <button
-                  key={type.id}
-                  onClick={() => {
-                    setSelectedType(type.id);
-                    setFormData({ ...formData, type: type.id });
-                  }}
-                  className={`p-4 rounded-xl border-2 transition-all ${
-                    selectedType === type.id
-                      ? `border-transparent bg-gradient-to-br ${type.color} text-white shadow-lg scale-105`
-                      : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
-                  }`}
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+
+            const start = text.indexOf('[');
+            const end = text.lastIndexOf(']');
+            if (start !== -1 && end !== -1) {
+                const jsonString = text.substring(start, end + 1);
+                const jsonIdx = JSON.parse(jsonString);
+                setNearbyPlaces(jsonIdx);
+            } else {
+                throw new Error("Invalid JSON from SARA");
+            }
+        } catch (error) {
+            console.error("SARA Location Error:", error);
+            setNearbyPlaces([
+                { id: 1, name: 'Local Desconhecido (GPS)', address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, type: 'restaurant' }
+            ]);
+        } finally {
+            setIsLoadingLocation(false);
+        }
+    };
+
+    // Gamification Timer
+    useEffect(() => {
+        let interval: any;
+        if (showGamification) {
+            interval = setTimeout(() => {
+                onClose();
+                onAdd(formData); // Finalize
+            }, 3000);
+        }
+        return () => clearTimeout(interval);
+    }, [showGamification]);
+
+    // Recording Timer
+    useEffect(() => {
+        let interval: any;
+        if (isRecording) {
+            interval = setInterval(() => {
+                setRecordingTime(prev => prev + 1);
+            }, 1000);
+        } else {
+            setRecordingTime(0);
+        }
+        return () => clearInterval(interval);
+    }, [isRecording]);
+
+    const handleSelectPlace = (place: any) => {
+        setFormData(prev => ({
+            ...prev,
+            name: place.name,
+            location: place.address,
+            type: place.type
+        }));
+        setStep('capture');
+    };
+
+    const handleCustomLocationSubmit = () => {
+        if (!customLocation) return;
+        setFormData(prev => ({
+            ...prev,
+            name: customLocation,
+            location: 'Localização Personalizada'
+        }));
+        setStep('capture');
+    };
+
+    const handleCapture = () => {
+        if (webcamRef.current) {
+            const imageSrc = webcamRef.current.getScreenshot();
+            if (imageSrc) {
+                setImagePreview(imageSrc);
+                setFormData(prev => ({ ...prev, image_url: imageSrc }));
+                setStep('details');
+            }
+        }
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const result = reader.result as string;
+                setImagePreview(result);
+                setFormData(prev => ({ ...prev, image_url: result }));
+                setStep('details');
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const toggleRecording = async () => {
+        if (isRecording) {
+            mediaRecorderRef.current?.stop();
+            setIsRecording(false);
+        } else {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const mediaRecorder = new MediaRecorder(stream);
+                mediaRecorderRef.current = mediaRecorder;
+
+                const chunks: BlobPart[] = [];
+                mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: 'audio/webm' });
+                    setAudioBlob(blob);
+                };
+
+                mediaRecorder.start();
+                setIsRecording(true);
+            } catch (err) {
+                alert("Erro ao acessar microfone");
+            }
+        }
+    };
+
+    const handleNext = () => {
+        if (step === 'details') setStep('share');
+    };
+
+    const handleSave = () => {
+        setShowGamification(true);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col animate-fadeIn">
+
+            {/* GAMIFICATION OVERLAY */}
+            {showGamification && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="absolute inset-0 z-[60] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center text-white p-6"
                 >
-                  <i className={`${type.icon} text-2xl mb-2 block`}></i>
-                  <div className="text-sm font-medium">{type.label}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Form Fields */}
-          <div className="space-y-5">
-            {/* Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Nome *
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder={`Ex: ${selectedType === 'restaurant' ? 'Restaurante Bella Vista' : selectedType === 'wine' ? 'Vinho Tinto Reserva' : selectedType === 'dish' ? 'Risoto de Funghi' : 'Mojito Clássico'}`}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-              />
-            </div>
-
-            {/* Location */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Localização
-              </label>
-              <div className="relative">
-                <i className="ri-map-pin-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                <input
-                  type="text"
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="Ex: São Paulo, Brasil"
-                  className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Date and Price */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Data
-                </label>
-                <div className="relative">
-                  <i className="ri-calendar-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Faixa de Preço
-                </label>
-                <select
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all appearance-none bg-white cursor-pointer"
-                >
-                  <option value="">Selecione</option>
-                  <option value="$">$ - Econômico (até R$ 50)</option>
-                  <option value="$$">$$ - Moderado (R$ 50-150)</option>
-                  <option value="$$$">$$$ - Caro (R$ 150-300)</option>
-                  <option value="$$$$">$$$$ - Muito Caro (R$ 300+)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Rating */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Avaliação *
-              </label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, rating: star })}
-                    className="text-4xl transition-all hover:scale-110"
-                  >
-                    <i className={`${star <= (formData.rating || 0) ? 'ri-star-fill text-yellow-400' : 'ri-star-line text-gray-300'}`}></i>
-                  </button>
-                ))}
-                {formData.rating > 0 && (
-                  <span className="ml-2 text-sm text-gray-600 self-center">
-                    {formData.rating === 5 ? '😍 Perfeito!' : formData.rating === 4 ? '😊 Muito bom!' : formData.rating === 3 ? '🙂 Bom' : formData.rating === 2 ? '😐 Regular' : '😞 Ruim'}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Descrição / Notas
-              </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={4}
-                placeholder="Conte sobre sua experiência... O que você achou? O que mais gostou?"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none transition-all"
-              ></textarea>
-              <p className="text-xs text-gray-500 mt-1">
-                {formData.description?.length || 0} caracteres
-              </p>
-            </div>
-
-            {/* Image Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Foto
-              </label>
-              <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-orange-300 transition-all">
-                {imagePreview ? (
-                  <div className="relative">
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="w-full h-48 object-cover rounded-lg mb-3"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImagePreview('');
-                        setFormData({ ...formData, image_url: '' });
-                      }}
-                      className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all shadow-lg"
+                    <motion.div
+                        initial={{ scale: 0, rotate: -180 }}
+                        animate={{ scale: 1.5, rotate: 0 }}
+                        transition={{ type: "spring" }}
+                        className="text-6xl mb-4"
                     >
-                      <i className="ri-delete-bin-line"></i>
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <i className="ri-image-add-line text-5xl text-gray-300 mb-3"></i>
-                    <p className="text-gray-600 mb-1 font-medium">Adicione uma foto da sua experiência</p>
-                    <p className="text-xs text-gray-500 mb-4">PNG, JPG até 10MB</p>
-                  </>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  id="image-upload"
-                />
-                <label
-                  htmlFor="image-upload"
-                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 cursor-pointer whitespace-nowrap transition-all"
-                >
-                  <i className="ri-upload-2-line"></i>
-                  {imagePreview ? 'Trocar Foto' : 'Selecionar Foto'}
-                </label>
-              </div>
-            </div>
-          </div>
+                        🎉
+                    </motion.div>
+                    <h2 className="text-3xl font-bold mb-2">Experiência Salva!</h2>
+                    <p className="text-xl text-orange-400 font-bold">+50 XP Foodie</p>
+                    <p className="text-sm text-gray-400 mt-4">Redirecionando...</p>
+                </motion.div>
+            )}
 
-          {/* Actions */}
-          <div className="flex gap-3 mt-8 pt-6 border-t border-gray-100">
-            <button
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="flex-1 px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-all whitespace-nowrap disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={isSubmitting || !formData.name || !formData.rating}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <>
-                  <i className="ri-loader-4-line animate-spin mr-2"></i>
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <i className="ri-check-line mr-2"></i>
-                  Salvar Experiência
-                </>
-              )}
-            </button>
-          </div>
+            {/* HEADER WITH PROGRESS */}
+            <div className="absolute top-0 left-0 right-0 p-4 z-20 flex justify-between items-center bg-gradient-to-b from-black/50 to-transparent">
+                <button onClick={onClose} className="text-white hover:bg-white/20 p-2 rounded-full transition-all">
+                    <i className="ri-close-line text-2xl"></i>
+                </button>
+                <div className="flex gap-1 flex-1 mx-4 max-w-[200px]">
+                    {['location', 'capture', 'details', 'share'].map((s, i) => {
+                        const steps = ['location', 'capture', 'details', 'share'];
+                        const currentIndex = steps.indexOf(step);
+                        const thisIndex = steps.indexOf(s);
+                        return (
+                            <div key={s} className={`h-1 flex-1 rounded-full transition-all duration-500 ${thisIndex <= currentIndex ? 'bg-white' : 'bg-white/20'}`} />
+                        );
+                    })}
+                </div>
+                <div className="w-10"></div> {/* Spacer */}
+            </div>
+
+            {/* BACKGROUND (Dynamic based on step) */}
+            <div className="absolute inset-0 z-0">
+                {step === 'location' ? (
+                    <div className="w-full h-full bg-slate-900 flex items-center justify-center">
+                        {/* Map Placeholder or Gradient */}
+                        <div className="absolute inset-0 bg-gradient-to-b from-slate-900 via-purple-900/20 to-slate-900"></div>
+                    </div>
+                ) : step === 'capture' ? (
+                    <div className="w-full h-full bg-black"></div>
+                ) : (
+                    <>
+                        <img src={imagePreview} className="w-full h-full object-cover blur-md scale-105" alt="Background" />
+                        <div className="absolute inset-0 bg-black/40"></div>
+                    </>
+                )}
+            </div>
+
+            {/* CONTENT STEPS */}
+            <div className="relative z-10 flex-1 flex flex-col mt-16 p-6 overflow-y-auto">
+
+                {/* STEP 1: LOCATION */}
+                {step === 'location' && (
+                    <motion.div
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        className="space-y-6"
+                    >
+                        <div className="text-center mb-8">
+                            <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                                <i className="ri-map-pin-user-fill text-4xl text-blue-400"></i>
+                            </div>
+                            <h2 className="text-2xl font-bold text-white">Onde você está?</h2>
+                            <p className="text-white/60">
+                                {locationError ? (
+                                    <span className="text-red-400 font-medium">⚠️ {locationError}</span>
+                                ) : detectedAddress ? (
+                                    <span className="text-blue-300 font-medium animate-fadeIn">📍 {detectedAddress}</span>
+                                ) : (
+                                    'SARA está buscando locais próximos via Satélite...'
+                                )}
+                            </p>
+                            {locationError && (
+                                <button
+                                    onClick={detectLocation}
+                                    className="mt-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full text-white text-sm transition-colors"
+                                >
+                                    Tentar Novamente
+                                </button>
+                            )}
+                        </div>
+
+                        {isLoadingLocation ? (
+                            <div className="space-y-3">
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="h-16 bg-white/10 rounded-xl animate-pulse"></div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {nearbyPlaces.map(place => (
+                                    <button
+                                        key={place.id}
+                                        onClick={() => handleSelectPlace(place)}
+                                        className="w-full bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-xl flex items-center gap-4 text-left hover:bg-white/20 transition-all group"
+                                    >
+                                        <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-white">
+                                            <i className={place.type === 'restaurant' ? 'ri-restaurant-fill' : place.type === 'wine' ? 'ri-goblet-fill' : 'ri-cup-fill'}></i>
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="text-white font-bold">{place.name}</h3>
+                                            <p className="text-white/60 text-xs">{place.address}</p>
+                                        </div>
+                                        <i className="ri-arrow-right-s-line text-white/50 group-hover:translate-x-1 transition-transform"></i>
+                                    </button>
+                                ))}
+
+                                {/* Custom Location Input */}
+                                <div className="pt-4 border-t border-white/10">
+                                    <label className="text-white/80 text-sm font-semibold mb-2 block">Outro local?</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={customLocation}
+                                            onChange={(e) => setCustomLocation(e.target.value)}
+                                            placeholder="Digite o nome..."
+                                            className="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <button
+                                            onClick={handleCustomLocationSubmit}
+                                            disabled={!customLocation}
+                                            className="bg-blue-600 text-white p-3 rounded-xl disabled:opacity-50"
+                                        >
+                                            <i className="ri-arrow-right-line"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+
+                {/* STEP 2: CAPTURE */}
+                {step === 'capture' && (
+                    <div className="absolute inset-0 flex flex-col">
+                        <Webcam
+                            audio={false}
+                            ref={webcamRef}
+                            screenshotFormat="image/jpeg"
+                            videoConstraints={{ facingMode: 'environment' }}
+                            className="w-full h-full object-cover"
+                        />
+
+                        {/* Location Overlay Badge */}
+                        <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full text-white flex items-center gap-2 border border-white/10">
+                            <i className="ri-map-pin-fill text-orange-400"></i>
+                            <span className="font-semibold text-sm max-w-[200px] truncate">{formData.name}</span>
+                        </div>
+
+                        <div className="absolute bottom-0 left-0 right-0 p-8 pb-12 bg-gradient-to-t from-black/80 to-transparent flex justify-between items-center">
+                            <label className="p-4 bg-white/10 backdrop-blur-md rounded-full text-white cursor-pointer hover:bg-white/20 transition-all">
+                                <i className="ri-image-add-line text-2xl"></i>
+                                <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                            </label>
+
+                            <button
+                                onClick={handleCapture}
+                                className="w-20 h-20 border-4 border-white rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
+                            >
+                                <div className="w-16 h-16 bg-white rounded-full"></div>
+                            </button>
+
+                            <div className="w-14"></div> {/* Spacer for symmetry */}
+                        </div>
+                    </div>
+                )}
+
+                {/* STEP 3: DETAILS (VIBE) */}
+                {step === 'details' && (
+                    <motion.div
+                        initial={{ x: 100, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        className="space-y-6 mt-10"
+                    >
+                        <div className="text-center text-white mb-4">
+                            <h2 className="text-3xl font-bold">Como foi?</h2>
+                            <p className="text-white/70">{formData.name}</p>
+                        </div>
+
+                        {/* Preview Thumb */}
+                        <div className="w-24 h-24 mx-auto rounded-xl overflow-hidden border-2 border-white/30 shadow-lg mb-6">
+                            <img src={imagePreview} className="w-full h-full object-cover" />
+                        </div>
+
+                        {/* Rating */}
+                        <div className="flex justify-center gap-3">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                    key={star}
+                                    onClick={() => setFormData({ ...formData, rating: star })}
+                                    className="text-5xl transition-all hover:scale-125 focus:scale-125 hover:rotate-6"
+                                >
+                                    <span className={star <= (formData.rating || 0) ? 'grayscale-0' : 'grayscale opacity-30 text-white'}>
+                                        {star === 1 ? '😠' : star === 2 ? '😐' : star === 3 ? '🙂' : star === 4 ? '😃' : '🤩'}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Audio Note */}
+                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-white font-semibold flex items-center gap-2">
+                                    <i className="ri-mic-line"></i> Voice Note
+                                </span>
+                                {recordingTime > 0 && <span className="text-red-400 font-mono animate-pulse">00:0{recordingTime}</span>}
+                            </div>
+                            <button
+                                onClick={toggleRecording}
+                                className={`w-full py-6 rounded-xl border-2 border-dashed transition-all flex flex-col items-center justify-center gap-2 ${isRecording ? 'border-red-500 bg-red-500/20' : 'border-white/30 hover:border-white/60'}`}
+                            >
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 scale-110' : 'bg-white/20'}`}>
+                                    <i className={`text-xl text-white ${isRecording ? 'ri-stop-mini-fill' : 'ri-mic-fill'}`}></i>
+                                </div>
+                                <span className="text-white/60 text-xs">{isRecording ? 'Parar' : 'Gravar áudio'}</span>
+                            </button>
+                        </div>
+
+                        {/* Price & Date */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <select
+                                value={formData.price}
+                                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                                className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500 [&>option]:text-black"
+                            >
+                                <option value="">Preço</option>
+                                <option value="$">$ Econômico</option>
+                                <option value="$$">$$ Justo</option>
+                                <option value="$$$">$$$ Especial</option>
+                            </select>
+                            <input
+                                type="date"
+                                value={formData.date}
+                                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            />
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* STEP 4: SHARE (PREVIEW) */}
+                {step === 'share' && (
+                    <motion.div
+                        initial={{ zoom: 0.8, opacity: 0 }}
+                        animate={{ zoom: 1, opacity: 1 }}
+                        className="flex flex-col items-center mt-6"
+                    >
+                        <h2 className="text-2xl font-bold text-white mb-6">Pronto para compartilhar!</h2>
+
+                        {/* Instagram Story Style Card */}
+                        <div className="w-[80%] aspect-[9/16] bg-white rounded-2xl overflow-hidden relative shadow-2xl transform rotate-1 hover:rotate-0 transition-transform duration-500">
+                            <img src={imagePreview} className="absolute inset-0 w-full h-full object-cover" alt="Background" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30"></div>
+
+                            <div className="absolute top-6 left-6 right-6 flex items-center gap-2">
+                                <div className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-xs font-bold border border-white/30 uppercase tracking-widest">
+                                    {formData.type}
+                                </div>
+                                <div className="ml-auto flex gap-1">
+                                    {[...Array(formData.rating)].map((_, i) => (
+                                        <span key={i} className="text-yellow-400 text-xs">★</span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="absolute bottom-12 left-6 right-6 text-white">
+                                <h1 className="text-2xl font-black mb-1 font-serif italic">{formData.name}</h1>
+                                <div className="flex items-center gap-2 opacity-80 text-sm mb-4">
+                                    <i className="ri-map-pin-fill"></i> {formData.location}
+                                </div>
+
+                                {audioBlob && (
+                                    <div className="flex items-center gap-2 bg-white/20 p-2 rounded-lg backdrop-blur-sm w-fit">
+                                        <i className="ri-voiceprint-line"></i>
+                                        <span className="text-xs">Audio Note</span>
+                                        <div className="flex gap-0.5 h-3 items-end">
+                                            {[...Array(10)].map((_, i) => <div key={i} className="w-1 bg-white rounded-full animate-pulse" style={{ height: Math.random() * 100 + '%' }}></div>)}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4 mt-8 w-full">
+                            <button className="flex-1 py-4 bg-white/10 text-white rounded-xl font-bold hover:bg-white/20 backdrop-blur-md transition-all">
+                                <i className="ri-instagram-line mr-2"></i> Story
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                className="flex-1 py-4 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl font-bold hover:shadow-lg hover:scale-105 transition-all"
+                            >
+                                Salvar
+                            </button>
+                        </div>
+
+                    </motion.div>
+                )}
+
+            </div>
+
+
+            {/* FOOTER NAVIGATION (STEPS DETAILS) */}
+            {(step === 'details') && (
+                <div className="p-6 bg-transparent relative z-20">
+                    <button
+                        onClick={handleNext}
+                        className="w-full py-4 bg-white text-black font-bold text-lg rounded-2xl hover:scale-[1.02] active:scale-95 transition-all shadow-xl"
+                    >
+                        Continuar
+                    </button>
+                </div>
+            )}
+
         </div>
-      </div>
-    </div>
-  );
+    );
 }

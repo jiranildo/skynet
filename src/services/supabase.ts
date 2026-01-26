@@ -280,6 +280,7 @@ export interface CellarWine {
   producer?: string;
   vintage?: number;
   type: 'red' | 'white' | 'rose' | 'sparkling' | 'fortified' | 'dessert';
+  status?: 'in_cellar' | 'wishlist' | 'consumed';
   country?: string;
   region?: string;
   grapes?: string;

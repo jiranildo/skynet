@@ -694,7 +694,47 @@ export default function FloatingMenu() {
                           <div key={index} className="h-full">
                             <RecommendationCard
                               data={rec}
-                              onSave={() => console.log('Save', rec.name)}
+                              onSave={async () => {
+                                try {
+                                  if (!rec.category || rec.category === 'wine') {
+                                    await import('@/services/supabase').then(mod => {
+                                      mod.cellarService.create({
+                                        name: rec.name,
+                                        producer: rec.producer || rec.name.split(' ')[0], // Fallback
+                                        region: rec.region,
+                                        country: rec.country,
+                                        vintage: rec.vintage ? parseInt(rec.vintage.replace(/\D/g, '')) || undefined : undefined,
+                                        grapes: rec.grapes,
+                                        type: (rec.wineType?.toLowerCase().includes('tinto') ? 'red' :
+                                          rec.wineType?.toLowerCase().includes('branco') ? 'white' :
+                                            rec.wineType?.toLowerCase().includes('rosé') ? 'rose' :
+                                              rec.wineType?.toLowerCase().includes('espumante') ? 'sparkling' : 'red') as any, // Simple mapping
+                                        image_url: rec.media?.[0] || undefined,
+                                        rating: rec.stars || 0,
+                                        quantity: 0, // Wishlist items have 0 quantity in cellar usually, or just status logic
+                                        status: 'wishlist',
+                                        notes: `SARA: ${rec.reason}`,
+                                        price: parseFloat(rec.estimatedCost?.replace(/[^\d,.]/g, '').replace(',', '.') || '0')
+                                      });
+                                    });
+                                    // Simple feedback
+                                    const btn = document.activeElement as HTMLElement;
+                                    if (btn) {
+                                      const icon = btn.querySelector('i');
+                                      if (icon) {
+                                        icon.className = 'ri-bookmark-3-fill text-lg text-purple-600';
+                                        icon.parentElement!.classList.add('bg-purple-100');
+                                      }
+                                    }
+                                    alert(`${rec.name} adicionado à sua Wishlist!`);
+                                  } else {
+                                    alert('Apenas vinhos podem ser adicionados à Wishlist da adega no momento.');
+                                  }
+                                } catch (err) {
+                                  console.error(err);
+                                  alert('Erro ao salvar.');
+                                }
+                              }}
                             />
                           </div>
                         ))}

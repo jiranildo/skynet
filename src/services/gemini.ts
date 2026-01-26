@@ -20,9 +20,9 @@ export interface AIWineAnalysis {
     notes?: string;
 }
 
-export const analyzeWineLabel = async (imageBase64: string): Promise<AIWineAnalysis | null> => {
+export const analyzeWineLabel = async (imageBase66: string): Promise<AIWineAnalysis | null> => {
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const prompt = `
       Analyze this wine label image and extract the following information in strict JSON format.
@@ -49,15 +49,19 @@ export const analyzeWineLabel = async (imageBase64: string): Promise<AIWineAnaly
       4. Return ONLY valid JSON, no markdown formatting.
     `;
 
-        // Remove the data URL prefix if present to get just the base64 string
-        const base64Data = imageBase64.split(',')[1] || imageBase64;
+        // Detect mime type from the base64 string
+        const mimeTypeMatch = imageBase66.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,/);
+        const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
+
+        // Robust base64 extraction
+        const base66Data = imageBase66.includes('base64,') ? imageBase66.split('base64,')[1] : imageBase66;
 
         const result = await model.generateContent([
             prompt,
             {
                 inlineData: {
-                    data: base64Data,
-                    mimeType: 'image/jpeg',
+                    data: base66Data,
+                    mimeType: mimeType,
                 },
             },
         ]);
@@ -65,10 +69,14 @@ export const analyzeWineLabel = async (imageBase64: string): Promise<AIWineAnaly
         const response = await result.response;
         const text = response.text();
 
-        // Clean up potential markdown code blocks
-        const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        // Robust JSON extraction
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
 
-        return JSON.parse(cleanText) as AIWineAnalysis;
+        if (start === -1 || end === -1) throw new Error('No JSON found in response');
+
+        const jsonString = text.substring(start, end + 1);
+        return JSON.parse(jsonString) as AIWineAnalysis;
     } catch (error) {
         console.error('Error analyzing wine label:', error);
         return null;

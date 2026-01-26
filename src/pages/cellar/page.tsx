@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MyWinesTab from './components/MyWinesTab';
-import ExploreTab from './components/ExploreTab';
+
 import StatsTab from './components/StatsTab';
 import AddWineModal from './components/AddWineModal';
 import SommelierTab from './components/SommelierTab';
@@ -25,7 +25,7 @@ export default function CellarPage() {
 
   const tabs = [
     { id: 'my-wines', label: 'Minha Adega', icon: 'custom' },
-    { id: 'explore', label: 'Explorar', icon: 'ri-compass-3-line' },
+
     { id: 'sommelier', label: 'Dicas do Sommelier', icon: 'ri-lightbulb-line' },
     { id: 'stats', label: 'Estatísticas', icon: 'ri-bar-chart-box-line' },
   ];
@@ -137,7 +137,7 @@ export default function CellarPage() {
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1 pb-24 md:pt-6">
         {activeTab === 'my-wines' && <MyWinesTab key={refreshKey} searchQuery="" onAddWine={() => setShowAddModal(true)} />}
-        {activeTab === 'explore' && <ExploreTab />}
+
         {activeTab === 'sommelier' && <SommelierTab />}
         {activeTab === 'stats' && <StatsTab />}
       </div>
@@ -154,11 +154,13 @@ export default function CellarPage() {
           </button>
 
           <button
-            onClick={() => handleBottomNavClick('explore')}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 transition-colors text-gray-600"
+            onClick={() => setActiveTab('sommelier')}
+            className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 transition-colors ${activeTab === 'sommelier' ? 'text-purple-600' : 'text-gray-600'
+              }`}
           >
-            <i className="ri-compass-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Explorar</span>
+            <i className={`ri-lightbulb-line text-xl sm:text-2xl ${activeTab === 'sommelier' ? 'text-purple-600' : ''
+              }`}></i>
+            <span className="text-[9px] sm:text-[10px] font-medium">Sommelier</span>
           </button>
 
           <button
@@ -176,8 +178,8 @@ export default function CellarPage() {
             onClick={() => setShowAddModal(true)}
             className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
           >
-            <i className="ri-add-circle-line text-xl sm:text-2xl text-purple-600"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium text-purple-600">Adicionar</span>
+            <CellarIcon className="w-6 h-6 text-gray-600" />
+            <span className="text-[9px] sm:text-[10px] font-medium">Adicionar</span>
           </button>
 
           <button

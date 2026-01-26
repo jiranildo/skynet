@@ -325,7 +325,7 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
         </div>
 
         {/* Empty State */}
-        {sortedWines.length === 0 && (
+        {sortedWines.filter(w => !w.status || w.status === 'in_cellar').length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 bg-white/50 backdrop-blur-sm rounded-3xl border border-dashed border-gray-300">
             <div className="w-24 h-24 bg-purple-50 rounded-full flex items-center justify-center mb-6 animate-bounce-slow">
               <i className="ri-goblet-line text-5xl text-purple-300"></i>
@@ -343,14 +343,14 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
           </div>
         )}
 
-        {/* Grid */}
-        {sortedWines.length > 0 && (
+        {/* Grid: Cellar Wines */}
+        {sortedWines.filter(w => !w.status || w.status === 'in_cellar').length > 0 && (
           <div className={
             viewMode === 'grid'
-              ? 'grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4 pb-24'
-              : 'space-y-1 pb-24'
+              ? 'grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4 pb-12'
+              : 'space-y-1 pb-12'
           }>
-            {sortedWines.map((wine) => (
+            {sortedWines.filter(w => !w.status || w.status === 'in_cellar').map((wine) => (
               viewMode === 'grid' ? (
                 <WineCard
                   key={wine.id}
@@ -399,6 +399,52 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
                 </div>
               )
             ))}
+          </div>
+        )}
+
+        {/* Wishlist Section */}
+        {sortedWines.filter(w => w.status === 'wishlist').length > 0 && (
+          <div className="pb-24 pt-4 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <i className="ri-bookmark-3-fill text-purple-500"></i>
+                Wishlist
+              </h3>
+              <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{sortedWines.filter(w => w.status === 'wishlist').length} vinhos</span>
+            </div>
+
+            <div className={
+              viewMode === 'grid'
+                ? 'grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4'
+                : 'space-y-1'
+            }>
+              {sortedWines.filter(w => w.status === 'wishlist').map((wine) => (
+                <div
+                  key={wine.id}
+                  onClick={() => setSelectedWine(wine)}
+                  className="relative group bg-white rounded-xl border-2 border-dashed border-purple-200 p-2 hover:border-purple-300 transition-all cursor-pointer"
+                >
+                  <div className="absolute top-2 right-2 z-10">
+                    <span className="bg-purple-100 text-purple-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">Desejado</span>
+                  </div>
+                  <div className="relative aspect-square mb-2 rounded-lg overflow-hidden bg-gray-50 opacity-80 group-hover:opacity-100 transition-opacity">
+                    <img
+                      src={wine.image_url || "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
+                      onError={(e) => e.currentTarget.src = "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
+                      className="w-full h-full object-contain p-1 grayscale group-hover:grayscale-0 transition-all duration-300"
+                      alt={wine.name}
+                    />
+                  </div>
+                  <h4 className="font-bold text-gray-900 truncate text-[10px] mb-0.5">{wine.name}</h4>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-gray-500 truncate max-w-[60px]">{wine.producer}</span>
+                    <div className="flex items-center gap-1 text-[9px] font-bold text-purple-500">
+                      <i className="ri-add-line"></i> Adicionar
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

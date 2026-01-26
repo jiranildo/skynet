@@ -116,6 +116,12 @@ export const personas: Record<PersonaType, PersonaConfig> = {
                 text: 'Buscar vinhos próximos de mim',
                 // keywords removed to use special handling
             },
+            {
+                icon: 'ri-vip-crown-line',
+                text: 'Vinhos Premium',
+                description: 'Descubra os melhores vinhos do mundo. Explore nossa seleção exclusiva de vinhos raros e premiados.',
+                keywords: ['premium', 'melhores', 'mundo', 'raros', 'premiados', 'luxo', 'exclusivo']
+            },
             { icon: 'ri-restaurant-line', text: 'Harmonizar com Jantar', keywords: ['harmonização', 'jantar', 'pairing'] },
             { icon: 'ri-star-line', text: 'Avaliar este vinho', keywords: ['avaliação', 'review', 'tasting'] },
             { icon: 'ri-gift-line', text: 'Sugerir Presente', keywords: ['presente', 'gift', 'especial'] }

@@ -28,11 +28,11 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
 
   const loadReviews = async () => {
     if (!experience.id) return;
-    
+
     try {
       const allReviews = await foodReviewService.getByExperience(experience.id);
       setReviews(allReviews);
-      
+
       const myReview = await foodReviewService.getUserReview(experience.id, currentUserId);
       setUserReview(myReview);
     } catch (error) {
@@ -42,7 +42,7 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
 
   const handleWouldReturn = async (wouldReturn: boolean) => {
     if (!experience.id) return;
-    
+
     try {
       setLoading(true);
       const updated = await foodExperienceService.updateWouldReturn(experience.id, wouldReturn);
@@ -62,7 +62,7 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
 
     try {
       setLoading(true);
-      
+
       if (userReview) {
         await foodReviewService.update(userReview.id!, {
           rating: reviewForm.rating,
@@ -78,11 +78,11 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
           would_return: reviewForm.would_return
         });
       }
-      
+
       await loadReviews();
       setShowReviewForm(false);
       setReviewForm({ rating: 0, comment: '', would_return: null });
-      
+
       // Recarregar experiência atualizada
       const updated = await foodExperienceService.getById(experience.id);
       onUpdate(updated);
@@ -129,7 +129,7 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
           >
             <i className="ri-close-line text-xl text-gray-700"></i>
           </button>
-          
+
           {/* Badge de Tipo */}
           <div className="absolute top-4 left-4 px-4 py-2 bg-white/90 backdrop-blur-sm rounded-full flex items-center gap-2">
             <i className={`${typeIcons[experience.type]} text-orange-600`}></i>
@@ -149,18 +149,17 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                   <span>{experience.location}</span>
                 </div>
               )}
-              
+
               {/* Avaliação Média */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-1">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <i
                       key={star}
-                      className={`text-2xl ${
-                        star <= (experience.average_rating || experience.rating || 0)
+                      className={`text-2xl ${star <= (experience.average_rating || experience.rating || 0)
                           ? 'ri-star-fill text-yellow-400'
                           : 'ri-star-line text-gray-300'
-                      }`}
+                        }`}
                     ></i>
                   ))}
                 </div>
@@ -183,11 +182,10 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                   <button
                     onClick={() => handleWouldReturn(true)}
                     disabled={loading}
-                    className={`flex-1 py-3 rounded-xl font-semibold transition-all whitespace-nowrap ${
-                      experience.would_return === true
+                    className={`flex-1 py-3 rounded-xl font-semibold transition-all whitespace-nowrap ${experience.would_return === true
                         ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
                         : 'bg-white text-gray-700 hover:bg-green-50 border border-gray-200'
-                    }`}
+                      }`}
                   >
                     <i className="ri-check-line mr-2"></i>
                     Voltaria Sim
@@ -195,11 +193,10 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                   <button
                     onClick={() => handleWouldReturn(false)}
                     disabled={loading}
-                    className={`flex-1 py-3 rounded-xl font-semibold transition-all whitespace-nowrap ${
-                      experience.would_return === false
+                    className={`flex-1 py-3 rounded-xl font-semibold transition-all whitespace-nowrap ${experience.would_return === false
                         ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg'
                         : 'bg-white text-gray-700 hover:bg-red-50 border border-gray-200'
-                    }`}
+                      }`}
                   >
                     <i className="ri-close-line mr-2"></i>
                     Não Voltaria
@@ -212,21 +209,19 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
             <div className="flex gap-4 border-b border-gray-200 mb-6">
               <button
                 onClick={() => setActiveTab('info')}
-                className={`pb-3 px-2 font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'info'
+                className={`pb-3 px-2 font-semibold transition-all whitespace-nowrap ${activeTab === 'info'
                     ? 'text-orange-600 border-b-2 border-orange-600'
                     : 'text-gray-500 hover:text-gray-700'
-                }`}
+                  }`}
               >
                 Informações
               </button>
               <button
                 onClick={() => setActiveTab('reviews')}
-                className={`pb-3 px-2 font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'reviews'
+                className={`pb-3 px-2 font-semibold transition-all whitespace-nowrap ${activeTab === 'reviews'
                     ? 'text-orange-600 border-b-2 border-orange-600'
                     : 'text-gray-500 hover:text-gray-700'
-                }`}
+                  }`}
               >
                 Avaliações ({reviews.length})
               </button>
@@ -241,7 +236,7 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                     <p className="text-lg font-semibold text-gray-900">{experience.price}</p>
                   </div>
                 )}
-                
+
                 {experience.date && (
                   <div>
                     <p className="text-sm font-medium text-gray-500 mb-1">Data da Visita</p>
@@ -254,7 +249,7 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                     </p>
                   </div>
                 )}
-                
+
                 {(experience.description || experience.notes) && (
                   <div>
                     <p className="text-sm font-medium text-gray-500 mb-2">Descrição</p>
@@ -315,22 +310,20 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                         <button
                           type="button"
                           onClick={() => setReviewForm({ ...reviewForm, would_return: true })}
-                          className={`flex-1 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${
-                            reviewForm.would_return === true
+                          className={`flex-1 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${reviewForm.would_return === true
                               ? 'bg-green-500 text-white'
                               : 'bg-white text-gray-700 border border-gray-200'
-                          }`}
+                            }`}
                         >
                           Sim
                         </button>
                         <button
                           type="button"
                           onClick={() => setReviewForm({ ...reviewForm, would_return: false })}
-                          className={`flex-1 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${
-                            reviewForm.would_return === false
+                          className={`flex-1 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${reviewForm.would_return === false
                               ? 'bg-red-500 text-white'
                               : 'bg-white text-gray-700 border border-gray-200'
-                          }`}
+                            }`}
                         >
                           Não
                         </button>
@@ -395,32 +388,30 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                                 {[1, 2, 3, 4, 5].map((star) => (
                                   <i
                                     key={star}
-                                    className={`text-sm ${
-                                      star <= review.rating
+                                    className={`text-sm ${star <= review.rating
                                         ? 'ri-star-fill text-yellow-400'
                                         : 'ri-star-line text-gray-300'
-                                    }`}
+                                      }`}
                                   ></i>
                                 ))}
                               </div>
                             </div>
                           </div>
-                          
+
                           {review.would_return !== null && review.would_return !== undefined && (
-                            <div className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
-                              review.would_return
+                            <div className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${review.would_return
                                 ? 'bg-green-100 text-green-700'
                                 : 'bg-red-100 text-red-700'
-                            }`}>
+                              }`}>
                               {review.would_return ? 'Voltaria' : 'Não Voltaria'}
                             </div>
                           )}
                         </div>
-                        
+
                         {review.comment && (
                           <p className="text-gray-700 text-sm leading-relaxed">{review.comment}</p>
                         )}
-                        
+
                         {review.created_at && (
                           <p className="text-xs text-gray-400 mt-2">
                             {new Date(review.created_at).toLocaleDateString('pt-BR', {

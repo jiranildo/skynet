@@ -188,8 +188,8 @@ export function RecommendationCard({ data, onSelect, onView, onSave }: Recommend
                     )}
                     <div className="flex gap-1">
                         {onSave && (
-                            <button onClick={onSave} className="p-2.5 rounded-xl hover:bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors border border-gray-100">
-                                <i className="ri-heart-line text-lg"></i>
+                            <button onClick={onSave} className="p-2.5 rounded-xl hover:bg-purple-50 text-purple-400 hover:text-purple-600 transition-colors border border-purple-100" title="Adicionar à Wishlist">
+                                <i className="ri-bookmark-3-line text-lg"></i>
                             </button>
                         )}
                     </div>

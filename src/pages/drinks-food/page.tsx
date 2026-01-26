@@ -25,12 +25,15 @@ export default function DrinksFoodPage() {
   const [showWallet, setShowWallet] = useState(false);
   const [showAddExperience, setShowAddExperience] = useState(false);
 
+  // Trigger for refreshing history
+  const [experienceTimestamp, setExperienceTimestamp] = useState(Date.now());
+
   const { refreshCounts } = useUnreadCounts();
   const { user } = useAuth(); // Assuming useAuth is needed for MobileNav or other parts, keeping it as per snippet.
 
   const tabs = [
+    { id: 'history' as TabType, icon: 'ri-history-line', label: 'Experiências' },
     { id: 'suggestions' as TabType, icon: 'ri-lightbulb-line', label: 'Sugestões' },
-    { id: 'history' as TabType, icon: 'ri-history-line', label: 'Histórico' },
     { id: 'goals' as TabType, icon: 'ri-trophy-line', label: 'Metas' },
     { id: 'stats' as TabType, icon: 'ri-bar-chart-box-line', label: 'Estatísticas' },
   ];
@@ -178,7 +181,7 @@ export default function DrinksFoodPage() {
       <div className="pt-[114px] md:pt-[130px] pb-20 md:pb-6">
         <div className="px-3 sm:px-4 md:px-6">
           {activeTab === 'suggestions' && <SuggestionsTab />}
-          {activeTab === 'history' && <HistoryTab />}
+          {activeTab === 'history' && <HistoryTab lastUpdated={experienceTimestamp} />}
           {activeTab === 'goals' && <GoalsTab />}
           {activeTab === 'stats' && <StatsTab />}
         </div>
@@ -306,7 +309,13 @@ export default function DrinksFoodPage() {
 
       {/* Add Experience Modal */}
       {showAddExperience && (
-        <AddExperienceModal onClose={() => setShowAddExperience(false)} onAdd={() => setShowAddExperience(false)} />
+        <AddExperienceModal
+          onClose={() => setShowAddExperience(false)}
+          onAdd={() => {
+            setShowAddExperience(false);
+            setExperienceTimestamp(Date.now());
+          }}
+        />
       )}
     </div>
   );
