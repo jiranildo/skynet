@@ -56,6 +56,7 @@ export interface User {
     itinerary_conflicts?: boolean;
     custom_instructions?: string;
     voice_uri?: string;
+    voice_enabled?: boolean;
     avatar_type?: 'icon' | 'image';
     avatar_url?: string;
   };
@@ -206,6 +207,7 @@ export interface Notification {
   is_read: boolean;
   related_user_id?: string;
   related_post_id?: string;
+  related_trip_id?: string;
   created_at: string;
 }
 
@@ -564,7 +566,27 @@ export const getUser = async (userId: string) => {
     .single();
 
   if (error) throw error;
-  return data as User;
+  const counts = await getUserCounts(userId);
+  return { ...data, ...counts } as User;
+};
+
+// Helper to get accurate counts
+const getUserCounts = async (userId: string) => {
+  const [
+    { count: followersCount },
+    { count: followingCount },
+    { count: postsCount }
+  ] = await Promise.all([
+    supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', userId).eq('status', 'accepted'),
+    supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', userId).eq('status', 'accepted'),
+    supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', userId)
+  ]);
+
+  return {
+    followers_count: followersCount || 0,
+    following_count: followingCount || 0,
+    posts_count: postsCount || 0
+  };
 };
 
 export const ensureUserProfile = async () => {
@@ -577,7 +599,10 @@ export const ensureUserProfile = async () => {
     .eq('id', user.id)
     .single();
 
-  if (profile) return profile as User;
+  if (profile) {
+    const counts = await getUserCounts(user.id);
+    return { ...profile, ...counts } as User;
+  }
 
   // Create missing profile
   const { data: newProfile, error } = await supabase
@@ -598,7 +623,7 @@ export const ensureUserProfile = async () => {
     console.error("Error creating user profile:", error);
     throw error;
   }
-  return newProfile;
+  return { ...newProfile, followers_count: 0, following_count: 0, posts_count: 0 } as User;
 };
 
 export const getUserByUsername = async (username: string) => {
@@ -609,7 +634,8 @@ export const getUserByUsername = async (username: string) => {
     .single();
 
   if (error) throw error;
-  return data as User;
+  const counts = await getUserCounts(data.id);
+  return { ...data, ...counts } as User;
 };
 
 export const updateUser = async (userId: string, updates: Partial<User>) => {
@@ -793,9 +819,7 @@ export const getFeedPosts = async (limit = 20, offset = 0, targetUserId?: string
   const { data: { user: currentUser } } = await supabase.auth.getUser();
   const currentUserId = currentUser?.id;
 
-  let query = supabase
-    .from('posts')
-    .select(`
+  let query = supabase.from('posts').select(`
       *,
       users (
         username,
@@ -806,73 +830,56 @@ export const getFeedPosts = async (limit = 20, offset = 0, targetUserId?: string
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
+  let followedUserIds: string[] = [];
+
   if (targetUserId) {
     query = query.eq('user_id', targetUserId);
-    // When fetching posts for a specific user, apply privacy logic
-    const { data: targetUser, error: userError } = await supabase
-      .from('users')
-      .select('privacy_setting')
-      .eq('id', targetUserId)
-      .single();
-
-    if (userError) throw userError;
-
-    if (targetUser.privacy_setting === 'private' && targetUserId !== currentUserId) {
-      // If target user is private and not the current user, check if current user is a follower
-      const { count: isFollowing, error: followError } = await supabase
-        .from('followers')
-        .select('*', { count: 'exact', head: true })
-        .eq('follower_id', currentUserId)
-        .eq('following_id', targetUserId);
-
-      if (followError) throw followError;
-
-      if (isFollowing === 0) {
-        // Not following, return empty array
-        return [];
-      }
-    } else if (targetUser.privacy_setting === 'friends' && targetUserId !== currentUserId) {
-      // If target user is friends-only and not the current user, check if current user is a friend
-      // For simplicity, assuming 'friends' means 'following' for now.
-      const { count: isFollowing, error: followError } = await supabase
-        .from('followers')
-        .select('*', { count: 'exact', head: true })
-        .eq('follower_id', currentUserId)
-        .eq('following_id', targetUserId);
-
-      if (followError) throw followError;
-
-      if (isFollowing === 0) {
-        // Not following, return empty array
-        return [];
-      }
+    // ... privacy logic for target user ...
+    const { data: targetUser } = await supabase.from('users').select('privacy_setting').eq('id', targetUserId).single();
+    if (targetUser?.privacy_setting === 'private' && targetUserId !== currentUserId) {
+      const { count } = await supabase.from('followers').select('*', { count: 'exact', head: true })
+        .eq('follower_id', currentUserId).eq('following_id', targetUserId).eq('status', 'accepted');
+      if (!count) return [];
     }
-    // If public, or current user is the target user, or current user is following, proceed.
+    // Similar check for friends...
+    else if (targetUser?.privacy_setting === 'friends' && targetUserId !== currentUserId) {
+      const { count } = await supabase.from('followers').select('*', { count: 'exact', head: true })
+        .eq('follower_id', currentUserId).eq('following_id', targetUserId).eq('status', 'accepted');
+      if (!count) return [];
+    }
   } else {
-    // For general feed, only show posts from followed users and self
+    // General Feed
     if (currentUserId) {
-      const { data: followingUsers, error: followError } = await supabase
-        .from('followers')
-        .select('following_id')
-        .eq('follower_id', currentUserId);
+      const { data: followingUsers } = await supabase.from('followers').select('following_id').eq('follower_id', currentUserId).eq('status', 'accepted');
+      followedUserIds = followingUsers?.map(f => f.following_id) || [];
+      followedUserIds.push(currentUserId);
 
-      if (followError) throw followError;
-
-      const followedUserIds = followingUsers?.map(f => f.following_id) || [];
-      followedUserIds.push(currentUserId); // Include current user's posts
-
-      // Filter posts by these user IDs
-      query = query.in('user_id', followedUserIds);
-
+      const followedStr = `(${followedUserIds.join(',')})`;
+      query = query.or(`visibility.eq.public,user_id.in.${followedStr},user_id.eq.${currentUserId}`);
     } else {
-      // If no current user (guest), only show public posts from public users
-      query = query.eq('visibility', 'public').eq('users.privacy_setting', 'public');
+      query = query.eq('visibility', 'public'); // Guest
     }
   }
 
-  const { data: posts, error } = await query;
-
+  const { data: rawPosts, error } = await query;
   if (error) throw error;
+
+  let validPosts = rawPosts;
+
+  // In-Memory Privacy Filter for General Feed
+  if (!targetUserId && currentUserId) {
+    const followedSet = new Set(followedUserIds);
+    validPosts = rawPosts.filter((post: any) => {
+      if (post.user_id === currentUserId) return true;
+      if (followedSet.has(post.user_id)) return true; // Followed users (trust queries)
+      // Non-followed: Only show if User is Public AND Post is Public
+      return post.users?.privacy_setting === 'public' && post.visibility === 'public';
+    });
+  } else if (!targetUserId && !currentUserId) {
+    // Guest: Strict check
+    validPosts = rawPosts.filter((post: any) => post.users?.privacy_setting === 'public' && post.visibility === 'public');
+  }
+
 
   // If there's no logged-in user, we can't check isLiked/isSaved properly, defaults to false
   // Or we can do a secondary query if we have a user
@@ -895,7 +902,7 @@ export const getFeedPosts = async (limit = 20, offset = 0, targetUserId?: string
   }
 
   // Map to FeedPost format
-  return posts.map((post: any) => {
+  return validPosts.map((post: any) => {
     // Calculate timeAgo
     const created = new Date(post.created_at);
     const now = new Date();
@@ -992,9 +999,14 @@ export const uploadFile = async (bucket: string, file: File | Blob) => {
 
 
 export const createPost = async (post: Omit<Post, 'id' | 'created_at' | 'updated_at' | 'likes_count' | 'comments_count'>) => {
+  const { data: { user } } = await supabase.auth.getUser();
+
   const { data, error } = await supabase
     .from('posts')
-    .insert(post)
+    .insert({
+      ...post,
+      user_id: user?.id
+    })
     .select()
     .single();
 
@@ -1002,7 +1014,7 @@ export const createPost = async (post: Omit<Post, 'id' | 'created_at' | 'updated
   return data as Post;
 };
 
-export const updatePost = async (postId: string, updates: Partial<Pick<Post, 'caption' | 'location' | 'image_url' | 'visibility'>>) => {
+export const updatePost = async (postId: string, updates: Partial<Pick<Post, 'caption' | 'location' | 'image_url' | 'visibility' | 'media_urls'>>) => {
   const { data, error } = await supabase
     .from('posts')
     .update({ ...updates, updated_at: new Date().toISOString() })
@@ -1029,20 +1041,37 @@ export const deletePost = async (postId: string) => {
 // ==================== VIAGENS ====================
 
 export const getTrips = async (userId: string) => {
-  // Fetch trips where user is owner OR user is in sharedWith
-  // Since sharedWith is inside metadata JSONB, checking for existence of an element in a JSON array can be complex with simple OR.
-  // For simplicity and to ensure we get both, we might need a complex query or filtering.
+  // 1. Get IDs of trips where user is a member
+  const { data: memberships } = await supabase
+    .from('trip_members')
+    .select('trip_id')
+    .eq('user_id', userId)
+    .eq('status', 'accepted');
 
-  // Try to use the OR syntax with JSON containment if supported, otherwise falling back to fetching and filtering might be needed
-  // but let's try a robust approach assuming 'metadata' column exists.
+  const memberTripIds = memberships?.map(m => m.trip_id) || [];
 
-  const { data, error } = await supabase
+  // 2. Build the query
+  let query = supabase
     .from('trips')
-    .select('*, users:user_id(id, full_name, avatar_url, username)')
-    // We want trips where (user_id = userId) OR (metadata->sharedWith @> '[{"id": "userId"}]')
-    // Note: JSON containment operator @> requires correct spacing/formatting in raw SQL or filter
-    .or(`user_id.eq.${userId},metadata->sharedWith.cs.[{"id": "${userId}"}]`)
-    .order('start_date', { ascending: false });
+    .select(`
+      *,
+      users:user_id(id, full_name, avatar_url, username),
+      trip_members (
+        user_id,
+        role,
+        status
+      )
+    `);
+
+  // 3. Apply OR filter
+  // We want trips where:
+  // - user is the owner (user_id = userId)
+  // - OR user is in legacy metadata->sharedWith
+  // - OR user is in trip_members (id IN memberTripIds)
+  const memberIdsStr = memberTripIds.length > 0 ? `,id.in.(${memberTripIds.join(',')})` : '';
+  query = query.or(`user_id.eq.${userId},metadata->sharedWith.cs.[{"id": "${userId}"}]${memberIdsStr}`);
+
+  const { data, error } = await query.order('start_date', { ascending: false });
 
   if (error) throw error;
 
@@ -1053,50 +1082,176 @@ export const getTrips = async (userId: string) => {
     pendingSuggestions: t.metadata?.pendingSuggestions,
     marketplaceConfig: t.metadata?.marketplaceConfig,
     isShared: t.user_id !== userId, // Mark as shared if not owned by current user
-    owner: t.users // Map joined user data to 'owner' prop
+    owner: t.users, // Map joined user data to 'owner' prop
+    permissions: t.trip_members?.find((m: any) => m.user_id === userId)?.role || (t.user_id === userId ? 'admin' : 'view')
   })) as Trip[];
 };
 
 
 export const getMarketplaceTrips = async () => {
-  // Query marketplace_listings joined with trips and users (sellers)
-  const { data, error } = await supabase
+  // Fetch current user
+  const { data: { user } } = await supabase.auth.getUser();
+  const currentUserId = user?.id;
+
+  // 1. Get Followed Users AND Member Trips (if logged in)
+  let followedUserIds: string[] = [];
+  let memberTripIds: string[] = [];
+  let listedTripIds: string[] = [];
+
+  const { data: listings } = await supabase
     .from('marketplace_listings')
+    .select('trip_id')
+    .eq('is_active', true);
+
+  if (listings) {
+    listedTripIds = listings.map(l => l.trip_id);
+  }
+
+  if (currentUserId) {
+    const { data: following } = await supabase
+      .from('followers')
+      .select('following_id')
+      .eq('follower_id', currentUserId)
+      .eq('status', 'accepted');
+
+    if (following) {
+      followedUserIds = following.map(f => f.following_id);
+    }
+
+    const { data: memberships } = await supabase
+      .from('trip_members')
+      .select('trip_id')
+      .eq('user_id', currentUserId)
+      .eq('status', 'accepted');
+
+    if (memberships) {
+      memberTripIds = memberships.map(m => m.trip_id);
+    }
+  }
+
+  // 2. Build Query on TRIPS table
+  let query = supabase
+    .from('trips')
     .select(`
       *,
-      trip:trips (
-        *,
-        users:user_id (
-          id,
-          username,
-          full_name,
-          avatar_url,
-          privacy_setting,
-          followers_count,
-          posts_count
-        )
+      users!inner (
+        id,
+        username,
+        full_name,
+        avatar_url,
+        privacy_setting,
+        followers_count,
+        posts_count
+      ),
+      marketplace_listings (
+        id,
+        price,
+        currency,
+        description,
+        is_active,
+        created_at
+      ),
+      trip_members (
+        user_id,
+        role,
+        status
       )
     `)
-    .eq('is_active', true)
     .order('created_at', { ascending: false });
+
+  if (currentUserId) {
+    const followedStr = `(${[...followedUserIds, currentUserId].join(',')})`;
+    const memberTripsStr = memberTripIds.length > 0 ? `,id.in.(${memberTripIds.join(',')})` : '';
+    const listedTripsStr = listedTripIds.length > 0 ? `,id.in.(${listedTripIds.join(',')})` : '';
+
+    // Fetch Public OR Followed OR Self OR Is Member OR Is Listed
+    query = query.or(`visibility.eq.public,user_id.in.${followedStr}${memberTripsStr}${listedTripsStr}`);
+  } else {
+    // Guest: Public OR Listed
+    const listedTripsStr = listedTripIds.length > 0 ? `,id.in.(${listedTripIds.join(',')})` : '';
+    if (listedTripsStr) {
+      query = query.or(`visibility.eq.public${listedTripsStr}`);
+    } else {
+      query = query.eq('visibility', 'public');
+    }
+  }
+
+  const { data: rawTrips, error } = await query;
 
   if (error) throw error;
 
-  // Map to Trip structure with injected marketplace info
-  // Map to Trip structure with injected marketplace info
-  return (data || [])
-    .filter((listing: any) => listing.trip && listing.trip.users) // Filter out items where trip or user is hidden/missing
-    .map((listing: any) => ({
-      ...listing.trip,
-      marketplaceConfig: {
+  // 3. In-Memory Filter for strict visibility
+  let validTrips = rawTrips || [];
+
+  if (currentUserId) {
+    const followedSet = new Set(followedUserIds);
+
+    validTrips = validTrips.filter((trip: any) => {
+      const isMine = trip.user_id === currentUserId;
+      const isFollowed = followedSet.has(trip.user_id);
+      const visibility = trip.visibility || 'private';
+
+      // Handle marketplace_listings safely (can be object or array)
+      let listings: any[] = [];
+      if (Array.isArray(trip.marketplace_listings)) {
+        listings = trip.marketplace_listings;
+      } else if (trip.marketplace_listings && typeof trip.marketplace_listings === 'object') {
+        listings = [trip.marketplace_listings];
+      }
+
+      const activeListing = listings.find((l: any) => l.is_active);
+
+      // Inject config so UI can use it
+      if (activeListing) {
+        trip.marketplaceConfig = activeListing;
+      }
+
+      // Check if I am a confirmed member of this trip
+      const isMember = trip.trip_members && trip.trip_members.some((m: any) => m.user_id === currentUserId && m.status === 'accepted');
+
+      // 1. If actively listed in Marketplace, always show
+      if (activeListing) return true;
+
+      // 2. Public trips always show
+      if (visibility === 'public') return true;
+
+      // 3. Followers/Network trips show if followed OR is mine
+      // We explicitly check for 'followers', 'friends', or 'network' as these are commonly used interchangeably for "My Network"
+      if (['followers', 'friends', 'network'].includes(visibility)) return isFollowed || isMine;
+
+      // 4. Private trips: Hide unless explicitly shared (Member)
+      if (visibility === 'private') {
+        return isMember;
+      }
+      return false;
+    });
+  } else {
+    validTrips = validTrips.filter((t: any) => t.visibility === 'public');
+  }
+
+  // 4. Map to return format
+  return validTrips.map((trip: any) => {
+    let listingsArr: any[] = [];
+    if (Array.isArray(trip.marketplace_listings)) {
+      listingsArr = trip.marketplace_listings;
+    } else if (trip.marketplace_listings && typeof trip.marketplace_listings === 'object') {
+      listingsArr = [trip.marketplace_listings];
+    }
+
+    const activeListing = listingsArr.find((l: any) => l.is_active);
+
+    return {
+      ...trip,
+      marketplaceConfig: activeListing ? {
         isListed: true,
-        price: listing.price,
-        currency: listing.currency,
-        description: listing.description
-      },
-      seller: listing.trip.users,
-      listing_id: listing.id // Keep reference to listing ID
-    })) as (Trip & { seller: User, listing_id: string })[];
+        price: activeListing.price,
+        currency: activeListing.currency,
+        description: activeListing.description
+      } : undefined,
+      seller: trip.users,
+      listing_id: activeListing?.id
+    };
+  }) as (Trip & { seller: User, listing_id?: string })[];
 };
 
 export const createMarketplaceListing = async (listing: {
@@ -1138,13 +1293,13 @@ export const getNetworkUsers = async (userId: string) => {
     .from('followers')
     .select(`
       following_id,
-      users:following_id (
+      users: following_id(
         id,
         username,
         full_name,
         avatar_url
       )
-    `)
+        `)
     .eq('follower_id', userId);
 
   if (error) throw error;
@@ -1158,9 +1313,15 @@ export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated
   const { sharedWith, pendingSuggestions, marketplaceConfig, ...rest } = trip;
   const metadata = { ...(trip as any).metadata, sharedWith, pendingSuggestions, marketplaceConfig };
 
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('Usuário não autenticado');
+  }
+
   const { data, error } = await supabase
     .from('trips')
-    .insert({ ...rest, metadata })
+    .insert({ ...rest, metadata, user_id: user.id })
     .select()
     .single();
 
@@ -1235,11 +1396,11 @@ export const getConversationsWithDetails = async (userId: string) => {
   const { data, error } = await supabase
     .from('conversations')
     .select(`
-      *,
-      user1:users!conversation_user1_id_fkey(username, avatar_url, full_name),
-      user2:users!conversation_user2_id_fkey(username, avatar_url, full_name)
-    `)
-    .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+    *,
+      user1: users!conversation_user1_id_fkey(username, avatar_url, full_name),
+      user2: users!conversation_user2_id_fkey(username, avatar_url, full_name)
+      `)
+    .or(`user1_id.eq.${userId}, user2_id.eq.${userId}`)
     .order('last_message_at', { ascending: false });
 
   if (error) {
@@ -1456,18 +1617,83 @@ export const getPostLikes = async (postId: string) => {
 export const getComments = async (postId: string) => {
   const { data, error } = await supabase
     .from('comments')
-    .select(`
-      *,
-      users (
-        username,
-        avatar_url
-      )
-    `)
+    .select('*, user:users!comments_user_id_fkey(*)') // Assuming foreign key name
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
 
   if (error) throw error;
-  return data as (Comment & { users: { username: string; avatar_url: string } })[];
+  return data as Comment[];
+};
+
+// ==================== AMIZADES / SEGUIR ====================
+
+export const getPendingFriendRequests = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  // Assuming 'followers' table is used for friendships/follows
+  // 'pending' status was added via migration
+  const { data, error } = await supabase
+    .from('followers')
+    .select(`
+    *,
+      follower: users!followers_follower_id_fkey(id, username, full_name, avatar_url)
+      `)
+    .eq('following_id', user.id)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching friend requests:', error);
+    return [];
+  }
+
+  // Map to a structure similar to invites for the UI
+  return data.map(item => ({
+    id: item.id,
+    type: 'friend',
+    target_id: item.follower_id, // The user acting is the follower (requester)
+    name: item.follower.username || item.follower.full_name,
+    avatar_url: item.follower.avatar_url,
+    created_at: item.created_at
+  }));
+};
+
+export const respondToFriendRequest = async (followerId: string, accept: boolean) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+
+  if (accept) {
+    const { error } = await supabase
+      .from('followers')
+      .update({ status: 'accepted' })
+      .eq('follower_id', followerId)
+      .eq('following_id', user.id);
+
+    if (error) throw error;
+
+    // Optional: Auto-follow back?
+    // For now, just accept.
+
+    // Notify the requester (follower) that we accepted
+    await supabase.from('notifications').insert({
+      user_id: followerId, // Recipient is the one who asked
+      type: 'system', // or 'friend_accept'
+      title: 'Solicitação Aceita',
+      message: `${user.user_metadata.full_name || user.email} aceitou sua solicitação de amizade.`,
+      related_user_id: user.id, // We are the one who accepted
+      is_read: false
+    });
+
+  } else {
+    const { error } = await supabase
+      .from('followers')
+      .delete()
+      .eq('follower_id', followerId)
+      .eq('following_id', user.id);
+
+    if (error) throw error;
+  }
 };
 
 export const createComment = async (comment: Omit<Comment, 'id' | 'created_at'>) => {
@@ -1505,13 +1731,53 @@ export const deleteComment = async (commentId: string) => {
 // ==================== SEGUIDORES ====================
 
 export const followUser = async (followerId: string, followingId: string) => {
+  // 1. Check target privacy
+  const { data: targetUser } = await supabase
+    .from('users')
+    .select('privacy_setting, username')
+    .eq('id', followingId)
+    .single();
+
+  const isPrivate = targetUser?.privacy_setting !== 'public';
+  const status = isPrivate ? 'pending' : 'accepted';
+
+  // 2. Create Follow
   const { data, error } = await supabase
     .from('followers')
-    .insert({ follower_id: followerId, following_id: followingId })
+    .insert({
+      follower_id: followerId,
+      following_id: followingId,
+      status
+    })
     .select()
     .single();
 
   if (error) throw error;
+
+  // 3. Notify Target
+  if (status === 'accepted') {
+    // If public, notify "started following you"
+    await supabase.from('notifications').insert({
+      user_id: followingId,
+      type: 'follow',
+      related_user_id: followerId,
+      title: 'Novo Seguidor',
+      message: 'Começou a seguir você',
+      is_read: false
+    });
+  } else {
+    // If pending, notify "requested to follow you"
+    // Ensuring it appears in the main stream as well
+    await supabase.from('notifications').insert({
+      user_id: followingId,
+      type: 'friend_request', // New type for generic notification
+      related_user_id: followerId,
+      title: 'Solicitação de Amizade',
+      message: 'Quer seguir você',
+      is_read: false
+    });
+  }
+
   return data as Follower;
 };
 
@@ -1528,21 +1794,23 @@ export const unfollowUser = async (followerId: string, followingId: string) => {
 export const getFollowers = async (userId: string) => {
   const { data, error } = await supabase
     .from('followers')
-    .select('*')
-    .eq('following_id', userId);
+    .select('*, follower:users!followers_follower_id_fkey(*)')
+    .eq('following_id', userId)
+    .eq('status', 'accepted');
 
   if (error) throw error;
-  return data as Follower[];
+  return data;
 };
 
 export const getFollowing = async (userId: string) => {
   const { data, error } = await supabase
     .from('followers')
-    .select('*')
-    .eq('follower_id', userId);
+    .select('*, following:users!followers_following_id_fkey(*)')
+    .eq('follower_id', userId)
+    .eq('status', 'accepted');
 
   if (error) throw error;
-  return data as Follower[];
+  return data;
 };
 
 export const getFollowingWithDetails = async (userId: string) => {
@@ -1636,9 +1904,14 @@ export const foodExperienceService = {
   },
 
   async create(experience: Omit<FoodExperience, 'id' | 'created_at'>): Promise<FoodExperience> {
+    const { data: { user } } = await supabase.auth.getUser();
+
     const { data, error } = await supabase
       .from('food_experiences')
-      .insert(experience)
+      .insert({
+        ...experience,
+        user_id: user?.id
+      })
       .select()
       .single();
 
@@ -1745,9 +2018,9 @@ export const foodReviewService = {
       .select('*')
       .eq('experience_id', experienceId)
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') throw error;
+    if (error) throw error;
     return data as FoodReview | null;
   },
 
@@ -2260,9 +2533,14 @@ export const storyService = {
   },
 
   async create(story: Omit<Story, 'id' | 'created_at' | 'expires_at' | 'users'>): Promise<Story> {
+    const { data: { user } } = await supabase.auth.getUser();
+
     const { data, error } = await supabase
       .from('stories')
-      .insert(story)
+      .insert({
+        ...story,
+        user_id: user?.id
+      })
       .select('*, users(username, avatar_url)')
       .single();
 
@@ -2404,14 +2682,14 @@ export const savedPostService = {
       .from('saved_posts')
       .select(`
         post_id,
-        posts (
+      posts(
           *,
-          users (
-            username,
-            avatar_url
-          )
+        users(
+          username,
+          avatar_url
         )
-      `)
+      )
+        `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -2450,12 +2728,12 @@ export const getExplorePosts = async (limit = 30) => {
     .from('posts')
     .select(`
       *,
-      users!inner (
+      users!inner(
         username,
         avatar_url,
         privacy_setting
       )
-    `)
+      `)
     .eq('visibility', 'public')
     .eq('users.privacy_setting', 'public')
     .order('created_at', { ascending: false })
@@ -2484,7 +2762,7 @@ export const searchUsers = async (query: string) => {
   const { data, error } = await supabase
     .from('users')
     .select('id, username, full_name, avatar_url, privacy_setting')
-    .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
+    .or(`username.ilike.% ${query} %, full_name.ilike.% ${query} % `)
     .limit(10);
 
   if (error) throw error;
@@ -2498,11 +2776,14 @@ export const searchPosts = async (query: string) => {
       id,
       caption,
       image_url,
-      users (
-        username
+      users!inner(
+        username,
+        privacy_setting
       )
-    `)
-    .ilike('caption', `%${query}%`)
+        `)
+    .ilike('caption', `% ${query} % `)
+    .eq('visibility', 'public') // Only public posts
+    .eq('users.privacy_setting', 'public') // Only from public users
     .limit(10);
 
   if (error) throw error;
@@ -2790,12 +3071,12 @@ export const getMessages = async (chatId: string, type: 'direct' | 'group' | 'co
   let query = supabase
     .from('messages')
     .select(`
-      *,
-      sender:users!sender_id (
+    *,
+      sender: users!sender_id(
         username,
         avatar_url
       )
-    `)
+      `)
     .order('created_at', { ascending: true });
 
   if (type === 'direct') {

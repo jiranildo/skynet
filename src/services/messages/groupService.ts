@@ -466,6 +466,18 @@ export const addGroupMember = async (groupId: string, userId: string) => {
             status: 'accepted' // Auto-accept added members by admin
         });
     if (error) throw error;
+
+    // Notify user
+    const { data: group } = await supabase.from('groups').select('name').eq('id', groupId).single();
+    if (group) {
+        await supabase.from('notifications').insert({
+            user_id: userId,
+            type: 'system', // or 'group_add'
+            title: 'Novo Grupo',
+            message: `Você foi adicionado ao grupo "${group.name}"`,
+            is_read: false
+        });
+    }
 };
 
 export const addCommunityMember = async (communityId: string, userId: string) => {
@@ -478,6 +490,18 @@ export const addCommunityMember = async (communityId: string, userId: string) =>
             status: 'accepted'
         });
     if (error) throw error;
+
+    // Notify user
+    const { data: comm } = await supabase.from('communities').select('name').eq('id', communityId).single();
+    if (comm) {
+        await supabase.from('notifications').insert({
+            user_id: userId,
+            type: 'system',
+            title: 'Nova Comunidade',
+            message: `Você foi adicionado à comunidade "${comm.name}"`,
+            is_read: false
+        });
+    }
 };
 
 export const removeGroupMember = async (groupId: string, userId: string) => {

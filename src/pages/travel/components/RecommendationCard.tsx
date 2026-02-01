@@ -71,9 +71,10 @@ interface RecommendationCardProps {
     onSelect?: () => void;
     onView?: () => void;
     onSave?: () => void;
+    onAddToItinerary?: () => void;
 }
 
-export function RecommendationCard({ data, onSelect, onView, onSave }: RecommendationCardProps) {
+export function RecommendationCard({ data, onSelect, onView, onSave, onAddToItinerary }: RecommendationCardProps) {
 
     // --- WINE LAYOUT (Special Custom Design) ---
     if (data.category === 'wine') {
@@ -187,6 +188,11 @@ export function RecommendationCard({ data, onSelect, onView, onSave }: Recommend
                         </button>
                     )}
                     <div className="flex gap-1">
+                        {onAddToItinerary && (
+                            <button onClick={onAddToItinerary} className="p-2.5 rounded-xl hover:bg-purple-50 text-purple-400 hover:text-purple-600 transition-colors border border-purple-100" title="Incluir no Roteiro">
+                                <i className="ri-calendar-check-line text-lg"></i>
+                            </button>
+                        )}
                         {onSave && (
                             <button onClick={onSave} className="p-2.5 rounded-xl hover:bg-purple-50 text-purple-400 hover:text-purple-600 transition-colors border border-purple-100" title="Adicionar à Wishlist">
                                 <i className="ri-bookmark-3-line text-lg"></i>
@@ -255,6 +261,7 @@ export function RecommendationCard({ data, onSelect, onView, onSave }: Recommend
                 {/* Footer Actions */}
                 <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
                     {onSelect && <button onClick={onSelect} className="flex-1 text-xs font-bold text-gray-700 hover:text-gray-900">Selecionar</button>}
+                    {onAddToItinerary && <button onClick={onAddToItinerary} className="text-gray-400 hover:text-gray-600" title="Incluir no Roteiro"><i className="ri-calendar-check-line"></i></button>}
                     {onSave && <button onClick={onSave} className="text-gray-400 hover:text-gray-600"><i className="ri-bookmark-line"></i></button>}
                 </div>
             </div>
@@ -357,6 +364,11 @@ export function RecommendationCard({ data, onSelect, onView, onSave }: Recommend
                                 <a href={data.link} target="_blank" rel="noopener noreferrer" className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 rounded-lg text-center transition-colors">
                                     Ver Oferta
                                 </a>
+                            )}
+                            {onAddToItinerary && (
+                                <button onClick={onAddToItinerary} className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-indigo-600 transition-colors" title="Incluir no Roteiro">
+                                    <i className="ri-calendar-check-line"></i>
+                                </button>
                             )}
                             {onSelect && (
                                 <button onClick={onSelect} className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors">
@@ -566,6 +578,11 @@ export function RecommendationCard({ data, onSelect, onView, onSave }: Recommend
                     </button>
                 )}
                 <div className="flex gap-1">
+                    {onAddToItinerary && (
+                        <button onClick={onAddToItinerary} className="p-3 rounded-xl hover:bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors" title="Incluir no Roteiro">
+                            <i className="ri-calendar-check-line text-lg"></i>
+                        </button>
+                    )}
                     {onView && (
                         <button onClick={onView} className="p-3 rounded-xl hover:bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors">
                             <i className="ri-eye-line text-lg"></i>

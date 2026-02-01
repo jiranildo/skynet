@@ -62,7 +62,7 @@ interface YearlyRetrospective {
   isGenerating?: boolean;
 }
 
-export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void }) {
+export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTrip?: () => void, initialSubTab?: string }) {
   const { user } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
@@ -75,8 +75,14 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
   const [shareLink, setShareLink] = useState('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
   const [commentText, setCommentText] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'shared' | 'newtrip' | 'stats' | 'maps' | 'goals' | 'suggestions' | 'retrospectives'>('trips');
+  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'shared' | 'newtrip' | 'stats' | 'maps' | 'goals' | 'suggestions' | 'retrospectives'>(initialSubTab as any || 'trips');
   const [retrospectives, setRetrospectives] = useState<YearlyRetrospective[]>([]);
+  useEffect(() => {
+    if (initialSubTab) {
+      setActiveSubTab(initialSubTab as any);
+    }
+  }, [initialSubTab]);
+
   const [selectedRetrospective, setSelectedRetrospective] = useState<YearlyRetrospective | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPlanningModalOpen, setIsPlanningModalOpen] = useState(false);
@@ -96,6 +102,8 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
     message: '',
     type: 'success'
   });
+
+
 
 
   useEffect(() => {
@@ -861,189 +869,226 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
     return (trip.pendingSuggestions || []).filter(s => s.status === 'pending').length;
   };
 
-  const destinations = [
-    {
-      id: 1,
-      name: 'Paris, France',
-      country: 'France',
-      continent: 'Europe',
-      dates: '15 - 22 Dec 2024',
-      travelers: 2,
-      places: 5,
-      color: 'blue',
-      position: { top: '32%', left: '49%' },
-      image: 'https://readdy.ai/api/search-image?query=paris%20eiffel%20tower%20romantic%20city%20view%20beautiful%20architecture%20french%20culture%20iconic%20landmark&width=400&height=300&seq=dest-paris-map&orientation=landscape'
-    },
-    {
-      id: 2,
-      name: 'Tokyo, Japan',
-      country: 'Japan',
-      continent: 'Asia',
-      dates: '10 - 20 Jan 2025',
-      travelers: 2,
-      places: 8,
-      color: 'purple',
-      position: { top: '35%', left: '82%' },
-      image: 'https://readdy.ai/api/search-image?query=tokyo%20japan%20modern%20city%20skyline%20neon%20lights%20cherry%20blossoms%20traditional%20temples%20urban%20landscape&width=400&height=300&seq=dest-tokyo-map&orientation=landscape'
-    },
-    {
-      id: 3,
-      name: 'Dubai, UAE',
-      country: 'United Arab Emirates',
-      continent: 'Middle East',
-      dates: '05 - 12 Mar 2025',
-      travelers: 4,
-      places: 6,
-      color: 'orange',
-      position: { top: '42%', left: '58%' },
-      image: 'https://readdy.ai/api/search-image?query=dubai%20burj%20khalifa%20luxury%20skyscrapers%20desert%20oasis%20golden%20skyline%20futuristic%20city&width=400&height=300&seq=dest-dubai-map&orientation=landscape'
-    },
-    {
-      id: 4,
-      name: 'New York, USA',
-      country: 'United States',
-      continent: 'North America',
-      dates: '20 - 28 Apr 2025',
-      travelers: 3,
-      places: 7,
-      color: 'green',
-      position: { top: '38%', left: '25%' },
-      image: 'https://readdy.ai/api/search-image?query=new%20york%20city%20manhattan%20skyline%20statue%20of%20liberty%20times%20square%20urban%20architecture&width=400&height=300&seq=dest-ny-map&orientation=landscape'
-    },
-    {
-      id: 5,
-      name: 'Barcelona, Spain',
-      country: 'Spain',
-      continent: 'Europe',
-      dates: '15 - 22 May 2025',
-      travelers: 2,
-      places: 4,
-      color: 'pink',
-      position: { top: '36%', left: '48%' },
-      image: 'https://readdy.ai/api/search-image?query=barcelona%20spain%20sagrada%20familia%20gaudi%20architecture%20mediterranean%20beach%20colorful%20vibrant%20city&width=400&height=300&seq=dest-bcn-map&orientation=landscape'
-    },
-    {
-      id: 6,
-      name: 'Sydney, Australia',
-      country: 'Australia',
-      continent: 'Oceania',
-      dates: '10 - 18 Jun 2025',
-      travelers: 2,
-      places: 5,
-      color: 'cyan',
-      position: { top: '72%', left: '85%' },
-      image: 'https://readdy.ai/api/search-image?query=sydney%20australia%20opera%20house%20harbor%20bridge%20beautiful%20city%20coastline%20modern%20architecture&width=400&height=300&seq=dest-sydney-map&orientation=landscape'
-    },
-    {
-      id: 7,
-      name: 'Rio de Janeiro, Brazil',
-      country: 'Brazil',
-      continent: 'South America',
-      dates: '01 - 08 Jul 2025',
-      travelers: 3,
-      places: 6,
-      color: 'yellow',
-      position: { top: '62%', left: '32%' },
-      image: 'https://readdy.ai/api/search-image?query=rio%20de%20janeiro%20christ%20redeemer%20statue%20sugarloaf%20mountain%20copacabana%20beach%20beautiful%20cityscape%20tropical%20paradise&width=400&height=300&seq=dest-rio-map&orientation=landscape'
-    },
-    {
-      id: 8,
-      name: 'London, England',
-      country: 'United Kingdom',
-      continent: 'Europe',
-      dates: '15 - 22 Aug 2025',
-      travelers: 2,
-      places: 7,
-      color: 'red',
-      position: { top: '30%', left: '48.5%' },
-      image: 'https://readdy.ai/api/search-image?query=london%20england%20big%20ben%20tower%20bridge%20red%20buses%20british%20culture%20historical%20architecture&width=400&height=300&seq=dest-london-map&orientation=landscape'
-    },
-    {
-      id: 9,
-      name: 'Bali, Indonesia',
-      country: 'Indonesia',
-      continent: 'Asia',
-      dates: '10 - 20 Sep 2025',
-      travelers: 2,
-      places: 9,
-      color: 'teal',
-      position: { top: '55%', left: '75%' },
-      image: 'https://readdy.ai/api/search-image?query=bali%20indonesia%20tropical%20paradise%20beach%20temples%20rice%20terraces%20turquoise%20water%20peaceful%20nature&width=400&height=300&seq=dest-bali-map&orientation=landscape'
-    },
-    {
-      id: 10,
-      name: 'Rome, Italy',
-      country: 'Italy',
-      continent: 'Europe',
-      dates: '05 - 12 Oct 2025',
-      travelers: 2,
-      places: 8,
-      color: 'indigo',
-      position: { top: '37%', left: '51%' },
-      image: 'https://readdy.ai/api/search-image?query=rome%20italy%20colosseum%20vatican%20ancient%20ruins%20historical%20architecture%20roman%20culture%20european%20heritage&width=400&height=300&seq=dest-rome-map&orientation=landscape'
-    }
-  ];
+  // Coordinate mapping for major cities (approximate % on the map image)
+  const cityCoordinates: Record<string, { top: string; left: string }> = {
+    // --- North America ---
+    'Orlando': { top: '39%', left: '28%' },
+    'Orlando, FL': { top: '39%', left: '28%' },
+    'Florida': { top: '40%', left: '28%' },
+    'New York': { top: '34%', left: '29%' },
+    'New York City': { top: '34%', left: '29%' },
+    'NY': { top: '34%', left: '29%' },
+    'Nova York': { top: '34%', left: '29%' },
+    'Los Angeles': { top: '37%', left: '18%' },
+    'LA': { top: '37%', left: '18%' },
+    'San Francisco': { top: '36%', left: '17%' },
+    'California': { top: '36%', left: '18%' },
+    'Miami': { top: '40%', left: '28%' },
+    'Las Vegas': { top: '36%', left: '19%' },
+    'Chicago': { top: '34%', left: '26%' },
+    'Toronto': { top: '33%', left: '28%' },
+    'Vancouver': { top: '31%', left: '17%' },
+    'Canada': { top: '30%', left: '25%' },
+    'Mexico City': { top: '45%', left: '22%' },
+    'Mexico': { top: '45%', left: '22%' },
+    'Cancun': { top: '44%', left: '24%' },
+
+    // --- South America ---
+    'Rio de Janeiro': { top: '75%', left: '33%' },
+    'Rio': { top: '75%', left: '33%' },
+    'Sao Paulo': { top: '76%', left: '32%' },
+    'São Paulo': { top: '76%', left: '32%' },
+    'Brasil': { top: '70%', left: '30%' },
+    'Brazil': { top: '70%', left: '30%' },
+    'Buenos Aires': { top: '82%', left: '30%' },
+    'Argentina': { top: '82%', left: '30%' },
+    'Bariloche': { top: '85%', left: '28%' },
+    'Santiago': { top: '80%', left: '28%' },
+    'Chile': { top: '80%', left: '28%' },
+    'Lima': { top: '65%', left: '28%' },
+    'Peru': { top: '65%', left: '28%' },
+    'Cusco': { top: '66%', left: '29%' },
+    'Bogota': { top: '55%', left: '28%' },
+    'Colombia': { top: '55%', left: '28%' },
+
+    // --- Europe ---
+    'London': { top: '30%', left: '48.5%' },
+    'Londres': { top: '30%', left: '48.5%' },
+    'UK': { top: '29%', left: '48%' },
+    'Paris': { top: '32%', left: '49%' },
+    'France': { top: '33%', left: '49%' },
+    'França': { top: '33%', left: '49%' },
+    'Rome': { top: '37%', left: '51%' },
+    'Roma': { top: '37%', left: '51%' },
+    'Italy': { top: '38%', left: '51%' },
+    'Itália': { top: '38%', left: '51%' },
+    'Venice': { top: '36%', left: '51.5%' },
+    'Veneza': { top: '36%', left: '51.5%' },
+    'Milan': { top: '35%', left: '50.5%' },
+    'Milão': { top: '35%', left: '50.5%' },
+    'Barcelona': { top: '37%', left: '49%' },
+    'Madrid': { top: '37%', left: '48%' },
+    'Spain': { top: '37%', left: '48%' },
+    'Espanha': { top: '37%', left: '48%' },
+    'Lisbon': { top: '38%', left: '47%' },
+    'Lisboa': { top: '38%', left: '47%' },
+    'Portugal': { top: '38%', left: '47%' },
+    'Amsterdam': { top: '31%', left: '50%' },
+    'Netherlands': { top: '31%', left: '50%' },
+    'Holanda': { top: '31%', left: '50%' },
+    'Berlin': { top: '31%', left: '51%' },
+    'Berlim': { top: '31%', left: '51%' },
+    'Munich': { top: '33%', left: '51%' },
+    'Germany': { top: '32%', left: '51%' },
+    'Alemanha': { top: '32%', left: '51%' },
+    'Prague': { top: '32%', left: '52%' },
+    'Praga': { top: '32%', left: '52%' },
+    'Vienna': { top: '33%', left: '52%' },
+    'Viena': { top: '33%', left: '52%' },
+    'Zurich': { top: '33%', left: '50.5%' },
+    'Suíça': { top: '33%', left: '50.5%' },
+    'Athens': { top: '38%', left: '54%' },
+    'Atenas': { top: '38%', left: '54%' },
+    'Greece': { top: '38%', left: '54%' },
+    'Grécia': { top: '38%', left: '54%' },
+    'Santorini': { top: '39%', left: '54.5%' },
+    'Istanbul': { top: '37%', left: '55%' },
+    'Istambul': { top: '37%', left: '55%' },
+    'Moscow': { top: '25%', left: '58%' },
+    'Moscou': { top: '25%', left: '58%' },
+    'Russia': { top: '25%', left: '65%' },
+    'Stockholm': { top: '25%', left: '52%' },
+    'Estocolmo': { top: '25%', left: '52%' },
+    'Dublin': { top: '30%', left: '47%' },
+    'Ireland': { top: '30%', left: '47%' },
+    'Reykjavik': { top: '20%', left: '45%' },
+    'Iceland': { top: '20%', left: '45%' },
+
+    // --- Asia / Middle East ---
+    'Tokyo': { top: '35%', left: '82%' },
+    'Tokyo, Japan': { top: '35%', left: '82%' },
+    'Tokio': { top: '35%', left: '82%' },
+    'Japan': { top: '35%', left: '82%' },
+    'Japão': { top: '35%', left: '82%' },
+    'Kyoto': { top: '36%', left: '81.5%' },
+    'Osaka': { top: '36%', left: '81.5%' },
+    'Seoul': { top: '35%', left: '79%' },
+    'Seul': { top: '35%', left: '79%' },
+    'South Korea': { top: '35%', left: '79%' },
+    'Coreia do Sul': { top: '35%', left: '79%' },
+    'Beijing': { top: '33%', left: '76%' },
+    'Pequim': { top: '33%', left: '76%' },
+    'Shanghai': { top: '38%', left: '77%' },
+    'Xangai': { top: '38%', left: '77%' },
+    'China': { top: '35%', left: '75%' },
+    'Hong Kong': { top: '42%', left: '76%' },
+    'Bangkok': { top: '48%', left: '73%' },
+    'Thailand': { top: '48%', left: '73%' },
+    'Tailândia': { top: '48%', left: '73%' },
+    'Singapore': { top: '53%', left: '74%' },
+    'Singapura': { top: '53%', left: '74%' },
+    'Bali': { top: '60%', left: '78%' },
+    'Indonesia': { top: '58%', left: '77%' },
+    'Indonésia': { top: '58%', left: '77%' },
+    'Mumbai': { top: '45%', left: '65%' },
+    'New Delhi': { top: '40%', left: '66%' },
+    'India': { top: '42%', left: '66%' },
+    'Maldives': { top: '55%', left: '65%' },
+    'Maldivas': { top: '55%', left: '65%' },
+    'Vietnam': { top: '46%', left: '75%' },
+    'Dubai': { top: '42%', left: '58%' },
+    'Dubai, UAE': { top: '42%', left: '58%' },
+    'UAE': { top: '42%', left: '58%' },
+    'Abu Dhabi': { top: '42.5%', left: '57.5%' },
+    'Jerusalem': { top: '40%', left: '56%' },
+    'Tel Aviv': { top: '40%', left: '56%' },
+    'Israel': { top: '40%', left: '56%' },
+    'Doha': { top: '43%', left: '59%' },
+
+    // --- Africa ---
+    'Cairo': { top: '40%', left: '55%' },
+    'Egypt': { top: '40%', left: '55%' },
+    'Cape Town': { top: '82%', left: '53%' },
+    'Cidade do Cabo': { top: '82%', left: '53%' },
+    'South Africa': { top: '80%', left: '54%' },
+    'Marrakech': { top: '39%', left: '46%' },
+    'Morocco': { top: '39%', left: '46%' },
+
+    // --- Oceania ---
+    'Sydney': { top: '85%', left: '92%' },
+    'Australia': { top: '80%', left: '88%' },
+    'Austrália': { top: '80%', left: '88%' },
+    'Melbourne': { top: '86%', left: '90%' },
+    'Auckland': { top: '87%', left: '96%' },
+    'New Zealand': { top: '88%', left: '95%' },
+    'Nova Zelândia': { top: '88%', left: '95%' },
+    'Fiji': { top: '75%', left: '97%' }
+
+  };
+
+  const destinations = trips
+    .filter(t => t.destination) // Ensure destination exists
+    .map((trip, idx) => {
+      // Try to find exact match or partial match
+      const cityKey = Object.keys(cityCoordinates).find(key =>
+        trip.destination.includes(key) || key.includes(trip.destination)
+      );
+
+      const position = cityKey ? cityCoordinates[cityKey] : { top: '50%', left: '50%' }; // Default to center if unknown
+
+      // Determine continent roughly (fallback)
+      let continent = 'Unknown';
+      if (position.left < '30%') continent = 'Americas';
+      else if (position.left > '60%') continent = 'Asia/Oceania';
+      else if (position.top > '50%') continent = 'Africa/South America';
+      else continent = 'Europe';
+
+      return {
+        id: trip.id,
+        name: trip.destination,
+        country: trip.destination.split(',')[1] || 'Unknown',
+        continent: continent,
+        dates: `${new Date(trip.start_date).toLocaleDateString()} - ${new Date(trip.end_date).toLocaleDateString()}`,
+        travelers: trip.travelers || 1,
+        places: trip.places?.length || 0,
+        color: ['blue', 'purple', 'orange', 'green', 'pink', 'cyan', 'yellow', 'red'][idx % 8],
+        position: position,
+        image: trip.cover_image || `https://readdy.ai/api/search-image?query=${encodeURIComponent(trip.destination)}%20travel%20landmark&width=400&height=300&orientation=landscape`,
+        isUnknownLocation: !cityKey // Flag to maybe hide or style differently
+      };
+    })
+    // Filter out unknown locations if you want to avoid clustering at center, 
+    // OR keep them to show the user their trip IS there even if map is generic.
+    // For now, let's keep them but maybe the user will see they are in the middle of the ocean.
+    // Actually, let's filter only valid coordinates to avoid "middle of ocean" clustering which looks broken.
+    .filter(d => !d.isUnknownLocation);
+
+
 
   const handleTripClick = (trip: Trip) => {
     setSelectedTrip(trip);
     setIsPlanningModalOpen(true);
   };
 
-  const filteredTrips = filterStatus === 'all'
-    ? trips
-    : trips.filter(trip => trip.status === filterStatus);
+  const filteredTrips = trips.filter(trip => {
+    if (filterStatus === 'all') return true;
+    if (filterStatus === 'shared') {
+      return trip.isShared || (trip.sharedWith && trip.sharedWith.length > 0) || trip.marketplaceConfig?.isListed;
+    }
+    return trip.status === filterStatus;
+  });
 
   const renderTripsContent = () => (
     <>
 
 
-      {/* Filter Buttons Carousel */}
-      <div className="mb-6 overflow-x-auto scrollbar-hide">
-        <div className="flex gap-3 pb-2">
-          <button
-            onClick={() => setFilterStatus('all')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${filterStatus === 'all'
-              ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
-              : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-          >
-            <i className="ri-map-pin-line text-lg"></i>
-            <span className="font-semibold">{trips.length}</span>
-          </button>
-
-          <button
-            onClick={() => setFilterStatus('completed')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${filterStatus === 'completed'
-              ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
-              : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-          >
-            <i className="ri-checkbox-circle-line text-lg"></i>
-            <span className="font-semibold">{trips.filter(t => t.status === 'completed').length}</span>
-          </button>
-
-          <button
-            onClick={() => setFilterStatus('planning')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${filterStatus === 'planning'
-              ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg'
-              : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-          >
-            <i className="ri-calendar-line text-lg"></i>
-            <span className="font-semibold">{trips.filter(t => t.status === 'planning').length}</span>
-          </button>
-
-          <button
-            onClick={() => setFilterStatus('shared')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all ${filterStatus === 'shared'
-              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-              : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-          >
-            <i className="ri-share-line text-lg"></i>
-            <span className="font-semibold">{trips.filter(t => t.isShared).length}</span>
-          </button>
-        </div>
+      {/* Trip list header with search/sort if needed */}
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-bold text-gray-900">
+          {filterStatus === 'all' ? 'Todas as Viagens' :
+            filterStatus === 'completed' ? 'Viagens Concluídas' :
+              filterStatus === 'planning' ? 'Planejando' : 'Viagens Compartilhadas'}
+        </h3>
       </div>
 
       {/* Trips Grid */}
@@ -1085,14 +1130,16 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
                   )}
                 </div>
 
-                {/* Delete Button */}
-                <button
-                  onClick={(e) => handleDeleteTrip(e, trip)}
-                  className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-red-500/80 text-white hover:bg-red-600 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-lg translate-y-2 group-hover:translate-y-0"
-                  title="Excluir Viagem"
-                >
-                  <i className="ri-delete-bin-line"></i>
-                </button>
+                {/* Delete Button - Only for Owners/Admins */}
+                {trip.permissions === 'admin' && (
+                  <button
+                    onClick={(e) => handleDeleteTrip(e, trip)}
+                    className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-red-500/80 text-white hover:bg-red-600 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-lg translate-y-2 group-hover:translate-y-0"
+                    title="Excluir Viagem"
+                  >
+                    <i className="ri-delete-bin-line"></i>
+                  </button>
+                )}
 
 
 
@@ -1205,17 +1252,19 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
                   >
                     <i className="ri-edit-line text-lg"></i>
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedTrip(trip);
-                      setShowShareModal(true);
-                    }}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
-                    title="Compartilhar Viagem"
-                  >
-                    <i className="ri-share-forward-line text-lg"></i>
-                  </button>
+                  {trip.permissions === 'admin' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTrip(trip);
+                        setShowShareModal(true);
+                      }}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+                      title="Compartilhar Viagem"
+                    >
+                      <i className="ri-share-forward-line text-lg"></i>
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -2127,179 +2176,70 @@ export default function MyTripsTab({ onCreateTrip }: { onCreateTrip?: () => void
           <p className="text-gray-600 text-sm mt-1">Gerencie e compartilhe seus roteiros</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setActiveSubTab('newtrip')}
-            className="px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl shadow-md flex items-center gap-2 text-sm font-medium whitespace-nowrap hover:shadow-lg transition-all"
-          >
-            <i className="ri-add-circle-line text-lg"></i>
-            Nova Viagem
-          </button>
-          <button className="px-4 py-2 bg-white border border-gray-200 rounded-xl hover:border-orange-300 transition-all flex items-center gap-2 text-sm whitespace-nowrap">
-            <i className="ri-filter-line"></i>
-            Filtrar
-          </button>
         </div>
       </div>
 
-      {/* Sub Tabs */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-2">
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-
+      {/* Unified Navigation Row */}
+      <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide py-1">
+        {/* Trip Filters */}
+        {[
+          { id: 'all', icon: 'ri-map-pin-line', label: 'Todas', color: 'blue', count: trips.length },
+          { id: 'completed', icon: 'ri-checkbox-circle-line', label: 'Concluídas', color: 'green', count: trips.filter(t => t.status === 'completed').length },
+          { id: 'planning', icon: 'ri-calendar-line', label: 'Planejando', color: 'orange', count: trips.filter(t => t.status === 'planning').length },
+          { id: 'shared_filter', icon: 'ri-share-line', label: 'Compartilhadas', color: 'purple', count: trips.filter(t => t.isShared || (t.sharedWith && t.sharedWith.length > 0) || t.marketplaceConfig?.isListed).length },
+        ].map(filter => (
           <button
-            onClick={() => setActiveSubTab('trips')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'trips' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+            key={filter.id}
+            onClick={() => {
+              setActiveSubTab('trips');
+              setFilterStatus(filter.id === 'shared_filter' ? 'shared' : filter.id as any);
+            }}
+            className={`flex items-center justify-center w-12 h-12 rounded-2xl transition-all shadow-sm border relative group ${activeSubTab === 'trips' && (filter.id === 'shared_filter' ? filterStatus === 'shared' : filterStatus === filter.id)
+              ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white border-transparent shadow-md scale-105'
+              : 'bg-white text-gray-600 border-gray-100 hover:border-orange-200 hover:bg-orange-50'
               }`}
+            title={filter.label}
           >
-            <i className="ri-map-pin-line"></i>
-            <span className="text-sm font-medium">Viagens</span>
+            <i className={`${filter.icon} text-xl`}></i>
+            {filter.count > 0 && (
+              <span className={`absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold shadow-sm ${activeSubTab === 'trips' && (filter.id === 'shared_filter' ? filterStatus === 'shared' : filterStatus === filter.id)
+                ? 'bg-white text-gray-900'
+                : 'bg-gray-100 text-gray-600'
+                }`}>
+                {filter.count}
+              </span>
+            )}
           </button>
+        ))}
 
+        {/* Separator */}
+        <div className="w-px h-8 bg-gray-200 mx-1 flex-shrink-0"></div>
+
+        {/* Other Sections (Subtabs) */}
+        {[
+          { id: 'stats', icon: 'ri-bar-chart-line', label: 'Estatísticas' },
+          { id: 'maps', icon: 'ri-map-2-line', label: 'Mapas' },
+          { id: 'goals', icon: 'ri-trophy-line', label: 'Metas' },
+          { id: 'suggestions', icon: 'ri-lightbulb-line', label: 'Sugestões' },
+          { id: 'retrospectives', icon: 'ri-movie-2-line', label: 'Retrospectivas' },
+        ].map(item => (
           <button
-            onClick={() => setActiveSubTab('shared')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'shared' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+            key={item.id}
+            onClick={() => setActiveSubTab(activeSubTab === item.id ? 'trips' : item.id as any)}
+            className={`flex items-center justify-center w-12 h-12 rounded-2xl transition-all shadow-sm border ${activeSubTab === item.id
+              ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white border-transparent shadow-md scale-105'
+              : 'bg-white text-gray-600 border-gray-100 hover:border-orange-200 hover:bg-orange-50'
               }`}
+            title={item.label}
           >
-            <i className="ri-group-line"></i>
-            <span className="text-sm font-medium">Compartilhadas</span>
+            <i className={`${item.icon} text-xl`}></i>
           </button>
-
-
-          <button
-            onClick={() => setActiveSubTab('stats')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'stats' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-              }`}
-          >
-            <i className="ri-bar-chart-line"></i>
-            <span className="text-sm font-medium">Estatísticas</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('maps')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'maps' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-              }`}
-          >
-            <i className="ri-map-2-line"></i>
-            <span className="text-sm font-medium">Mapas</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('goals')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'goals' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-              }`}
-          >
-            <i className="ri-trophy-line"></i>
-            <span className="text-sm font-medium">Metas</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('suggestions')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'suggestions' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-              }`}
-          >
-            <i className="ri-lightbulb-line"></i>
-            <span className="text-sm font-medium">Sugestões</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('retrospectives')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${activeSubTab === 'retrospectives' ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-              }`}
-          >
-            <i className="ri-movie-2-line"></i>
-            <span className="text-sm font-medium">Retrospectivas</span>
-          </button>
-        </div>
+        ))}
       </div>
 
       {/* Content */}
       {activeSubTab === 'trips' && renderTripsContent()}
-      {activeSubTab === 'shared' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {trips.filter(t => t.isShared).length > 0 ? (
-            trips.filter(t => t.isShared).map(trip => {
-              const statusBadge = getStatusBadge(trip.status);
-              const daysUntil = getDaysUntilTrip(trip.start_date);
-              const pendingCount = getPendingSuggestionsCount(trip);
 
-              return (
-                <div
-                  key={trip.id}
-                  onClick={() => handleTripClick(trip)}
-                  className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group border-2 border-purple-100"
-                >
-                  {/* Cover Image */}
-                  <div className="relative h-48 overflow-hidden">
-                    <img
-                      src={
-                        trip.cover_image ||
-                        `https://readdy.ai/api/search-image?query=${trip.destination}%20beautiful%20travel%20destination%20scenic%20view&width=400&height=300&seq=trip-${trip.id}&orientation=landscape`
-                      }
-                      alt={trip.title}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
-
-                    <div className="absolute top-3 right-3">
-                      <div className="px-3 py-1 bg-purple-500 text-white rounded-full text-xs font-bold shadow-lg flex items-center gap-1">
-                        <i className="ri-group-line"></i>
-                        Compartilhada Comigo
-                      </div>
-                    </div>
-
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <h3 className="text-white font-bold text-lg mb-1">{trip.title}</h3>
-                      <div className="flex items-center gap-2 text-white/90 text-sm">
-                        <i className="ri-map-pin-line"></i>
-                        <span>{trip.destination}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-4">
-                    <div className="flex items-center gap-3 mb-4">
-                      {trip.owner?.avatar_url ? (
-                        <img src={trip.owner.avatar_url} alt={trip.owner.full_name} className="w-8 h-8 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold">
-                          {(trip.owner?.full_name || 'U').substring(0, 2).toUpperCase()}
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-xs text-gray-500">Compartilhado por</p>
-                        <p className="text-sm font-semibold text-gray-900">{trip.owner?.full_name || 'Usuário Desconhecido'}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium text-sm">
-                        Visualizar
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleLeaveTrip(trip);
-                        }}
-                        className="px-4 py-2 bg-red-50 text-red-500 rounded-lg font-medium text-sm hover:bg-red-100 transition-colors border border-red-100"
-                        title="Sair desta viagem"
-                      >
-                        <i className="ri-logout-box-r-line"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="col-span-3 text-center py-12 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <i className="ri-group-line text-3xl text-purple-500"></i>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Nenhuma viagem compartilhada</h3>
-              <p className="text-gray-600">Viagens compartilhadas com você aparecerão aqui.</p>
-            </div>
-          )}
-        </div>
-      )}
       {activeSubTab === 'newtrip' && (
         <CreateTripForm
           onCancel={() => {

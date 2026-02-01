@@ -53,6 +53,7 @@ const parseLocalDate = (dateStr: string) => {
 
 export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated }: TripPlanningModalProps) {
   const { user } = useAuth();
+  const isAdmin = trip.permissions === 'admin';
 
   // Calcular número de dias da viagem (Moved to top for scope access)
   const startDate = parseLocalDate(trip.start_date);
@@ -192,6 +193,13 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
         `;
       }
 
+      // 5.1 Build Existing Itinerary Context (To avoid duplicates)
+      const existingItems = Object.values(itinerary).flat().map(item => item.title).join(", ");
+      const existingContext = existingItems ? `
+          JÁ AGENDADO (NÃO REPETIR ESTES LOCAIS):
+          ${existingItems}
+      ` : "";
+
       const dayLabels = daysToGenerate.map(idx => {
         if (idx === PRE_TRIP_INDEX) return { idx, label: 'Pré-Viagem (Checklists)' };
         if (idx === POST_TRIP_INDEX) return { idx, label: 'Pós-Viagem' };
@@ -200,40 +208,42 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
 
       // 6. Build Prompts
       const systemInstruction = `
-          ATUE COMO: "SARA" - Agente de Viagens Senior.
-          DESTINO: ${trip.destination}.
+          ATUE COMO: Um ESCPECIALISTA LOCAL nativo de ${trip.destination}. Você conhece os segredos, os melhores horários e a logística da cidade como ninguém.
           
-          OBJETIVO: Gerar um roteiro prontos para uso, sem necessidade de revisão.
+          OBJETIVO: Gerar um roteiro profissional, lógico e imersivo para os dias solicitados.
           
-          REGRAS DE LOGÍSTICA (Obrigatório para Dias Relevantes):
-          - Dia 1: Incluir "Chegada/Transfer" e "Check-in".
-          - Último Dia: Incluir "Check-out" e "Transfer Aeroporto".
-          - Transporte: Sugira como se locomover no destino.
+          REGRAS DE LOGÍSTICA (IMPORTANTE):
+          - NÃO sugira atividades que colidam com itens já agendados.
+          - Se for múltiplos dias, crie uma narrativa coesa (ex: "Dia Cultural" seguido de "Dia de Natureza").
+          - Para 'Dia 1': Incluir "Chegada/Transfer" e "Check-in" se não houver.
+          - Para 'Último Dia': Incluir "Check-out" e preparação para partida.
           
           REGRAS DE QUALIDADE:
-          - NÃO repita locais.
-          - NÃO sugira atrações fechadas no horário/dia (estime).
-          - Varie os tipos (Cultura, Lazer, Gastronomia).
+          - NÃO repita locais listados em "JÁ AGENDADO".
+          - Otimize a rota: Agrupe atrações vizinhas.
+          - Considere o tempo de deslocamento real na cidade.
           
           ${prefsContext}
+
+          ${existingContext}
 
           IDS DOS DIAS PARA PREENCHER:
           ${dayLabels.map(d => `${d.idx} (${d.label})`).join(', ')}
       `;
 
       const userPrompt = `
-          Gere a lista final de atividades para estes dias.
+          Gere a lista detalhada de atividades para estes dias.
           
           FORMATO JSON ESTRITO (Array):
           [
             {
                 "title": "Nome Curto e Claro",
-                "description": "Por que ir? (1 frase)",
+                "description": "Por que ir? (Dica de especialista)",
                 "time": "HH:MM",
                 "type": "activity" | "restaurant" | "transport" | "accommodation",
                 "price": "R$ Estimado",
                 "suggestedDayId": number (Obrigatório: ID do dia correspondente),
-                "notes": "Dica rápida"
+                "notes": "Dica logística (ex: 'Melhor ir de metrô')"
             }
           ]
       `;
@@ -247,10 +257,11 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
       const jsonStr = match ? match[1] : text.replace(/^[\s\S]*?\[/, '[').replace(/\][\s\S]*?$/, ']');
       const items: any[] = JSON.parse(jsonStr);
 
-      // 9. Process & Save DIRECTLY (Bypassing Preview)
+      // 9. Process & Save
       // Immutable Copy: Avoid mutating state references
       const nextState = { ...itinerary };
       let addedCount = 0;
+      const suggestionsToAdd: any[] = [];
 
       items.forEach(item => {
         const dIdx = typeof item.suggestedDayId === 'number' ? item.suggestedDayId : activeDayIndex;
@@ -261,50 +272,85 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
         const isDupe = currentDayActivities.some(a => a.title.toLowerCase() === item.title.toLowerCase());
 
         if (!isDupe) {
-          currentDayActivities.push({
+          const newActivityData = {
             id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
             title: item.title,
             description: item.description,
             time: item.time,
             type: item.type || 'activity',
-            status: 'confirmed', // Auto-confirm
+            status: 'confirmed' as const, // Auto-confirm for owner, pending if suggestion?
             price: item.price,
             notes: item.notes,
             icon: activityTypes.find(t => t.id === item.type)?.icon || 'ri-map-pin-line'
-          });
+          };
+
+          if (isAdmin) {
+            currentDayActivities.push(newActivityData);
+            nextState[dIdx] = currentDayActivities;
+          } else {
+            suggestionsToAdd.push({
+              type: 'add_place',
+              description: `Sugerido pela IA: ${item.title}`,
+              data: { ...newActivityData, suggestedDayId: dIdx }
+            });
+          }
           addedCount++;
-
-          // Reassign modified array
-          nextState[dIdx] = currentDayActivities;
         }
       });
 
-      // Sort chronological
-      Object.keys(nextState).forEach(k => {
-        const key = Number(k);
-        if (nextState[key]) {
-          nextState[key].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      if (isAdmin) {
+        // Sort chronological
+        Object.keys(nextState).forEach(k => {
+          const key = Number(k);
+          if (nextState[key]) {
+            nextState[key].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+          }
+        });
+
+        console.log("Saving generated itinerary to Supabase...", nextState);
+
+        // Update Local State
+        setItinerary(nextState);
+
+        // Update Database & Sync
+        const updatedTrip = await updateTrip(trip.id, { itinerary: nextState });
+
+        if (onTripUpdated) {
+          onTripUpdated(updatedTrip);
         }
-      });
 
-      console.log("Saving generated itinerary to Supabase...", nextState);
-
-      // Update Local State
-      setItinerary(nextState);
-
-      // Update Database & Sync
-      // Use the RETURNED trip from updateTrip to ensure we have confirmed DB state
-      const updatedTrip = await updateTrip(trip.id, { itinerary: nextState });
-
-      // Notify Parent with CONFIRMED data from DB
-      if (onTripUpdated) {
-        onTripUpdated(updatedTrip);
+        alert(` ✨ Roteiro Gerado e Salvo com Sucesso! \n\n${addedCount} atividades foram adicionadas ao seu planejamento.`);
       } else {
-        console.warn("onTripUpdated handler missing, parent state might be stale.");
-      }
+        // Handle Suggestions for Collaborators
+        if (suggestionsToAdd.length > 0) {
+          const newSuggestions = suggestionsToAdd.map(s => ({
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            tripId: trip.id,
+            userId: user?.id || 'unknown',
+            userName: user?.user_metadata?.full_name || user?.email || 'Collaborator',
+            userAvatar: user?.user_metadata?.avatar_url || '',
+            type: s.type as any,
+            description: s.description,
+            data: s.data,
+            status: 'pending' as const,
+            createdAt: new Date().toISOString(),
+            comments: []
+          }));
 
-      // 10. Feedback
-      alert(` ✨ Roteiro Gerado e Salvo com Sucesso! \n\n${addedCount} atividades foram adicionadas ao seu planejamento.`);
+          const updatedMetadata = {
+            ...trip.metadata,
+            pendingSuggestions: [...(trip.metadata?.pendingSuggestions || []), ...newSuggestions]
+          };
+
+          const updatedTrip = await updateTrip(trip.id, { metadata: updatedMetadata });
+
+          if (onTripUpdated) {
+            onTripUpdated(updatedTrip);
+          }
+
+          alert(` ✨ Sugestões de Ajuste Enviadas! \n\n${addedCount} novas sugestões foram enviadas para aprovação do proprietário.`);
+        }
+      }
 
     } catch (error) {
       console.error("AI Generation Error:", error);
@@ -725,6 +771,9 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
 
   // Save to Supabase whenever itinerary changes
   useEffect(() => {
+    // Skip if not admin (collaborators should only suggest)
+    if (!isAdmin) return;
+
     // Skip initial mount if empty
     if (Object.keys(itinerary).length === 0 && !trip.itinerary) return;
 
@@ -744,17 +793,19 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
         });
     }, 1000); // 1s debounce
     return () => clearTimeout(timer);
-  }, [itinerary, trip.id]);
+  }, [itinerary, trip.id, isAdmin]);
 
 
 
   const handleClose = async () => {
-    // Ensure we save before closing
-    try {
-      const updatedTrip = await updateTrip(trip.id, { itinerary });
-      if (onTripUpdated) onTripUpdated(updatedTrip);
-    } catch (error) {
-      console.error('Error saving on close:', error);
+    // Ensure we save before closing (only for admins)
+    if (isAdmin) {
+      try {
+        const updatedTrip = await updateTrip(trip.id, { itinerary });
+        if (onTripUpdated) onTripUpdated(updatedTrip);
+      } catch (error) {
+        console.error('Error saving on close:', error);
+      }
     }
     onClose();
   };
@@ -873,6 +924,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
   };
 
   const handleStartEditing = (activity: Activity) => {
+    if (!isAdmin) return;
     setNewActivity({
       title: activity.title,
       description: activity.description,
@@ -890,6 +942,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
 
 
   const updateActivityStatus = (dayIndex: number, activityId: string, newStatus: Activity['status']) => {
+    if (!isAdmin) return;
     setItinerary(prev => ({
       ...prev,
       [dayIndex]: prev[dayIndex].map(act => act.id === activityId ? { ...act, status: newStatus } : act)
@@ -897,6 +950,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
   };
 
   const deleteActivity = (dayIndex: number, activityId: string, e?: React.MouseEvent) => {
+    if (!isAdmin) return;
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -1328,6 +1382,16 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
             </div>
           </div>
 
+          {/* Suggestion Mode Banner */}
+          {!isAdmin && (
+            <div className="mx-6 mb-4 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-3 text-blue-700">
+              <i className="ri-information-line text-xl"></i>
+              <div className="text-sm">
+                <span className="font-bold">Modo de Sugestão Ativado:</span> Como colaborador, você pode sugerir alterações e usar a IA, mas as mudanças precisam ser aprovadas pelo proprietário.
+              </div>
+            </div>
+          )}
+
           {/* Day Header & Actions */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1365,13 +1429,15 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
                   </>
                 )}
               </button>
-              <button
-                onClick={() => setIsAddingActivity(true)}
-                className="w-10 h-10 bg-blue-600 text-white rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-                title="Adicionar Item"
-              >
-                <i className="ri-add-line text-xl"></i>
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setIsAddingActivity(true)}
+                  className="w-10 h-10 bg-blue-600 text-white rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                  title="Adicionar Item"
+                >
+                  <i className="ri-add-line text-xl"></i>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1384,12 +1450,14 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
                 </div>
                 <p className="font-medium">Nenhuma atividade planejada</p>
                 <p className="text-sm text-gray-400 mb-4">Adicione itens ou gere um roteiro com IA</p>
-                <button
-                  onClick={() => setIsAddingActivity(true)}
-                  className="text-blue-600 font-semibold hover:underline text-sm"
-                >
-                  + Adicionar primeira atividade
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setIsAddingActivity(true)}
+                    className="text-blue-600 font-semibold hover:underline text-sm"
+                  >
+                    + Adicionar primeira atividade
+                  </button>
+                )}
               </div>
             ) : (
               dayActivities.map((activity) => {
@@ -1501,22 +1569,24 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
                         <h4 className={`font-bold text-gray-900 ${isChecked ? 'line-through text-gray-400' : ''}`}>{activity.title}</h4>
                         <p className="text-sm text-gray-500">{activity.description}</p>
                       </div>
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleStartEditing(activity)}
-                          className="w-8 h-8 rounded-full bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 flex items-center justify-center transition-colors"
-                          title="Editar"
-                        >
-                          <i className="ri-pencil-line"></i>
-                        </button>
-                        <button
-                          onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
-                          className="w-8 h-8 rounded-full bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 flex items-center justify-center transition-colors"
-                          title="Excluir"
-                        >
-                          <i className="ri-delete-bin-line"></i>
-                        </button>
-                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleStartEditing(activity)}
+                            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 flex items-center justify-center transition-colors"
+                            title="Editar"
+                          >
+                            <i className="ri-pencil-line"></i>
+                          </button>
+                          <button
+                            onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
+                            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 flex items-center justify-center transition-colors"
+                            title="Excluir"
+                          >
+                            <i className="ri-delete-bin-line"></i>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 }
@@ -1555,26 +1625,28 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
                           </div>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={() => handleStartEditing(activity)}
-                          className="text-gray-400 hover:text-blue-500 transition-colors p-1"
-                          title="Editar"
-                        >
-                          <i className="ri-pencil-line text-lg"></i>
-                        </button>
-                        <button
-                          onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
-                          className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                          title="Excluir"
-                        >
-                          <i className="ri-delete-bin-line text-lg"></i>
-                        </button>
-                      </div>
+                      {isAdmin && (
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => handleStartEditing(activity)}
+                            className="text-gray-400 hover:text-blue-500 transition-colors p-1"
+                            title="Editar"
+                          >
+                            <i className="ri-pencil-line text-lg"></i>
+                          </button>
+                          <button
+                            onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
+                            className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                            title="Excluir"
+                          >
+                            <i className="ri-delete-bin-line text-lg"></i>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Footer / Status Selector */}
-                    <div className="flex gap-2 mt-4 pt-3 border-t border-gray-200/50">
+                    <div className={`flex gap-2 mt-4 pt-3 border-t border-gray-200/50 ${!isAdmin ? 'opacity-70 pointer-events-none' : ''}`}>
                       <button
                         onClick={() => updateActivityStatus(activeDayIndex, activity.id, 'not_reserved')}
                         className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activity.status === 'not_reserved'

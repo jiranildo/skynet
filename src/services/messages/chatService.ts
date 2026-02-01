@@ -204,6 +204,51 @@ export const sendMessage = async (
         });
     }
 
+    // 3. Group/Community Notifications
+    if (params.groupId) {
+        // Fetch group members to notify
+        const { data: members } = await supabase
+            .from('group_members')
+            .select('user_id')
+            .eq('group_id', params.groupId)
+            .eq('status', 'accepted')
+            .neq('user_id', user.id); // Don't notify self
+
+        if (members && members.length > 0) {
+            const notifications = members.map(m => ({
+                user_id: m.user_id,
+                type: 'message',
+                related_user_id: user.id,
+                title: 'Nova mensagem no grupo',
+                message: params.content,
+                is_read: false,
+                // optional: link to group
+            }));
+            await supabase.from('notifications').insert(notifications);
+        }
+    } else if (params.communityId) {
+        // Fetch community members to notify
+        // Warning: This could be large for big communities.
+        const { data: members } = await supabase
+            .from('community_members')
+            .select('user_id')
+            .eq('community_id', params.communityId)
+            .eq('status', 'accepted')
+            .neq('user_id', user.id);
+
+        if (members && members.length > 0) {
+            const notifications = members.map(m => ({
+                user_id: m.user_id,
+                type: 'message',
+                related_user_id: user.id,
+                title: 'Nova mensagem na comunidade',
+                message: params.content,
+                is_read: false
+            }));
+            await supabase.from('notifications').insert(notifications);
+        }
+    }
+
     // Update last_message
     const now = new Date().toISOString();
     let lastMsgText = params.content;

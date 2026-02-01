@@ -659,10 +659,14 @@ export default function MarketplaceTab() {
                   <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Preço</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-gray-900">{item.price}</span>
-                        <span className="text-sm font-semibold text-yellow-600">TM</span>
-                      </div>
+                      {item.price === 0 ? (
+                        <span className="text-2xl font-bold text-green-600">Gratuito</span>
+                      ) : (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-2xl font-bold text-gray-900">{item.price}</span>
+                          <span className="text-sm font-semibold text-yellow-600">TM</span>
+                        </div>
+                      )}
                     </div>
                     <button className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg transition-all whitespace-nowrap">
                       Ver Detalhes

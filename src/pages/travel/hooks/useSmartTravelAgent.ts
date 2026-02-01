@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 type SearchContext = 'NEARBY' | 'EXPLORE_COUNTRY' | 'DESTINATION_DISCOVERY' | 'SPECIFIC_CATEGORY' | 'MANUAL_PLACE';
 
 interface TravelAgentState {
-    userLocation: { name: string; country: string; coords: { lat: number; lon: number } | null };
+    userLocation: { name: string; country: string; coords: { lat: number; lon: number } | null, types?: string[] };
     results: any[];
     isLoading: boolean;
     hasSearched: boolean;
@@ -108,15 +108,26 @@ export const useSmartTravelAgent = () => {
 
             // Reverse Geocode
             try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
                 const data = await res.json();
 
                 const city = data.address.city || data.address.town || data.address.municipality || 'Sua Região';
                 const country = data.address.country || 'Brasil';
 
+                // Extract types/categories
+                const types = [];
+                if (data.type) types.push(data.type);
+                if (data.category) types.push(data.category);
+                if (data.addresstype) types.push(data.addresstype);
+
                 setState(prev => ({
                     ...prev,
-                    userLocation: { name: city, country: country, coords: { lat: latitude, lon: longitude } }
+                    userLocation: {
+                        name: data.name || city, // Prefer precise name if available (POI)
+                        country: country,
+                        coords: { lat: latitude, lon: longitude },
+                        types: types
+                    }
                 }));
             } catch (e) {
                 console.warn("Reverse Geo Error", e);

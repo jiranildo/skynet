@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import SearchTab from './components/SearchTab';
 import AISearchTab from './components/AISearchTab';
 import CreateTripModal from './components/CreateTripModal';
 import FlightsTab from './components/FlightsTab';
@@ -16,7 +15,6 @@ import FavoritesTab from './components/FavoritesTab';
 import OffersTab from './components/OffersTab';
 import MarketplaceTab from './components/MarketplaceTab';
 import BlogsTab from './components/BlogsTab';
-import MobileNav from '../home/components/MobileNav';
 import CreateMenu from '../../components/CreateMenu';
 import CreatePostModal from '../home/components/CreatePostModal';
 import NotificationsPanel from '../home/components/NotificationsPanel';
@@ -29,12 +27,12 @@ type TabType = 'search' | 'ai-search' | 'flights' | 'hotels' | 'packages' | 'car
 
 export default function TravelPage() {
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<TabType>('search');
+  const [activeTab, setActiveTab] = useState<TabType>('mytrips');
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
-    if (tabParam && ['search', 'ai-search', 'flights', 'hotels', 'packages', 'cars', 'cruises', 'tickets', 'transfer', 'insurance', 'mytrips', 'favorites', 'offers', 'marketplace', 'blogs'].includes(tabParam)) {
+    if (tabParam && ['ai-search', 'flights', 'hotels', 'packages', 'cars', 'cruises', 'tickets', 'transfer', 'insurance', 'mytrips', 'favorites', 'offers', 'marketplace', 'blogs'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     }
   }, [location.search]);
@@ -46,11 +44,11 @@ export default function TravelPage() {
   const [showGamification, setShowGamification] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [mytripsSubTab, setMytripsSubTab] = useState<string>('trips');
   const { refreshCounts } = useUnreadCounts();
 
   const tabs = [
-    { id: 'search', label: 'Buscar', icon: 'ri-search-line' },
-    { id: 'mytrips', label: 'Minhas Viagens', icon: 'ri-map-pin-user-line' },
+    { id: 'mytrips', label: 'Minhas Viagens', icon: 'ri-compass-3-line' },
     { id: 'marketplace', label: 'Marketplace', icon: 'ri-store-line' },
     { id: 'flights', label: 'Voos', icon: 'ri-flight-takeoff-line' },
     { id: 'hotels', label: 'Hotéis', icon: 'ri-hotel-line' },
@@ -78,7 +76,7 @@ export default function TravelPage() {
     if (option === 'post') {
       setShowCreatePost(true);
     } else if (option === 'travel') {
-      setActiveTab('search');
+      setActiveTab('mytrips');
     } else if (option === 'cellar') {
       window.REACT_APP_NAVIGATE('/cellar');
     } else if (option === 'food') {
@@ -87,12 +85,12 @@ export default function TravelPage() {
   };
 
   const handleExploreClick = () => {
-    setActiveTab('search');
+    setActiveTab('mytrips');
   };
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'search': return <AISearchTab />;
+
       case 'ai-search': return <AISearchTab />;
       case 'flights': return <FlightsTab />;
       case 'hotels': return <HotelsTab />;
@@ -102,12 +100,12 @@ export default function TravelPage() {
       case 'tickets': return <TicketsTab />;
       case 'transfer': return <TransferTab />;
       case 'insurance': return <InsuranceTab />;
-      case 'mytrips': return <MyTripsTab onCreateTrip={() => setShowCreateTripModal(true)} />;
+      case 'mytrips': return <MyTripsTab initialSubTab={mytripsSubTab} onCreateTrip={() => setShowCreateTripModal(true)} />;
       case 'favorites': return <FavoritesTab />;
       case 'offers': return <OffersTab />;
       case 'marketplace': return <MarketplaceTab />;
       case 'blogs': return <BlogsTab />;
-      default: return <SearchTab />;
+      default: return <MyTripsTab initialSubTab={mytripsSubTab} onCreateTrip={() => setShowCreateTripModal(true)} />;
     }
   };
 
@@ -209,6 +207,9 @@ export default function TravelPage() {
                 key={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id as TabType);
+                  if (tab.id === 'mytrips') {
+                    setMytripsSubTab('trips');
+                  }
                 }}
                 className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-full whitespace-nowrap transition-all text-xs md:text-sm ${activeTab === tab.id
                   ? 'bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 text-white shadow-md'
@@ -282,11 +283,14 @@ export default function TravelPage() {
           </button>
 
           <button
-            onClick={() => setActiveTab('mytrips')}
+            onClick={() => {
+              setActiveTab('mytrips');
+              setMytripsSubTab('newtrip');
+            }}
             className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
           >
-            <i className="ri-suitcase-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Minhas Viagens</span>
+            <i className="ri-add-box-line text-xl sm:text-2xl"></i>
+            <span className="text-[9px] sm:text-[10px] font-medium">Nova Viagem</span>
           </button>
 
           <div className="relative">
