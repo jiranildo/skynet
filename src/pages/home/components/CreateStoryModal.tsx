@@ -198,13 +198,19 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
 
                 if (files.length > 0) {
                     const newUrls = await uploadNewFiles('posts');
-                    finalMediaUrls = [...finalMediaUrls, ...newUrls]; // Appending
+                    // Filter existing remote URLs (not blob:...)
+                    const existingKeptUrls = previewUrls.filter(url => !url.startsWith('blob:'));
+                    finalMediaUrls = [...existingKeptUrls, ...newUrls];
+                } else {
+                    // No new files, just use whatever is left in previewUrls (filtered for safety)
+                    finalMediaUrls = previewUrls.filter(url => !url.startsWith('blob:'));
                 }
 
                 await updatePost(editingPost.id, {
                     caption,
                     location,
                     visibility: visibility as any,
+                    media_urls: finalMediaUrls
                 });
 
             } else {
@@ -241,9 +247,10 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
 
             onSuccess();
             onClose();
-        } catch (error) {
-            console.error('Error creating:', error);
-            showAlert('Erro', 'Erro ao criar publicação. Tente novamente.', 'danger');
+        } catch (error: any) {
+            console.error('Error creating post/story:', error);
+            console.error('Error details:', error?.message, error?.details, error?.hint);
+            showAlert('Erro', `Erro ao criar publicação: ${error?.message || 'Tente novamente.'}`, 'danger');
         } finally {
             setLoading(false);
         }
@@ -513,11 +520,22 @@ export default function CreateStoryModal({ onClose, onSuccess, initialTab = 'STO
                         {!activeTool && (
                             <button
                                 onClick={() => {
-                                    const newFiles = [...files];
-                                    newFiles.splice(activeIndex, 1);
+                                    // Logic to remove file correctly
+                                    const isNewFile = previewUrls[activeIndex].startsWith('blob:');
+
+                                    if (isNewFile) {
+                                        // It's in files array. Count how many new files (blobs) are BEFORE this index
+                                        let fileIndex = 0;
+                                        for (let i = 0; i < activeIndex; i++) {
+                                            if (previewUrls[i].startsWith('blob:')) fileIndex++;
+                                        }
+                                        const newFiles = [...files];
+                                        newFiles.splice(fileIndex, 1);
+                                        setFiles(newFiles);
+                                    }
+
                                     const newUrls = [...previewUrls];
                                     newUrls.splice(activeIndex, 1);
-                                    setFiles(newFiles);
                                     setPreviewUrls(newUrls);
                                     if (activeIndex >= newUrls.length) setActiveIndex(Math.max(0, newUrls.length - 1));
                                 }}

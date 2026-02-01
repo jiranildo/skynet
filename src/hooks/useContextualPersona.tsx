@@ -1,4 +1,5 @@
 import { useLocation } from 'react-router-dom';
+import { useSmartTravelAgent } from '@/pages/travel/hooks/useSmartTravelAgent';
 
 export type PersonaType = 'travel' | 'sommelier' | 'chef' | 'assistant';
 
@@ -158,6 +159,7 @@ export const personas: Record<PersonaType, PersonaConfig> = {
 
 export function useContextualPersona() {
     const location = useLocation();
+    const { userLocation } = useSmartTravelAgent();
     const path = location.pathname;
 
     let currentPersona: PersonaConfig;
@@ -167,9 +169,35 @@ export function useContextualPersona() {
     } else if (path.includes('/cellar')) {
         currentPersona = personas.sommelier;
     } else if (path.includes('/drinks-food')) {
-        currentPersona = personas.chef;
+        // Dynamic Chef Persona
+        const basePersona = personas.chef;
+
+        // Determine label based on location context
+        const isAtRestaurant = userLocation?.name && (userLocation.types?.includes('restaurant') || userLocation.types?.includes('food'));
+        const dynamicText = isAtRestaurant
+            ? `Menu do ${userLocation.name}` // Specific context
+            : 'Buscar Restaurantes Próximos'; // General
+
+        const restaurantSuggestion: SuggestionItem = {
+            icon: 'ri-map-pin-2-line',
+            text: dynamicText,
+            description: isAtRestaurant ? 'Ver informações deste local' : 'Encontrar opções perto de você',
+            keywords: isAtRestaurant
+                ? ['menu', 'cardápio', 'informação', userLocation.name]
+                : ['restaurantes', 'próximos', 'jantar', 'almoço']
+        };
+
+        currentPersona = {
+            ...basePersona,
+            suggestions: [restaurantSuggestion, ...basePersona.suggestions]
+        };
     } else {
-        currentPersona = personas.assistant;
+        // Assistant - Enhance with Travel Suggestions (as per user request)
+        const baseAssistant = personas.assistant;
+        currentPersona = {
+            ...baseAssistant,
+            suggestions: [...baseAssistant.suggestions, ...personas.travel.suggestions]
+        };
     }
 
     return currentPersona;

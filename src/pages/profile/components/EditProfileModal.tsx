@@ -13,7 +13,11 @@ export function EditProfileContent({ userProfile, onClose, onUpdate, isEmbedded 
     const [bio, setBio] = useState(userProfile.bio || '');
     const [website, setWebsite] = useState(userProfile.website || '');
     const [avatarUrl, setAvatarUrl] = useState(userProfile.avatar_url || '');
-    const [privacySetting, setPrivacySetting] = useState<'public' | 'private' | 'friends'>(userProfile.privacy_setting || 'public');
+    const [privacySetting, setPrivacySetting] = useState<'public' | 'private'>(
+        (userProfile.privacy_setting === 'public' || userProfile.privacy_setting === 'private')
+            ? userProfile.privacy_setting
+            : 'public' // Default to public if it was 'friends' or invalid
+    );
     const [isUploading, setIsUploading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -186,22 +190,10 @@ export function EditProfileContent({ userProfile, onClose, onUpdate, isEmbedded 
                                 <i className="ri-lock-2-line block text-lg mb-1"></i>
                                 Privado
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => setPrivacySetting('friends')}
-                                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${privacySetting === 'friends'
-                                    ? 'bg-blue-50 border-blue-500 text-blue-600'
-                                    : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'
-                                    }`}
-                            >
-                                <i className="ri-group-line block text-lg mb-1"></i>
-                                Amigos
-                            </button>
                         </div>
                         <p className="mt-2 text-[10px] text-gray-400 leading-tight">
                             {privacySetting === 'public' && "Seu perfil será apresentado a toda a rede."}
-                            {privacySetting === 'private' && "Somente por convite e você precisa aprovar seguidores."}
-                            {privacySetting === 'friends' && "Somente seus amigos podem ver o perfil."}
+                            {privacySetting === 'private' && "Somente amigos podem ver suas publicações."}
                         </p>
                     </div>
                     <div>

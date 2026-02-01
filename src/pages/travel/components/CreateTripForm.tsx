@@ -9,6 +9,22 @@ interface CreateTripFormProps {
     initialData?: any;
 }
 
+// Constants moved outside component to avoid ReferenceError
+const tripTypes = [
+    { id: 'leisure', name: 'Lazer', icon: 'ri-sun-line', color: 'text-orange-500' },
+    { id: 'business', name: 'Negócios', icon: 'ri-briefcase-line', color: 'text-blue-500' },
+    { id: 'adventure', name: 'Aventura', icon: 'ri-mountain-line', color: 'text-green-500' },
+    { id: 'romantic', name: 'Romântica', icon: 'ri-heart-line', color: 'text-pink-500' },
+    { id: 'family', name: 'Família', icon: 'ri-group-line', color: 'text-purple-500' },
+    { id: 'cultural', name: 'Cultural', icon: 'ri-building-line', color: 'text-amber-500' }
+];
+
+const budgetOptions = [
+    { id: 'low', name: 'Econômica', range: 'Até R$ 3.000', color: 'text-green-500' },
+    { id: 'medium', name: 'Moderada', range: 'R$ 3.000 - R$ 8.000', color: 'text-blue-500' },
+    { id: 'high', name: 'Luxo', range: 'Acima de R$ 8.000', color: 'text-purple-500' }
+];
+
 export default function CreateTripForm({ onCancel, onSuccess, initialData }: CreateTripFormProps) {
     const { user } = useAuth();
 
@@ -46,9 +62,9 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
 
         const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
         if (!apiKey) {
-            alert('Erro de configuração: VITE_GOOGLE_API_KEY não encontrada. O sistema usará um prompt padrão.');
+            alert('Erro de configuração: VITE_GOOGLE_API_KEY não encontrada.');
             console.error('VITE_GOOGLE_API_KEY missing');
-            // We proceed with the default prompt, but warn the user
+            return;
         }
 
         setIsGeneratingImage(true);
@@ -67,58 +83,28 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
             // Find selected trip type name for context
             const selectedTripType = tripTypes.find(t => t.id === tripForm.tripType)?.name || 'Viagem';
 
-            // 1. Generate Optimized Search Keywords with Gemini
-            let searchKeywords = `${tripForm.destination}, ${selectedTripType}, travel`; // Default
-            let isGeminiUsed = false;
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-            if (apiKey) {
-                try {
-                    const genAI = new GoogleGenerativeAI(apiKey);
-                    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+            // 1. Ask SARA for a specific iconic landmark (single word/phrase)
+            const result = await model.generateContent(`
+                Pick ONE famous landmark for: "${tripForm.destination}".
+                Examples: "Eiffel Tower", "Colosseum", "Statue of Liberty".
+                Output ONLY the name.
+            `);
+            const response = await result.response;
+            const landmark = response.text().replace(/[*"]/g, '').trim();
+            console.log('✨ SARA Landmark:', landmark);
 
-                    const result = await model.generateContent(`
-                        You are an expert travel photographer's assistant.
-                        Generate a SHORT, VIVID, VISUAL description (in English) of a perfect travel photo for: "${tripForm.destination}" with a "${selectedTripType}" vibe.
-                        
-                        Rules:
-                        - Focus on visual elements (colors, lighting, landmarks).
-                        - NO introduction, NO "Here is a description", NO "prompt:".
-                        - Just the raw description text.
-                        - Max 25 words.
-                        - Example output: "Sun setting over the Eiffel Tower with golden light reflecting on the Seine river, autumn leaves"
-                    `);
-                    const response = await result.response;
-                    const text = response.text();
-                    if (text && text.length > 5) {
-                        searchKeywords = text.replace(/[*"]/g, '').trim(); // Clean up quotes/markdown
-                        isGeminiUsed = true;
-                        console.log('✨ Gemini visual description:', searchKeywords);
-                    }
-                } catch (e) {
-                    console.error("Gemini description generation failed:", e);
-                }
-            }
+            // 2. GUARANTEED RESULTS: LoremFlickr with specific tags
+            // This service is very reliable for matching landmarks to real photos.
+            const cleanLandmark = landmark.replace(/\s+/g, '').toLowerCase();
+            const cleanCity = tripForm.destination.split(',')[0].replace(/\s+/g, '').toLowerCase();
+            const randomLock = Math.floor(Math.random() * 1000000);
 
-            // 2. Reliable Image Strategy: LoremFlickr (Real Photos)
-            // Pollinations is unstable and returns "Robot" errors. We switch to LoremFlickr for real photos based on tags.
+            const primaryUrl = `https://loremflickr.com/1200/630/${cleanLandmark},${cleanCity},city/all?lock=${randomLock}`;
 
-            const cleanDestination = tripForm.destination.replace(/[^a-zA-Z0-9\s]/g, '');
-            // Create specific tags for Flickr search
-            // We use the Gemini visual keywords if available, otherwise construct standard tags
-            const tags = searchKeywords
-                ? searchKeywords.split(',').map(s => s.trim().replace(/\s+/g, '')).join(',')
-                : `${cleanDestination.replace(/\s+/g, '')},travel,landmark,city`;
-
-            const randomLock = Math.floor(Math.random() * 10000);
-
-            // Primary: Strict Tag Match
-            const primaryUrl = `https://loremflickr.com/1200/630/${encodeURIComponent(tags)}/all?lock=${randomLock}`;
-
-            // Secondary: Relaxed Match (Just City)
-            const secondaryUrl = `https://loremflickr.com/1200/630/${encodeURIComponent(cleanDestination.replace(/\s+/g, ''))},travel/?lock=${randomLock}`;
-
-            // Final Fallback: Unsplash Static
-            const staticFallbackUrl = `https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?ixlib=rb-4.0.3&q=80&w=1200&auto=format&fit=crop`;
+            const staticFallbackUrl = `https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1200&auto=format&fit=crop`;
 
             const img = new Image();
 
@@ -133,14 +119,7 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
             };
 
             img.onload = () => finish(primaryUrl);
-
-            img.onerror = () => {
-                const img2 = new Image();
-                img2.onload = () => finish(secondaryUrl);
-                img2.onerror = () => finish(staticFallbackUrl);
-                img2.src = secondaryUrl;
-            };
-
+            img.onerror = () => finish(staticFallbackUrl);
             img.src = primaryUrl;
 
         } catch (error) {
@@ -151,20 +130,7 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
         }
     };
 
-    const tripTypes = [
-        { id: 'leisure', name: 'Lazer', icon: 'ri-sun-line', color: 'text-orange-500' },
-        { id: 'business', name: 'Negócios', icon: 'ri-briefcase-line', color: 'text-blue-500' },
-        { id: 'adventure', name: 'Aventura', icon: 'ri-mountain-line', color: 'text-green-500' },
-        { id: 'romantic', name: 'Romântica', icon: 'ri-heart-line', color: 'text-pink-500' },
-        { id: 'family', name: 'Família', icon: 'ri-group-line', color: 'text-purple-500' },
-        { id: 'cultural', name: 'Cultural', icon: 'ri-building-line', color: 'text-amber-500' }
-    ];
 
-    const budgetOptions = [
-        { id: 'low', name: 'Econômica', range: 'Até R$ 3.000', color: 'text-green-500' },
-        { id: 'medium', name: 'Moderada', range: 'R$ 3.000 - R$ 8.000', color: 'text-blue-500' },
-        { id: 'high', name: 'Luxo', range: 'Acima de R$ 8.000', color: 'text-purple-500' }
-    ];
 
     const handleCreateTrip = async () => {
         if (!user) {
@@ -265,7 +231,7 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
                                 type="text"
                                 value={tripForm.destination}
                                 onChange={(e) => setTripForm({ ...tripForm, destination: e.target.value })}
-                                placeholder="Para onde você quer ir?"
+                                placeholder="Digite o destino (Ex: Paris, França)"
                                 className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-700"
                             />
                         </div>

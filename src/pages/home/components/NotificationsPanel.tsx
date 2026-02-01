@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getNotificationsWithDetails, supabase, markAllNotificationsAsRead } from '@/services/supabase';
+import { getNotificationsWithDetails, supabase, markAllNotificationsAsRead, markNotificationAsRead, deleteNotification, getPendingFriendRequests, respondToFriendRequest } from '@/services/supabase';
 import { getPendingGroupInvites, respondToGroupInvite } from '@/services/messages/groupService';
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -35,6 +35,8 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [processedItems, setProcessedItems] = useState<Record<string, 'accepted' | 'rejected' | 'followed_back'>>({});
+
   useEffect(() => {
     loadData();
   }, []);
@@ -45,12 +47,14 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
       setError(null);
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const [notifsData, invitesData] = await Promise.all([
+        const [notifsData, invitesData, friendRequestsData] = await Promise.all([
           getNotificationsWithDetails(user.id),
-          getPendingGroupInvites()
+          getPendingGroupInvites(),
+          getPendingFriendRequests()
         ]);
         setNotifications(notifsData);
-        setInvites(invitesData || []);
+        // Merge group invites and friend requests
+        setInvites([...(invitesData || []), ...(friendRequestsData || [])]);
       }
     } catch (error: any) {
       console.error('Error loading data:', error);
@@ -73,15 +77,52 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
     }
   };
 
-  const handleInviteResponse = async (type: 'group' | 'community', targetId: string, accept: boolean) => {
+  const handleInviteResponse = async (type: 'group' | 'community' | 'friend', targetId: string, accept: boolean, followBack = false) => {
     try {
-      await respondToGroupInvite(type, targetId, accept);
-      // Remove locally or reload
-      setInvites(prev => prev.filter(i => i.target_id !== targetId));
-      loadData();
+      // 1. Optimistic Update: Mark as processed immediately
+      const status = followBack ? 'followed_back' : (accept ? 'accepted' : 'rejected');
+      setProcessedItems(prev => ({ ...prev, [targetId]: status }));
+
+      if (type === 'friend') {
+        // Logic for friend request response
+        await respondToFriendRequest(targetId, accept);
+      } else {
+        await respondToGroupInvite(type, targetId, accept);
+      }
+
+      // We do NOT reload data here to keep the item visible with its new status
+      // We only reload if we really need to sync other things, but for this UX request, persistence is key.
+      // loadData(); 
     } catch (e) {
       console.error(e);
       setError('Erro ao responder convite');
+      // Revert optimistic update on error
+      setProcessedItems(prev => {
+        const newState = { ...prev };
+        delete newState[targetId];
+        return newState;
+      });
+    }
+  };
+
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      // Optimistic update
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+      await markNotificationAsRead(id);
+    } catch (error) {
+      console.error('Error marking as read:', error);
+    }
+  };
+
+  const handleDeleteNotification = async (id: string) => {
+    try {
+      // Optimistic update
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      await deleteNotification(id);
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      loadData(); // Revert on error
     }
   };
 
@@ -126,6 +167,7 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
 
   const renderNotificationItem = (item: any) => {
     if (item.type === 'invite') {
+      const isFriendRequest = item.origin_type === 'friend';
       return (
         <div key={item.id} className="p-4 bg-purple-50/30 hover:bg-purple-50 transition-colors">
           <div className="flex items-start gap-3">
@@ -140,26 +182,56 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
                 )}
               </div>
               <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-sm">
-                <i className="ri-mail-star-fill text-xs text-purple-600"></i>
+                <i className={`text-xs text-purple-600 ${isFriendRequest ? 'ri-user-add-fill' : 'ri-mail-star-fill'}`}></i>
               </div>
             </div>
             <div className="flex-1">
               <p className="text-sm text-gray-900 font-semibold">{item.name}</p>
-              <p className="text-sm text-gray-600 mb-2">Convidou você para participar do grupo.</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleInviteResponse(item.origin_type, item.target_id, true)}
-                  className="px-4 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow-md hover:scale-105 transition-all"
-                >
-                  Aceitar
-                </button>
-                <button
-                  onClick={() => handleInviteResponse(item.origin_type, item.target_id, false)}
-                  className="px-4 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50"
-                >
-                  Recusar
-                </button>
-              </div>
+              <p className="text-sm text-gray-600 mb-2">
+                {isFriendRequest ? 'Enviou uma solicitação de amizade.' : 'Convidou você para participar do grupo.'}
+              </p>
+              {processedItems[item.target_id] ? (
+                <div className={`text-sm font-semibold px-3 py-1.5 rounded-lg inline-block ${processedItems[item.target_id] === 'rejected'
+                    ? 'bg-gray-100 text-gray-500'
+                    : 'bg-purple-100 text-purple-700'
+                  }`}>
+                  {processedItems[item.target_id] === 'followed_back' && 'Solicitação aceita e seguida de volta 🤝'}
+                  {processedItems[item.target_id] === 'accepted' && 'Solicitação aceita ✅'}
+                  {processedItems[item.target_id] === 'rejected' && 'Solicitação recusada'}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => handleInviteResponse(item.origin_type, item.target_id, true)}
+                    className="px-4 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow-md hover:scale-105 transition-all"
+                  >
+                    Aceitar
+                  </button>
+                  <button
+                    onClick={() => handleInviteResponse(item.origin_type, item.target_id, false)}
+                    className="px-4 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50"
+                  >
+                    Recusar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (user) {
+                          // Pass custom updated logic
+                          await handleInviteResponse(item.origin_type, item.target_id, true, true);
+                          await import('@/services/supabase').then(mod => mod.followUser(user.id, item.target_id));
+                        }
+                      } catch (e) {
+                        console.error("Error following back", e);
+                      }
+                    }}
+                    className="px-4 py-1.5 bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold rounded-lg hover:bg-purple-200 transition-colors"
+                  >
+                    Aceitar e Seguir de Volta
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -176,6 +248,9 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
     return (
       <div
         key={notif.id}
+        onClick={() => {
+          if (!notif.is_read) handleMarkAsRead(notif.id);
+        }}
         className={`relative group flex gap-3 p-3 items-center hover:bg-gray-50 transition-all cursor-pointer rounded-lg mx-2 my-1 ${!notif.is_read ? 'bg-blue-50/30' : ''}`}
       >
         {/* Avatar / Icon */}
@@ -190,7 +265,7 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
           ) : (
             <div className="w-11 h-11 rounded-full p-[2px] bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 relative">
               <img
-                src={notif.related_user?.avatar_url || `https://ui-avatars.com/api/?name=${notif.related_user?.username}&background=random`}
+                src={notif.related_user?.avatar_url || `https://ui-avatars.com/api/?name=${notif.related_user?.username || 'User'}&background=random`}
                 alt={notif.related_user?.username}
                 className="w-full h-full object-cover rounded-full border-2 border-white"
               />
@@ -230,13 +305,6 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
               {formatDistanceToNow(createdDate, { locale: ptBR, addSuffix: false }).replace('cerca de ', '')}
             </span>
           </p>
-
-          {/* Action Buttons for User Interaction */}
-          {!isSystem && notif.type === 'follow' && (
-            <button className="mt-2 px-4 py-1.5 bg-gray-100 text-gray-900 text-xs font-semibold rounded-lg hover:bg-gray-200 transition-colors">
-              Seguir
-            </button>
-          )}
         </div>
 
         {/* Post Thumbnail (Media) */}
@@ -250,9 +318,23 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
           </div>
         )}
 
+        {/* Actions (Delete/Read) */}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteNotification(notif.id);
+            }}
+            className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+            title="Excluir"
+          >
+            <i className="ri-delete-bin-line text-lg"></i>
+          </button>
+        </div>
+
         {/* Read Indicator */}
         {!notif.is_read && (
-          <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+          <div className="absolute right-3 top-3 w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
         )}
       </div>
     );

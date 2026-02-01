@@ -76,7 +76,7 @@ export const useSystemNotifications = () => {
                                     type: 'trip',
                                     title: title,
                                     message: `Sua viagem para ${trip.destination} começa em ${diffDays} dias! Verifique seu roteiro e documentos.`,
-                                    related_post_id: trip.id // Linking to trip ID for potential navigation
+                                    related_trip_id: trip.id // Linking to trip ID for potential navigation
                                 });
                             }
                         }
@@ -96,7 +96,7 @@ export const useSystemNotifications = () => {
                                         type: 'alert',
                                         title: title,
                                         message: `Você tem ${pendingCount} reservas ou itens pendentes para sua viagem de ${trip.destination}. Confirme-os antes de viajar!`,
-                                        related_post_id: trip.id
+                                        related_trip_id: trip.id
                                     });
                                 }
                             }

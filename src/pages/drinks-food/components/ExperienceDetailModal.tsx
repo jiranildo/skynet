@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { FoodExperience, FoodReview, foodReviewService, foodExperienceService } from '../../../services/supabase';
 
+import { useAuth } from '../../../context/AuthContext';
+
 interface ExperienceDetailModalProps {
   experience: FoodExperience;
   onClose: () => void;
@@ -9,6 +11,7 @@ interface ExperienceDetailModalProps {
 }
 
 export default function ExperienceDetailModal({ experience, onClose, onUpdate }: ExperienceDetailModalProps) {
+  const { user } = useAuth();
   const [reviews, setReviews] = useState<FoodReview[]>([]);
   const [userReview, setUserReview] = useState<FoodReview | null>(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -20,7 +23,7 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'info' | 'reviews'>('info');
 
-  const currentUserId = 'user_123'; // Substituir por ID real do usuário autenticado
+  const currentUserId = user?.id;
 
   useEffect(() => {
     loadReviews();
@@ -157,8 +160,8 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                     <i
                       key={star}
                       className={`text-2xl ${star <= (experience.average_rating || experience.rating || 0)
-                          ? 'ri-star-fill text-yellow-400'
-                          : 'ri-star-line text-gray-300'
+                        ? 'ri-star-fill text-yellow-400'
+                        : 'ri-star-line text-gray-300'
                         }`}
                     ></i>
                   ))}
@@ -183,8 +186,8 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                     onClick={() => handleWouldReturn(true)}
                     disabled={loading}
                     className={`flex-1 py-3 rounded-xl font-semibold transition-all whitespace-nowrap ${experience.would_return === true
-                        ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
-                        : 'bg-white text-gray-700 hover:bg-green-50 border border-gray-200'
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
+                      : 'bg-white text-gray-700 hover:bg-green-50 border border-gray-200'
                       }`}
                   >
                     <i className="ri-check-line mr-2"></i>
@@ -194,8 +197,8 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                     onClick={() => handleWouldReturn(false)}
                     disabled={loading}
                     className={`flex-1 py-3 rounded-xl font-semibold transition-all whitespace-nowrap ${experience.would_return === false
-                        ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg'
-                        : 'bg-white text-gray-700 hover:bg-red-50 border border-gray-200'
+                      ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg'
+                      : 'bg-white text-gray-700 hover:bg-red-50 border border-gray-200'
                       }`}
                   >
                     <i className="ri-close-line mr-2"></i>
@@ -210,8 +213,8 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
               <button
                 onClick={() => setActiveTab('info')}
                 className={`pb-3 px-2 font-semibold transition-all whitespace-nowrap ${activeTab === 'info'
-                    ? 'text-orange-600 border-b-2 border-orange-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                  ? 'text-orange-600 border-b-2 border-orange-600'
+                  : 'text-gray-500 hover:text-gray-700'
                   }`}
               >
                 Informações
@@ -219,8 +222,8 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
               <button
                 onClick={() => setActiveTab('reviews')}
                 className={`pb-3 px-2 font-semibold transition-all whitespace-nowrap ${activeTab === 'reviews'
-                    ? 'text-orange-600 border-b-2 border-orange-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                  ? 'text-orange-600 border-b-2 border-orange-600'
+                  : 'text-gray-500 hover:text-gray-700'
                   }`}
               >
                 Avaliações ({reviews.length})
@@ -311,8 +314,8 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                           type="button"
                           onClick={() => setReviewForm({ ...reviewForm, would_return: true })}
                           className={`flex-1 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${reviewForm.would_return === true
-                              ? 'bg-green-500 text-white'
-                              : 'bg-white text-gray-700 border border-gray-200'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-white text-gray-700 border border-gray-200'
                             }`}
                         >
                           Sim
@@ -321,8 +324,8 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                           type="button"
                           onClick={() => setReviewForm({ ...reviewForm, would_return: false })}
                           className={`flex-1 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${reviewForm.would_return === false
-                              ? 'bg-red-500 text-white'
-                              : 'bg-white text-gray-700 border border-gray-200'
+                            ? 'bg-red-500 text-white'
+                            : 'bg-white text-gray-700 border border-gray-200'
                             }`}
                         >
                           Não
@@ -389,8 +392,8 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
                                   <i
                                     key={star}
                                     className={`text-sm ${star <= review.rating
-                                        ? 'ri-star-fill text-yellow-400'
-                                        : 'ri-star-line text-gray-300'
+                                      ? 'ri-star-fill text-yellow-400'
+                                      : 'ri-star-line text-gray-300'
                                       }`}
                                   ></i>
                                 ))}
@@ -400,8 +403,8 @@ export default function ExperienceDetailModal({ experience, onClose, onUpdate }:
 
                           {review.would_return !== null && review.would_return !== undefined && (
                             <div className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${review.would_return
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-700'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
                               }`}>
                               {review.would_return ? 'Voltaria' : 'Não Voltaria'}
                             </div>

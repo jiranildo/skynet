@@ -26,6 +26,23 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
     mood: ''
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [userPrivacy, setUserPrivacy] = useState<'public' | 'private'>('public');
+
+  useEffect(() => {
+    const checkPrivacy = async () => {
+      const profile = await ensureUserProfile();
+      if (profile && profile.privacy_setting) {
+        const setting = profile.privacy_setting as 'public' | 'private';
+        setUserPrivacy(setting);
+
+        // If user is private and tries to set public, force friends/private
+        if (setting === 'private' && visibility === 'public') {
+          setVisibility('friends');
+        }
+      }
+    };
+    checkPrivacy();
+  }, []);
 
   // Modal State
   const [modalState, setModalState] = useState<{
@@ -187,7 +204,8 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
           caption: fullCaption,
           image_url: finalImageUrl || '',
           location: location,
-          visibility: visibility
+          visibility: visibility,
+          media_urls: finalImageUrl ? [finalImageUrl] : []
         });
       } else {
         await createPost({
@@ -434,11 +452,12 @@ export default function CreatePostModal({ onClose, editingPost }: CreatePostModa
               <div className="flex gap-2">
                 <button
                   type="button"
+                  disabled={userPrivacy === 'private'}
                   onClick={() => setVisibility('public')}
-                  className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl border-2 transition-all ${visibility === 'public' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-100 bg-gray-50 text-gray-500 hover:border-blue-200'}`}
+                  className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl border-2 transition-all ${visibility === 'public' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-100 bg-gray-50 text-gray-500 hover:border-blue-200'} ${userPrivacy === 'private' ? 'opacity-50 cursor-not-allowed bg-gray-100' : ''}`}
                 >
                   <i className="ri-earth-line text-lg"></i>
-                  <span className="text-[10px] font-bold">Público</span>
+                  <span className="text-[10px] font-bold">Público {userPrivacy === 'private' && '(Desativado)'}</span>
                 </button>
                 <button
                   type="button"

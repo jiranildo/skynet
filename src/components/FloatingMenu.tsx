@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { ensureUserProfile, User as UserProfile } from '@/services/supabase';
+import { getTrips, Trip, ensureUserProfile, User as UserProfile, addTripFavorite, updateTrip, cellarService } from '@/services/supabase';
 import { useContextualPersona } from '@/hooks/useContextualPersona';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -43,12 +43,62 @@ export default function FloatingMenu() {
 
   const { user: authUser } = useAuth();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userTrips, setUserTrips] = useState<Trip[]>([]);
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+
+  // Contextual Search Prompt State
+  const [showContextPrompt, setShowContextPrompt] = useState(false);
+  const [pendingSearch, setPendingSearch] = useState<{ label: string; prompt: string } | null>(null);
+  const [waitingForTripSelection, setWaitingForTripSelection] = useState(false);
+
+  // Effect to trigger search when trip is selected IF waiting
+  // Effect to trigger search when trip is selected IF waiting
+  useEffect(() => {
+    if (selectedTrip && pendingSearch && waitingForTripSelection) {
+      // Don't auto-search to allow dashboard to open
+      // handleSearch(pendingSearch.prompt, false, selectedTrip);
+      setWaitingForTripSelection(false);
+      // setPendingSearch(null); // Keep pending context if needed? Or clear it? 
+      // Clearing it is safer to rely on manual action from dashboard
+      setPendingSearch(null);
+    }
+  }, [selectedTrip]);
+
+  const handleSearchOptionClick = (label: string, prompt: string) => {
+    if (selectedTrip) {
+      handleSearch(prompt, false, selectedTrip);
+    } else {
+      setPendingSearch({ label, prompt });
+      setShowContextPrompt(true);
+    }
+  };
+
+  const handleContextDecision = (linkToTrip: boolean) => {
+    setShowContextPrompt(false);
+    if (!pendingSearch) return;
+
+    if (linkToTrip) {
+      setWaitingForTripSelection(true);
+    } else {
+      const genericPrompt = `O usuário quer pesquisar sobre ${pendingSearch.label}, mas NÃO selecionou uma viagem específica.
+       Diga: "Certo, vamos pesquisar sobre ${pendingSearch.label}. Para onde você gostaria de ir e quais são suas preferências?"
+       Seja proativo e pergunte os detalhes necessários (datas, número de pessoas, etc) para fazer uma busca de ${pendingSearch.label}.`;
+      handleSearch(genericPrompt, false, null);
+      setPendingSearch(null);
+    }
+  };
+  const [schedulingRecommendation, setSchedulingRecommendation] = useState<Recommendation | null>(null);
+  const [scheduleData, setScheduleData] = useState<{ dayIndex: number; time: string }>({ dayIndex: 0, time: '12:00' });
 
   // Load User Profile for SARA Config
   useEffect(() => {
     if (authUser) {
       ensureUserProfile().then(profile => {
         if (profile) setUserProfile(profile);
+      });
+      // Fetch user trips for travel context
+      getTrips(authUser.id).then(trips => {
+        if (trips) setUserTrips(trips);
       });
     }
   }, [authUser]);
@@ -90,6 +140,11 @@ export default function FloatingMenu() {
     setViewMode('suggestions'); // Reset view mode
     setShowWineLocationOptions(false); // Reset options
     window.speechSynthesis.cancel(); // Stop talking on nav change
+    // Don't reset selectedTrip automatically if switching sections, 
+    // but maybe we should if moving AWAY from travel
+    if (persona.type !== 'travel') {
+      setSelectedTrip(null);
+    }
   }, [persona.type]);
 
   const handleToggleLocation = () => {
@@ -272,7 +327,7 @@ export default function FloatingMenu() {
     handleSearch(promptText);
   };
 
-  const handleSearch = async (text: string = query, isVoiceTriggered: boolean = false) => {
+  const handleSearch = async (text: string = query, isVoiceTriggered: boolean = false, tripOverride?: Trip) => {
     if (!text.trim()) return;
 
     setShowWineLocationOptions(false); // Close options if manual search starts
@@ -321,20 +376,45 @@ export default function FloatingMenu() {
       }
 
       // Dynamic Prompt based on Persona but with Strict Guidelines
+      let tripContext = "";
+      const currentTrip = tripOverride || selectedTrip;
+      if (persona.type === 'travel' && currentTrip) {
+        tripContext = `
+        CONTEXTO DA VIAGEM SELECIONADA:
+        - Destino: ${currentTrip.destination}
+        - Título: ${currentTrip.title}
+        - Datas: ${currentTrip.start_date} até ${currentTrip.end_date}
+        - Tipo: ${currentTrip.trip_type}
+        - Orçamento: ${currentTrip.budget}
+        - Viajantes: ${currentTrip.travelers}
+        - Status: ${currentTrip.status}
+        - Planejamento Atual: ${JSON.stringify(currentTrip.itinerary || [])}
+        
+        Sua missão é ajudar o usuário com ESTA viagem. Analise o que falta (Voos? Hotel? Roteiro detalhado?) e seja proativo em sugerir.
+        `;
+      } else if (persona.type === 'travel' && userTrips.length > 0) {
+        tripContext = `
+        O usuário tem as seguintes viagens registradas: ${userTrips.map(t => t.destination).join(', ')}.
+        Se a pergunta for genérica, você pode perguntar sobre qual dessas viagens ele gostaria de falar ou sugerir algo novo.
+        `;
+      }
+
       const prompt = `
         ATUE COMO: "${persona.title}" - ${persona.role}.
         CONTEXTO ATUAL: O usuário está navegando na seção "${persona.type}" do aplicativo.
-        
+
+        ${tripContext}
+
         SUA MISSÃO: Responder a QUALQUER pergunta do usuário.
         1. Se for sobre viagens/turismo/vinhos: Forneça um resumo útil E uma lista estruturada de recomendações no formato JSON.
         2. Se NÃO for sobre viagens (ex: "Qual a temperatura no Canadá?", "Conte uma piada"): Responda de forma útil, simpática e completa no campo "intro". Retorne uma lista vazia "[]" em "recommendations" se não houver locais físicos para sugerir.
-        
+
         INSTRUÇÃO ESPECIAL DE ÁUDIO: O campo "intro" será LIDO em voz alta para o usuário. Mantenha-o conversacional, empático e informativo.
-        
+
         IMPORTANT SOBRE IMAGENS E LINKS (Apenas se houver recomendações):
         1. OBRIGATÓRIO: Use o GOOGLE SEARCH para encontrar URLs de imagens.
         2. Priorize imagens da WIKIPEDIA (upload.wikimedia.org), TRIPADVISOR ou sites oficiais.
-        
+
         ${locationContext}
 
         PERGUNTA DO USUÁRIO: "${text}"
@@ -342,27 +422,27 @@ export default function FloatingMenu() {
         FORMATO DE RESPOSTA OBRIGATÓRIO:
         Você deve retornar UM ÚNICO objeto JSON com a seguinte estrutura estrita:
         {
-            "intro": "Texto conversacional para ser lido em voz alta (TTS). Se a pergunta for geral, responda aqui.",
-            "recommendations": [
-            {
-                "category": "flight|hotel|general|wine",
-                "icon": "Emoji",
-                "name": "Nome",
-                "description": "Descrição curta e atraente",
-                "link": "URL",
-                "estimatedCost": "Preço",
-                "reason": "Why?",
-                "visitDuration": "Tempo (Ex: 3 dias)",
-                "bestVisitTime": "Melhor época",
-                "reservationStatus": "required|recommended|not_needed",
-                // Specific fields as defined previously...
-                "airline": "...", "flightNumber": "...", "departureTime": "...", "arrivalTime": "...", "departureAirport": "...", "arrivalAirport": "...", "duration": "...", "stops": "...",
-                "stars": 4, "amenities": ["..."], "media": ["..."], "address": "...", "tripAdvisorRating": 4.5, "bookingRating": 9.2,
-                "googleRating": 4.8, "establishmentType": "...", "openHours": "...", "menuLink": "...", "parking": "...", "tags": ["..."], "highlights": ["..."],
-                // WINE SPECIFIC
-                "producer": "...", "wineType": "...", "vintage": "...", "region": "...", "country": "...", "grapes": "...", "alcohol": "...", "pairing": "...", "temperature": "...", "decanting": "...", "agingPotential": "...", "reviewsCount": 100
+          "intro": "Texto conversacional para ser lido em voz alta (TTS). Se a pergunta for geral, responda aqui.",
+        "recommendations": [
+        {
+          "category": "flight|hotel|general|wine",
+        "icon": "Emoji",
+        "name": "Nome",
+        "description": "Descrição curta e atraente",
+        "link": "URL",
+        "estimatedCost": "Preço",
+        "reason": "Why?",
+        "visitDuration": "Tempo (Ex: 3 dias)",
+        "bestVisitTime": "Melhor época",
+        "reservationStatus": "required|recommended|not_needed",
+        // Specific fields as defined previously...
+        "airline": "...", "flightNumber": "...", "departureTime": "...", "arrivalTime": "...", "departureAirport": "...", "arrivalAirport": "...", "duration": "...", "stops": "...",
+        "stars": 4, "amenities": ["..."], "media": ["..."], "address": "...", "tripAdvisorRating": 4.5, "bookingRating": 9.2,
+        "googleRating": 4.8, "establishmentType": "...", "openHours": "...", "menuLink": "...", "parking": "...", "tags": ["..."], "highlights": ["..."],
+        // WINE SPECIFIC
+        "producer": "...", "wineType": "...", "vintage": "...", "region": "...", "country": "...", "grapes": "...", "alcohol": "...", "pairing": "...", "temperature": "...", "decanting": "...", "agingPotential": "...", "reviewsCount": 100
             }
-            ]
+        ]
         }
         Retorne apenas o JSON puro.
         `;
@@ -447,14 +527,14 @@ export default function FloatingMenu() {
       const prompt = `
         ATUE COMO: "${persona.title}" - ${persona.role}.
         CONTEXTO: O usuário quer MAIS opções sobre a pesquisa anterior: "${lastQuery}".
-        
+
         SUA MISSÃO: Fornecer 3 NOVAS recomendações que NÃO foram listadas ainda.
-        
+
         IMPORTANTE:
         1. Mantenha o mesmo rigor de imagens REAIS e dados precisos.
         2. Retorne APENAS o JSON com o array "recommendations" (sem intro).
         3. Siga o mesmo schema JSON estrito anterior.
-        
+
         FILTRO OBRIGATÓRIO DE CONTEÚDO:
         1. Siga as mesmas restrições da busca original (só hotéis se for hotel, etc).
         2. Para CIDADES, PAÍSES, REGIÕES, ILHAS ou PRAIAS: NUNCA retorne "openHours". OBRIGATÓRIO preencher "visitDuration" e "bestVisitTime".
@@ -462,47 +542,47 @@ export default function FloatingMenu() {
         4. O campo "description" é OBRIGATÓRIO (resumo curto e atraente).
 
         ${locationContext}
-        
+
         FORMATO DE RESPOSTA OBRIGATÓRIO:
-         Você deve retornar UM ÚNICO objeto JSON com a seguinte estrutura estrita:
+        Você deve retornar UM ÚNICO objeto JSON com a seguinte estrutura estrita:
         {
-            "recommendations": [
-            {
-                "category": "Obrigatório: 'flight', 'hotel', 'general' ou 'wine'",
-                "icon": "Emoji representative",
-                "name": "Nome",
-                "description": "Descrição curta e atraente (2 linhas)",
-                
-                // Campos Universais
-                "link": "URL of website/deal",
-                "estimatedCost": "Preço",
-                "estimatedCost": "Preço",
-                "reason": "Why?",
-                "visitDuration": "OBRIGATÓRIO. Tempo exato ideal. Use rangos: '3-4 dias', '2 horas'.",
-                "bestVisitTime": "OBRIGATÓRIO. Melhor mês/época. (Ex: 'Maio a Setembro').",
-                "reservationStatus": "required|recommended|not_needed|unknown",
-                
-                // Variantes...
-                "airline": "...", "flightNumber": "...", "departureTime": "...", "arrivalTime": "...",
-                
-                // WINE SPECIFIC FIELDS (Obrigatório se category="wine")
-                "producer": "Nome do produtor",
-                "wineType": "Tinto, Branco, Rosé, Espumante",
-                "vintage": "Safra (Ex: Safra 2018)",
-                "region": "Região, Cidade de Origem",
-                "country": "País",
-                "grapes": "Castas (Ex: Cabernet Sauvignon 80%, Merlot 20%)",
-                "alcohol": "Teor Alcoólico (Ex: 13.5%)",
-                "pairing": "Sugestão de Harmonização",
-                "temperature": "Temp. de Serviço (Ex: 16-18°C)",
-                "decanting": "Tempo de Decantação (Ex: 30 min)",
-                "agingPotential": "Potencial de Guarda (Ex: 10-15 anos)",
-                "reviewsCount": 120,
-                
-                // ... outros campos genéricos
-                "stars": 4, "amenities": ["..."], "media": ["..."], "address": "...", "tripAdvisorRating": 4.5, "bookingRating": 9.2,
-                "googleRating": 4.8, "establishmentType": "...", "openHours": "...", "menuLink": "...", "parking": "...", "tags": ["..."], "highlights": ["..."],
-      `;
+          "recommendations": [
+        {
+          "category": "Obrigatório: 'flight', 'hotel', 'general' ou 'wine'",
+        "icon": "Emoji representative",
+        "name": "Nome",
+        "description": "Descrição curta e atraente (2 linhas)",
+
+        // Campos Universais
+        "link": "URL of website/deal",
+        "estimatedCost": "Preço",
+        "estimatedCost": "Preço",
+        "reason": "Why?",
+        "visitDuration": "OBRIGATÓRIO. Tempo exato ideal. Use rangos: '3-4 dias', '2 horas'.",
+        "bestVisitTime": "OBRIGATÓRIO. Melhor mês/época. (Ex: 'Maio a Setembro').",
+        "reservationStatus": "required|recommended|not_needed|unknown",
+
+        // Variantes...
+        "airline": "...", "flightNumber": "...", "departureTime": "...", "arrivalTime": "...",
+
+        // WINE SPECIFIC FIELDS (Obrigatório se category="wine")
+        "producer": "Nome do produtor",
+        "wineType": "Tinto, Branco, Rosé, Espumante",
+        "vintage": "Safra (Ex: Safra 2018)",
+        "region": "Região, Cidade de Origem",
+        "country": "País",
+        "grapes": "Castas (Ex: Cabernet Sauvignon 80%, Merlot 20%)",
+        "alcohol": "Teor Alcoólico (Ex: 13.5%)",
+        "pairing": "Sugestão de Harmonização",
+        "temperature": "Temp. de Serviço (Ex: 16-18°C)",
+        "decanting": "Tempo de Decantação (Ex: 30 min)",
+        "agingPotential": "Potencial de Guarda (Ex: 10-15 anos)",
+        "reviewsCount": 120,
+
+        // ... outros campos genéricos
+        "stars": 4, "amenities": ["..."], "media": ["..."], "address": "...", "tripAdvisorRating": 4.5, "bookingRating": 9.2,
+        "googleRating": 4.8, "establishmentType": "...", "openHours": "...", "menuLink": "...", "parking": "...", "tags": ["..."], "highlights": ["..."],
+        `;
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
@@ -530,6 +610,52 @@ export default function FloatingMenu() {
 
   return (
     <>
+      <AnimatePresence>
+        {showContextPrompt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => setShowContextPrompt(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl relative overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500"></div>
+
+              <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4 mx-auto">
+                <i className="ri-map-pin-time-line text-2xl"></i>
+              </div>
+
+              <h3 className="text-xl font-bold text-center text-gray-900 mb-2">Relacionar a uma Viagem?</h3>
+              <p className="text-sm text-gray-500 text-center mb-6">
+                Deseja utilizar os dados de uma das suas viagens planejadas para esta pesquisa de <strong>{pendingSearch?.label}</strong>?
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleContextDecision(false)}
+                  className="flex-1 py-3 px-4 rounded-xl border border-gray-200 text-gray-700 font-bold hover:bg-gray-50 transition-colors text-sm"
+                >
+                  Não, busca livre
+                </button>
+                <button
+                  onClick={() => handleContextDecision(true)}
+                  className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 text-sm"
+                >
+                  Sim, relacionar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -569,9 +695,95 @@ export default function FloatingMenu() {
               {/* Initial State: Suggestions OR Categories */}
               {!aiResponse && !isAiLoading && (
                 <div className="space-y-4">
+
+                  {/* Selected Trip Dashboard */}
+                  {persona.type === 'travel' && userTrips.length > 0 && (
+                    <div className="mb-6 animate-fadeIn">
+                      {/* Section Header with "Trocar" */}
+                      <div className="flex items-center justify-between mb-3 px-1">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                          Viagem Selecionada
+                        </p>
+                        {selectedTrip && (
+                          <button
+                            onClick={() => setSelectedTrip(null)}
+                            className="text-[10px] text-indigo-500 hover:text-indigo-700 font-bold flex items-center gap-1"
+                          >
+                            <i className="ri-exchange-line"></i> Trocar
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex overflow-x-auto gap-3 pb-2 -mx-4 px-4 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        {selectedTrip ? (
+                          // Trip Card - Dashboard Style
+                          <div className="flex-none w-full snap-start p-4 bg-gray-50/50 rounded-3xl border border-gray-100 flex items-start gap-4 relative overflow-hidden group">
+                            {/* Watermark Icon */}
+                            <div className="absolute top-1/2 -right-6 -translate-y-1/2 opacity-5 pointer-events-none">
+                              <i className="ri-plane-fill text-9xl -rotate-45 text-gray-900"></i>
+                            </div>
+
+                            {/* Image */}
+                            <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 shadow-sm border border-white">
+                              <img
+                                src={selectedTrip.cover_image || `https://readdy.ai/api/search-image?query=${selectedTrip.destination}&width=200&height=200`}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0 relative z-10 pt-1">
+                              <h4 className="font-bold text-xl text-gray-900 leading-tight mb-1">{selectedTrip.destination}</h4>
+                              <p className="text-xs text-gray-500 mb-3 flex items-center gap-3">
+                                <span><i className="ri-calendar-line mr-1"></i> {new Date(selectedTrip.start_date).toLocaleDateString('pt-BR')}</span>
+                                <span><i className="ri-group-line mr-1"></i> {selectedTrip.travelers}</span>
+                              </p>
+
+                              <div className="flex gap-2">
+                                <span className="px-3 py-1 text-[10px] font-bold rounded-lg uppercase bg-amber-100/80 text-amber-700">
+                                  {selectedTrip.status || 'PLANNING'}
+                                </span>
+                                {(!selectedTrip.itinerary || Object.keys(selectedTrip.itinerary || {}).length === 0) && (
+                                  <span className="px-3 py-1 bg-rose-50 text-rose-600 text-[10px] font-bold rounded-lg uppercase flex items-center gap-1 border border-rose-100">
+                                    <i className="ri-alert-line"></i> Sem roteiro
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          // List of trips (unchanged logic for selection)
+                          userTrips.map((trip) => (
+                            <button
+                              key={trip.id}
+                              onClick={() => {
+                                setSelectedTrip(trip);
+                              }}
+                              className="flex-none w-64 snap-start p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all text-left flex items-center gap-3 group"
+                            >
+                              <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 shadow-sm transition-transform group-hover:scale-105">
+                                <img
+                                  src={trip.cover_image || `https://readdy.ai/api/search-image?query=${trip.destination}&width=100&height=100`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-gray-900 text-sm truncate">{trip.destination}</h4>
+                                <p className="text-[10px] text-gray-500">{new Date(trip.start_date).toLocaleDateString('pt-BR')}</p>
+                              </div>
+                              <i className="ri-arrow-right-s-line text-gray-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all"></i>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Specialist Suggestions Header & Carousel */}
                   <div className="flex items-center justify-between mb-2 px-1">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                      {viewMode === 'categories' ? 'Selecione uma categoria' : 'Sugestões do Especialista'}
+                      {viewMode === 'categories' ? 'Selecione uma categoria' :
+                        selectedTrip ? 'Pendências do Planejamento' : 'Sugestões do Especialista'}
                     </p>
                     {viewMode === 'categories' && (
                       <button
@@ -584,28 +796,144 @@ export default function FloatingMenu() {
                   </div>
 
                   {viewMode === 'suggestions' ? (
-                    /* Standard Suggestions Carousel */
-                    <div className="flex overflow-x-auto gap-3 pb-4 -mx-4 px-4 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                      {persona.suggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleSuggestionClick(suggestion)}
-                          className="flex-none w-40 snap-start flex flex-col items-start p-3 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all group text-left h-32"
-                        >
-                          <div className={`w-8 h-8 rounded-lg mb-3 flex items-center justify-center transition-colors ${suggestion.icon.includes('map-pin') ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-500 group-hover:bg-indigo-50 group-hover:text-indigo-600'}`}>
-                            <i className={`${suggestion.icon} text-lg`}></i>
+                    selectedTrip ? (
+                      /* Trip Specific Suggestions & Progress */
+                      <div className="space-y-4">
+                        {/* Progress Bar - Dashboard Style */}
+                        <div className="px-1">
+                          {(() => {
+                            const itinerary = selectedTrip.itinerary || {};
+                            const activities = Object.values(itinerary).flat() as any[];
+                            const activitiesCount = activities.length;
+                            const daysCount = Math.ceil((new Date(selectedTrip.end_date).getTime() - new Date(selectedTrip.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                            const isFullyPlanned = activitiesCount >= daysCount * 2; // Rough heuristic
+
+                            // Simple calculation for demo: 30% default, more if things exist
+                            let progress = 30;
+                            if (activitiesCount > 0) progress += 20;
+                            if (selectedTrip.travelers > 1) progress += 10;
+                            if (isFullyPlanned) progress = 100;
+
+                            const pendingText = progress === 100 ? 'Pronto para viajar!' : 'Faltam as passagens'; // Dynamic based on actual missing data in future
+
+                            return (
+                              <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm">
+                                <div className="flex justify-between items-center mb-2">
+                                  <div className="flex items-center gap-2 text-indigo-700">
+                                    <i className="ri-pie-chart-2-fill"></i>
+                                    <span className="text-xs font-bold text-gray-900">Status do Planejamento</span>
+                                  </div>
+                                  <span className="text-xs font-bold text-indigo-600">{progress}%</span>
+                                </div>
+                                <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-2">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full"
+                                    style={{ width: `${progress}%` }}
+                                  ></div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[10px] text-gray-400 font-medium">{pendingText}</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+
+                        {/* Action Grid Buttons */}
+                        <div className="grid grid-cols-3 gap-3 px-1">
+                          {/* Button 1: Flights */}
+                          <button
+                            onClick={() => handleSearchOptionClick('Voos', `Pesquise as melhores opções de voos para ${selectedTrip.destination} partindo de [Minha Localização] nas datas ${new Date(selectedTrip.start_date).toLocaleDateString()} a ${new Date(selectedTrip.end_date).toLocaleDateString()}. Priorize custo-benefício.`)}
+                            className="flex flex-col items-center justify-center bg-white border border-gray-100 rounded-3xl p-4 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all aspect-square group"
+                          >
+                            <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                              <i className="ri-plane-fill text-xl"></i>
+                            </div>
+                            <span className="text-[11px] font-bold text-gray-700 text-center leading-tight group-hover:text-blue-700">Buscar<br />Voos</span>
+                          </button>
+
+                          {/* Button 2: Hotel */}
+                          <button
+                            onClick={() => handleSearchOptionClick('Acomodações', `Sugira 3 opções de hospedagem em ${selectedTrip.destination} para as datas da viagem. Considere localização central e boas avaliações. Inclua preços estimados.`)}
+                            className="flex flex-col items-center justify-center bg-white border border-gray-100 rounded-3xl p-4 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all aspect-square group"
+                          >
+                            <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                              <i className="ri-hotel-fill text-xl"></i>
+                            </div>
+                            <span className="text-[11px] font-bold text-gray-700 text-center leading-tight group-hover:text-indigo-700">Encontrar<br />Hotel</span>
+                          </button>
+
+                          {/* Button 3: Itinerary */}
+                          <button
+                            onClick={() => handleSearchOptionClick('Roteiro', `Crie um roteiro detalhado dia a dia para minha viagem a ${selectedTrip.destination}. Foco em experiências locais.`)}
+                            className="flex flex-col items-center justify-center bg-white border border-gray-100 rounded-3xl p-4 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all aspect-square group"
+                          >
+                            <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                              <i className="ri-map-2-line text-xl"></i>
+                            </div>
+                            <span className="text-[11px] font-bold text-gray-700 text-center leading-tight group-hover:text-emerald-700">Roteiro<br />Dia a Dia</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Standard Suggestions Carousel (Height Reduced) + NEW SEARCH SECTION */
+                      <div className="space-y-6">
+                        {/* Reduced Height Specialist Suggestions */}
+                        <div className="flex overflow-x-auto gap-3 -mx-4 px-4 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                          {persona.suggestions.map((suggestion, index) => (
+                            <button
+                              key={index}
+                              onClick={() => handleSuggestionClick(suggestion)}
+                              className="flex-none w-36 snap-start flex flex-col items-start p-3 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all group text-left h-24"
+                            >
+                              <div className={`w-8 h-8 rounded-lg mb-2 flex items-center justify-center transition-colors ${suggestion.icon.includes('map-pin') ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-500 group-hover:bg-indigo-50 group-hover:text-indigo-600'}`}>
+                                <i className={`${suggestion.icon} text-lg`}></i>
+                              </div>
+                              <span className="font-semibold text-xs text-gray-800 leading-tight group-hover:text-indigo-700 block line-clamp-2">
+                                {suggestion.text}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* NEW: SEARCH Section */}
+                        {persona.type === 'travel' && (
+                          <div className="animate-fadeIn">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
+                              Pesquisa
+                            </p>
+                            <div className="flex overflow-x-auto gap-3 pb-2 -mx-4 px-4 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                              {[
+                                { label: 'Voos', icon: 'ri-plane-fill', color: 'blue', keywords: 'voos, passagem aérea, aéreo, origem, destino, ida e volta, datas, classe econômica, executiva, milhas, bagagem', desc: 'Pesquisar opções de voos disponíveis...' },
+                                { label: 'Acomodações', icon: 'ri-hotel-fill', color: 'indigo', keywords: 'hotel, hospedagem, acomodação, resort, airbnb, pousada...', desc: 'Pesquisar hospedagens no destino especificado...' },
+                                { label: 'Pacotes', icon: 'ri-suitcase-2-fill', color: 'purple', keywords: 'pacote de viagem, pacote turístico, voo + hotel...', desc: 'Pesquisar pacotes de viagem completos...' },
+                                { label: 'Carros', icon: 'ri-roadster-fill', color: 'emerald', keywords: 'alugar carro, locadora, rent a car...', desc: 'Pesquisar opções de aluguel de carro...' },
+                                { label: 'Cruzeiros', icon: 'ri-ship-fill', color: 'cyan', keywords: 'cruzeiro, navio, cabine...', desc: 'Pesquisar cruzeiros disponíveis...' },
+                                { label: 'Ingressos', icon: 'ri-ticket-2-fill', color: 'amber', keywords: 'ingresso, ticket, parque, museu, show...', desc: 'Pesquisar ingressos e experiências...' },
+                                { label: 'Transfer', icon: 'ri-taxi-fill', color: 'zinc', keywords: 'transfer, traslado, aeroporto hotel...', desc: 'Pesquisar serviços de transporte...' },
+                                { label: 'Guias', icon: 'ri-user-star-fill', color: 'orange', keywords: 'guia turístico, tour guide, passeio guiado...', desc: 'Pesquisar guias turísticos locais...' },
+                                { label: 'Seguro', icon: 'ri-shield-cross-fill', color: 'rose', keywords: 'seguro viagem, cobertura médica, assistência...', desc: 'Pesquisar planos de seguro viagem...' },
+                                { label: 'Ofertas', icon: 'ri-price-tag-3-fill', color: 'red', keywords: 'promoção viagem, oferta voo, desconto...', desc: 'Pesquisar ofertas e promoções...' },
+                                { label: 'Vistos', icon: 'ri-passport-fill', color: 'slate', keywords: 'visto, passaporte, documentação...', desc: 'Pesquisar exigências de documentação...' },
+                              ].map((item, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => handleSearchOptionClick(item.label, `Gostaria de pesquisar sobre ${item.label}. \nContexto: ${item.desc} \nPalavras-chave: ${item.keywords}`)}
+                                  className="flex-none w-24 snap-start flex flex-col items-center gap-2 group"
+                                >
+                                  <div className={`w-14 h-14 rounded-2xl bg-${item.color}-50 text-${item.color}-600 flex items-center justify-center shadow-sm border border-${item.color}-100 group-hover:scale-110 transition-transform`}>
+                                    <i className={`${item.icon} text-2xl`}></i>
+                                  </div>
+                                  <span className="text-[10px] font-medium text-gray-600 group-hover:text-gray-900 text-center leading-tight px-1">
+                                    {item.label}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                          <span className="font-semibold text-xs text-gray-800 leading-tight mb-1 group-hover:text-indigo-700 block">
-                            {suggestion.text}
-                          </span>
-                          {suggestion.description && (
-                            <span className="text-[10px] text-gray-400 leading-snug line-clamp-2">
-                              {suggestion.description}
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                        )}
+                      </div>
+                    )
                   ) : (
                     /* In-Menu Categories Carousel */
                     <div className="grid grid-cols-2 gap-2">
@@ -695,12 +1023,12 @@ export default function FloatingMenu() {
                             <RecommendationCard
                               data={rec}
                               onSave={async () => {
-                                try {
-                                  if (!rec.category || rec.category === 'wine') {
-                                    await import('@/services/supabase').then(mod => {
-                                      mod.cellarService.create({
+                                if (authUser) {
+                                  try {
+                                    if (rec.category === 'wine') {
+                                      await cellarService.create({
                                         name: rec.name,
-                                        producer: rec.producer || rec.name.split(' ')[0], // Fallback
+                                        producer: rec.producer || rec.name.split(' ')[0],
                                         region: rec.region,
                                         country: rec.country,
                                         vintage: rec.vintage ? parseInt(rec.vintage.replace(/\D/g, '')) || undefined : undefined,
@@ -708,15 +1036,24 @@ export default function FloatingMenu() {
                                         type: (rec.wineType?.toLowerCase().includes('tinto') ? 'red' :
                                           rec.wineType?.toLowerCase().includes('branco') ? 'white' :
                                             rec.wineType?.toLowerCase().includes('rosé') ? 'rose' :
-                                              rec.wineType?.toLowerCase().includes('espumante') ? 'sparkling' : 'red') as any, // Simple mapping
-                                        image_url: rec.media?.[0] || undefined,
+                                              rec.wineType?.toLowerCase().includes('espumante') ? 'sparkling' : 'red') as any,
+                                        image_url: rec.icon,
                                         rating: rec.stars || 0,
-                                        quantity: 0, // Wishlist items have 0 quantity in cellar usually, or just status logic
+                                        quantity: 0,
                                         status: 'wishlist',
                                         notes: `SARA: ${rec.reason}`,
                                         price: parseFloat(rec.estimatedCost?.replace(/[^\d,.]/g, '').replace(',', '.') || '0')
                                       });
-                                    });
+                                    } else {
+                                      await addTripFavorite({
+                                        user_id: authUser.id,
+                                        destination: rec.name,
+                                        description: rec.description,
+                                        category: rec.category,
+                                        image_url: rec.icon
+                                      });
+                                    }
+
                                     // Simple feedback
                                     const btn = document.activeElement as HTMLElement;
                                     if (btn) {
@@ -726,13 +1063,15 @@ export default function FloatingMenu() {
                                         icon.parentElement!.classList.add('bg-purple-100');
                                       }
                                     }
-                                    alert(`${rec.name} adicionado à sua Wishlist!`);
-                                  } else {
-                                    alert('Apenas vinhos podem ser adicionados à Wishlist da adega no momento.');
+                                  } catch (err) {
+                                    console.error('Save failed:', err);
                                   }
-                                } catch (err) {
-                                  console.error(err);
-                                  alert('Erro ao salvar.');
+                                }
+                              }}
+                              onAddToItinerary={() => {
+                                setSchedulingRecommendation(rec);
+                                if (!selectedTrip && userTrips.length > 0) {
+                                  setSelectedTrip(userTrips[0]);
                                 }
                               }}
                             />
@@ -816,6 +1155,110 @@ export default function FloatingMenu() {
                 </div>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Scheduling Overlay */}
+      <AnimatePresence>
+        {schedulingRecommendation && selectedTrip && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center"
+            onClick={() => setSchedulingRecommendation(null)}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="w-full bg-white rounded-t-3xl p-6 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Agendar Atividade</h3>
+                  <p className="text-xs text-gray-500 mt-1">{schedulingRecommendation.name}</p>
+                </div>
+                <button onClick={() => setSchedulingRecommendation(null)} className="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors">
+                  <i className="ri-close-line text-xl"></i>
+                </button>
+              </div>
+
+              <div className="space-y-6 mb-8">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Selecione o Dia</label>
+                  <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar px-1">
+                    {Array.from({ length: Math.ceil((new Date(selectedTrip.end_date).getTime() - new Date(selectedTrip.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1 }).map((_, i) => {
+                      const date = new Date(selectedTrip.start_date);
+                      date.setDate(date.getDate() + i);
+                      const isSelected = scheduleData.dayIndex === i;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => setScheduleData(prev => ({ ...prev, dayIndex: i }))}
+                          className={`flex-none min-w-[100px] px-4 py-3 rounded-2xl border transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-gray-50 border-gray-100 text-gray-700 hover:border-blue-200'}`}
+                        >
+                          <span className="block text-[10px] opacity-70 font-bold uppercase tracking-widest leading-none mb-1 text-center">Dia {i + 1}</span>
+                          <span className="block text-sm font-bold text-center">{date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Horário</label>
+                  <div className="relative">
+                    <i className="ri-time-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl"></i>
+                    <input
+                      type="time"
+                      value={scheduleData.time}
+                      onChange={(e) => setScheduleData(prev => ({ ...prev, time: e.target.value }))}
+                      className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-lg font-bold text-gray-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={async () => {
+                  try {
+                    const currentItinerary = selectedTrip.itinerary || {};
+                    const dayActivities = currentItinerary[scheduleData.dayIndex] || [];
+
+                    const newActivity = {
+                      id: crypto.randomUUID(),
+                      title: `${schedulingRecommendation.icon} ${schedulingRecommendation.name}`,
+                      description: schedulingRecommendation.description,
+                      time: scheduleData.time,
+                      type: 'activity',
+                      status: 'confirmed',
+                      icon: 'ri-map-pin-2-line',
+                      metadata: schedulingRecommendation
+                    };
+
+                    const updatedItinerary = {
+                      ...currentItinerary,
+                      [scheduleData.dayIndex]: [...dayActivities, newActivity]
+                    };
+
+                    await updateTrip(selectedTrip.id, { itinerary: updatedItinerary });
+
+                    setUserTrips(prev => prev.map(t => t.id === selectedTrip.id ? { ...t, itinerary: updatedItinerary } : t));
+                    setSelectedTrip(prev => prev?.id === selectedTrip.id ? { ...prev, itinerary: updatedItinerary } : prev);
+
+                    setSchedulingRecommendation(null);
+                  } catch (err) {
+                    console.error('Failed to add to itinerary:', err);
+                  }
+                }}
+                className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-2xl shadow-xl shadow-blue-200 hover:scale-[1.02] active:scale-95 transition-all text-lg"
+              >
+                Confirmar Agendamento
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -22,9 +22,12 @@ import {
   unfollowUser,
   checkIfReelLiked,
   getReelsByUser,
+  getFollowers,
+  getFollowing,
   storyService,
   Story
 } from '../../services/supabase';
+import UserListModal from './components/UserListModal';
 import { supabase } from '../../services/supabase';
 import StoryViewer from '../home/components/StoryViewer';
 
@@ -74,6 +77,13 @@ export default function ProfilePage() {
   // const [showGamification, setShowGamification] = useState(false); // Removed
   // const [showWallet, setShowWallet] = useState(false); // Removed
   const [showCreateMenu, setShowCreateMenu] = useState(false);
+
+  // Follower/Following Modal State
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
+  const [followersList, setFollowersList] = useState<any[]>([]);
+  const [followingList, setFollowingList] = useState<any[]>([]);
+  const [isLoadingList, setIsLoadingList] = useState(false);
 
   // Load Profile Data
   useEffect(() => {
@@ -255,6 +265,68 @@ export default function ProfilePage() {
     }
   };
 
+  const handleOpenFollowers = async () => {
+    if (!currentProfile?.id) return;
+    setShowFollowersModal(true);
+    setIsLoadingList(true);
+    try {
+      const data = await getFollowers(currentProfile.id);
+      setFollowersList(data || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingList(false);
+    }
+  };
+
+  const handleOpenFollowing = async () => {
+    if (!currentProfile?.id) return;
+    setShowFollowingModal(true);
+    setIsLoadingList(true);
+    try {
+      const data = await getFollowing(currentProfile.id);
+      setFollowingList(data || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingList(false);
+    }
+  };
+
+  const handleRemoveFollower = async (targetUserId: string) => {
+    if (!authUser || !currentProfile) return;
+    // Current user is the 'following' (me), target is 'follower'
+    // unfollowUser deletes based on follower_id, following_id
+    try {
+      await unfollowUser(targetUserId, authUser.id);
+      setFollowersList(prev => prev.filter(item => item.follower_id !== targetUserId));
+      // Update local count
+      setUserProfile(prev => prev ? ({ ...prev, followers_count: (prev.followers_count || 1) - 1 }) : null);
+    } catch (e) {
+      console.error("Error removing follower:", e);
+      alert("Erro ao remover seguidor.");
+    }
+  };
+
+  const handleUnfollowFromList = async (targetUserId: string) => {
+    if (!authUser) return;
+    // Current user is 'follower' (me), target is 'following'
+    try {
+      await unfollowUser(authUser.id, targetUserId);
+      setFollowingList(prev => prev.filter(item => item.following_id !== targetUserId));
+      // Update local count
+      setUserProfile(prev => prev ? ({ ...prev, following_count: (prev.following_count || 1) - 1 }) : null);
+
+      // If we are on that user's profile, update the main button too
+      if (targetUserId === currentProfile.id) {
+        setIsFollowing(false);
+      }
+    } catch (e) {
+      console.error("Error unfollowing:", e);
+      alert("Erro ao deixar de seguir.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50">
       {/* Header */}
@@ -364,11 +436,11 @@ export default function ProfilePage() {
                     <div className="text-lg md:text-xl font-bold text-gray-900">{currentProfile.posts_count || posts.length}</div>
                     <div className="text-xs md:text-sm text-gray-600">Posts</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center cursor-pointer hover:opacity-80 transition-opacity" onClick={handleOpenFollowers}>
                     <div className="text-lg md:text-xl font-bold text-gray-900">{currentProfile.followers_count || 0}</div>
                     <div className="text-xs md:text-sm text-gray-600">Seguidores</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center cursor-pointer hover:opacity-80 transition-opacity" onClick={handleOpenFollowing}>
                     <div className="text-lg md:text-xl font-bold text-gray-900">{currentProfile.following_count || 0}</div>
                     <div className="text-xs md:text-sm text-gray-600">Seguindo</div>
                   </div>
@@ -573,6 +645,32 @@ export default function ProfilePage() {
       {showNotifications && <NotificationsPanel onClose={() => setShowNotifications(false)} />}
       {showCreateMenu && <CreateMenu onClose={() => setShowCreateMenu(false)} onSelectOption={handleCreateOption} />}
       {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+
+      {showFollowersModal && (
+        <UserListModal
+          title="Seguidores"
+          users={followersList}
+          onClose={() => setShowFollowersModal(false)}
+          onAction={handleRemoveFollower}
+          actionLabel="Remover"
+          actionIcon="ri-close-circle-line"
+          isLoading={isLoadingList}
+          isActionDestructive={true}
+        />
+      )}
+
+      {showFollowingModal && (
+        <UserListModal
+          title="Seguindo"
+          users={followingList}
+          onClose={() => setShowFollowingModal(false)}
+          onAction={handleUnfollowFromList}
+          actionLabel="Seguindo"
+          actionIcon="ri-user-check-line"
+          isLoading={isLoadingList}
+          isActionDestructive={true}
+        />
+      )}
     </div >
   );
 }
