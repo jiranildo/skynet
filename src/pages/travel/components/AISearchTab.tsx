@@ -20,7 +20,7 @@ export default function AISearchTab() {
     const responseRef = useRef<HTMLDivElement>(null);
 
     // Use the smart travel agent hook to get location
-    const { userLocation, detectUserLocation } = useSmartTravelAgent();
+    const { userLocation, detectUserLocation, locationStatus } = useSmartTravelAgent();
 
     const handleToggleLocation = () => {
         const newState = !useLocation;
@@ -400,9 +400,15 @@ export default function AISearchTab() {
                     </div>
 
                     {/* Helper Text for Location Status */}
-                    {useLocation && !userLocation?.name && (
+                    {useLocation && locationStatus === 'detecting' && (
                         <p className="text-xs text-blue-500 mt-2 ml-2 animate-pulse text-center">
                             <i className="ri-loader-2-line animate-spin mr-1"></i> Detectando sua localização...
+                        </p>
+                    )}
+                    {useLocation && locationStatus === 'error' && (
+                        <p className="text-xs text-red-500 mt-2 ml-2 text-center">
+                            <i className="ri-error-warning-line mr-1"></i> Não foi possível obter sua localização.
+                            <button onClick={detectUserLocation} className="ml-2 underline font-bold">Tentar novamente</button>
                         </p>
                     )}
                 </div>

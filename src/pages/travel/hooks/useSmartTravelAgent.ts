@@ -5,6 +5,7 @@ type SearchContext = 'NEARBY' | 'EXPLORE_COUNTRY' | 'DESTINATION_DISCOVERY' | 'S
 
 interface TravelAgentState {
     userLocation: { name: string; country: string; coords: { lat: number; lon: number } | null, types?: string[] };
+    locationStatus: 'idle' | 'detecting' | 'success' | 'error';
     results: any[];
     isLoading: boolean;
     hasSearched: boolean;
@@ -87,6 +88,7 @@ export const useSmartTravelAgent = () => {
     // --- State ---
     const [state, setState] = useState<TravelAgentState>({
         userLocation: { name: '', country: '', coords: null },
+        locationStatus: 'idle',
         results: [],
         isLoading: false,
         hasSearched: false,
@@ -100,9 +102,18 @@ export const useSmartTravelAgent = () => {
 
     // 1. Detect Location (Enhanced)
     const detectUserLocation = useCallback(async () => {
+        setState(prev => ({ ...prev, locationStatus: 'detecting' }));
         try {
+            if (!navigator.geolocation) {
+                throw new Error("Geolocation not supported");
+            }
+
             const position: any = await new Promise((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 });
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    timeout: 8000,
+                    enableHighAccuracy: false,
+                    maximumAge: 30000
+                });
             });
             const { latitude, longitude } = position.coords;
 
@@ -122,6 +133,7 @@ export const useSmartTravelAgent = () => {
 
                 setState(prev => ({
                     ...prev,
+                    locationStatus: 'success',
                     userLocation: {
                         name: data.name || city, // Prefer precise name if available (POI)
                         country: country,
@@ -133,11 +145,13 @@ export const useSmartTravelAgent = () => {
                 console.warn("Reverse Geo Error", e);
                 setState(prev => ({
                     ...prev,
+                    locationStatus: 'success', // Coords are still success even if geocoding fails
                     userLocation: { name: 'Localização Atual', country: 'Brasil', coords: { lat: latitude, lon: longitude } }
                 }));
             }
         } catch (error) {
             console.error("Location Denied/Error", error);
+            setState(prev => ({ ...prev, locationStatus: 'error' }));
         }
     }, []);
 
@@ -390,6 +404,7 @@ export const useSmartTravelAgent = () => {
 
     return {
         userLocation: state.userLocation,
+        locationStatus: state.locationStatus,
         searchState: {
             results: state.results,
             isLoading: state.isLoading,

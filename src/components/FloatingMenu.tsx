@@ -32,7 +32,7 @@ export default function FloatingMenu() {
   const [showWineLocationOptions, setShowWineLocationOptions] = useState(false);
 
   // Location Context
-  const { userLocation, detectUserLocation } = useSmartTravelAgent();
+  const { userLocation, detectUserLocation, locationStatus } = useSmartTravelAgent();
   const [useLocation, setUseLocation] = useState(false);
 
   // Voice Interaction State
@@ -1153,6 +1153,19 @@ export default function FloatingMenu() {
                     {isAiLoading ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-send-plane-fill"></i>}
                   </button>
                 </div>
+
+                {/* Helper Text for Location Status */}
+                {useLocation && locationStatus === 'detecting' && (
+                  <p className="text-[10px] text-blue-500 mt-1 ml-1 animate-pulse">
+                    <i className="ri-loader-2-line animate-spin mr-1"></i> Detectando localização...
+                  </p>
+                )}
+                {useLocation && locationStatus === 'error' && (
+                  <p className="text-[10px] text-red-500 mt-1 ml-1">
+                    <i className="ri-error-warning-line mr-1"></i> Erro na localização.
+                    <button onClick={detectUserLocation} className="ml-1 underline font-bold">Tentar</button>
+                  </p>
+                )}
               </div>
             </div>
           </motion.div>
