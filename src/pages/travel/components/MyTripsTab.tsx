@@ -4,6 +4,7 @@ import CreateTripForm from './CreateTripForm';
 import ShareTripModal, { ShareConfig, PublishConfig } from './ShareTripModal';
 import { ConfirmationModal } from '../../../components/ConfirmationModal';
 import { useAuth } from '../../../context/AuthContext';
+import { UserAvatar } from '../../../components/UserAvatar';
 
 
 
@@ -86,6 +87,7 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
   const [selectedRetrospective, setSelectedRetrospective] = useState<YearlyRetrospective | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPlanningModalOpen, setIsPlanningModalOpen] = useState(false);
+  const [suggestionTab, setSuggestionTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [networkUsers, setNetworkUsers] = useState<User[]>([]);
@@ -608,17 +610,49 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
           let updatedTrip = { ...trip };
 
           switch (suggestion.type) {
-            case 'add_place':
-              updatedTrip.places = [...(trip.places || []), suggestion.data];
+            case 'add_place': {
+              const { suggestedDayId, ...activityData } = suggestion.data;
+              const dayIdx = suggestedDayId !== undefined ? suggestedDayId : 0;
+              const currentDayItinerary = updatedTrip.itinerary?.[dayIdx] || [];
+
+              updatedTrip.itinerary = {
+                ...(updatedTrip.itinerary || {}),
+                [dayIdx]: [...currentDayItinerary, activityData].sort((a: any, b: any) => (a.time || '').localeCompare(b.time || ''))
+              };
+              updatedTrip.places = [...(trip.places || []), activityData];
               break;
-            case 'remove_place':
-              updatedTrip.places = (trip.places || []).filter(p => p.id !== suggestion.data.placeId);
+            }
+            case 'remove_place': {
+              const rDayIdx = suggestion.data.dayIndex;
+              const actId = suggestion.data.activityId;
+
+              if (rDayIdx !== undefined && updatedTrip.itinerary?.[rDayIdx]) {
+                updatedTrip.itinerary = {
+                  ...updatedTrip.itinerary,
+                  [rDayIdx]: updatedTrip.itinerary[rDayIdx].filter((a: any) => String(a.id) !== String(actId))
+                };
+              }
+              updatedTrip.places = (trip.places || []).filter((p: any) => String(p.id) !== String(actId));
               break;
-            case 'edit_place':
-              updatedTrip.places = (trip.places || []).map(p =>
-                p.id === suggestion.data.placeId ? { ...p, ...suggestion.data.changes } : p
+            }
+            case 'edit_place': {
+              const eDayIdx = suggestion.data.dayIndex;
+              const eActId = suggestion.data.activityId;
+              const changes = suggestion.data.changes;
+
+              if (eDayIdx !== undefined && updatedTrip.itinerary?.[eDayIdx]) {
+                updatedTrip.itinerary = {
+                  ...updatedTrip.itinerary,
+                  [eDayIdx]: updatedTrip.itinerary[eDayIdx].map((a: any) =>
+                    String(a.id) === String(eActId) ? { ...a, ...changes } : a
+                  )
+                };
+              }
+              updatedTrip.places = (trip.places || []).map((p: any) =>
+                p.id === suggestion.data.placeId ? { ...p, ...changes } : p
               );
               break;
+            }
             case 'edit_info':
               updatedTrip = { ...updatedTrip, ...suggestion.data };
               break;
@@ -1075,6 +1109,9 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     if (filterStatus === 'shared') {
       return trip.isShared || (trip.sharedWith && trip.sharedWith.length > 0) || trip.marketplaceConfig?.isListed;
     }
+    if (filterStatus === 'approvals') {
+      return trip.pendingSuggestions?.some((s: any) => s.status === 'pending');
+    }
     return trip.status === filterStatus;
   });
 
@@ -1087,7 +1124,8 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
         <h3 className="text-xl font-bold text-gray-900">
           {filterStatus === 'all' ? 'Todas as Viagens' :
             filterStatus === 'completed' ? 'Viagens Concluídas' :
-              filterStatus === 'planning' ? 'Planejando' : 'Viagens Compartilhadas'}
+              filterStatus === 'planning' ? 'Planejando' :
+                filterStatus === 'approvals' ? 'Aprovações Pendentes' : 'Viagens Compartilhadas'}
         </h3>
       </div>
 
@@ -1146,7 +1184,7 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
 
                 {/* Pending Suggestions Badge */}
                 {
-                  pendingCount > 0 && (
+                  pendingCount > 0 && trip.permissions === 'admin' && (
                     <div className="absolute top-12 right-3">
                       <div className="px-3 py-1 bg-yellow-500 text-white rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
                         <i className="ri-notification-3-line"></i>
@@ -1212,11 +1250,11 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
                   <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
                     <div className="flex -space-x-2">
                       {trip.sharedWith.slice(0, 3).map((user, idx) => (
-                        <img
+                        <UserAvatar
                           key={idx}
                           src={user.avatar}
-                          alt={user.name}
-                          className="w-6 h-6 rounded-full border-2 border-white"
+                          name={user.name}
+                          className="w-6 h-6 border-2 border-white"
                         />
                       ))}
                     </div>
@@ -1229,7 +1267,7 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
 
                 {/* Actions */}
                 <div className="flex gap-2">
-                  {pendingCount > 0 && (
+                  {pendingCount > 0 && trip.permissions === 'admin' && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1300,6 +1338,8 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
               setTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t));
               setSelectedTrip(updatedTrip);
             }}
+            onApproveSuggestion={handleApproveSuggestion}
+            onRejectSuggestion={handleRejectSuggestion}
           />
         )
       }
@@ -2187,6 +2227,7 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
           { id: 'completed', icon: 'ri-checkbox-circle-line', label: 'Concluídas', color: 'green', count: trips.filter(t => t.status === 'completed').length },
           { id: 'planning', icon: 'ri-calendar-line', label: 'Planejando', color: 'orange', count: trips.filter(t => t.status === 'planning').length },
           { id: 'shared_filter', icon: 'ri-share-line', label: 'Compartilhadas', color: 'purple', count: trips.filter(t => t.isShared || (t.sharedWith && t.sharedWith.length > 0) || t.marketplaceConfig?.isListed).length },
+          { id: 'approvals', icon: 'ri-notification-3-line', label: 'Aprovações', color: 'yellow', count: trips.filter(t => t.pendingSuggestions?.some((s: any) => s.status === 'pending')).length },
         ].map(filter => (
           <button
             key={filter.id}
@@ -2309,7 +2350,11 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
                         className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors"
                       >
                         <div className="flex items-center gap-4">
-                          <img src={user.avatar} alt={user.name} className="w-14 h-14 rounded-full object-cover" />
+                          <UserAvatar
+                            src={user.avatar}
+                            name={user.name}
+                            size="lg"
+                          />
                           <div>
                             <h4 className="font-bold text-gray-900">{user.name}</h4>
                             <p className="text-sm text-gray-500">Entrou {new Date(user.joinedAt).toLocaleDateString('pt-BR')}</p>
@@ -2389,34 +2434,66 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
                 {selectedTrip.pendingSuggestions && selectedTrip.pendingSuggestions.length > 0 ? (
                   <div className="space-y-4">
-                    {/* Tabs */}
                     <div className="flex gap-2 border-b border-gray-200 pb-4">
-                      <button className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg font-medium text-sm">
+                      <button
+                        onClick={() => setSuggestionTab('pending')}
+                        className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${suggestionTab === 'pending'
+                          ? 'bg-yellow-100 text-yellow-700 shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      >
                         Pendentes ({selectedTrip.pendingSuggestions.filter(s => s.status === 'pending').length})
                       </button>
-                      <button className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium text-sm hover:bg-gray-200">
+                      <button
+                        onClick={() => setSuggestionTab('approved')}
+                        className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${suggestionTab === 'approved'
+                          ? 'bg-green-100 text-green-700 shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      >
                         Aprovadas ({selectedTrip.pendingSuggestions.filter(s => s.status === 'approved').length})
                       </button>
-                      <button className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium text-sm hover:bg-gray-200">
+                      <button
+                        onClick={() => setSuggestionTab('rejected')}
+                        className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${suggestionTab === 'rejected'
+                          ? 'bg-red-100 text-red-700 shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      >
                         Rejeitadas ({selectedTrip.pendingSuggestions.filter(s => s.status === 'rejected').length})
                       </button>
                     </div>
 
                     {/* Suggestions List */}
                     {selectedTrip.pendingSuggestions
-                      .filter(s => s.status === 'pending')
+                      .filter(s => s.status === suggestionTab)
                       .map((suggestion) => (
                         <div
                           key={suggestion.id}
-                          className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-2xl p-6"
+                          className={`rounded-2xl p-6 border-2 transition-all ${suggestionTab === 'pending'
+                            ? 'bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200'
+                            : suggestionTab === 'approved'
+                              ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
+                              : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-200'
+                            }`}
                         >
                           {/* Suggestion Header */}
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-start gap-4">
-                              <img src={suggestion.userAvatar} alt={suggestion.userName} className="w-12 h-12 rounded-full object-cover" />
+                              <UserAvatar
+                                src={suggestion.userAvatar}
+                                name={suggestion.userName}
+                                size="lg"
+                                className="border-2 border-white"
+                              />
                               <div>
                                 <h4 className="font-bold text-gray-900">{suggestion.userName}</h4>
-                                <p className="text-sm text-gray-600">{getTimeAgo(suggestion.createdAt)}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm text-gray-600">{getTimeAgo(suggestion.createdAt)}</p>
+                                  {suggestion.status !== 'pending' && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${suggestion.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                      }`}>
+                                      {suggestion.status === 'approved' ? 'Aprovada' : 'Rejeitada'}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getSuggestionColor(suggestion.type).replace('text-', 'bg-')}/20`}>
@@ -2425,11 +2502,67 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
                           </div>
 
                           {/* Suggestion Content */}
-                          <div className="bg-white rounded-xl p-4 mb-4">
-                            <h5 className="font-semibold text-gray-900 mb-2">{suggestion.description}</h5>
-                            <div className="text-sm text-gray-600">
-                              <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(suggestion.data, null, 2)}</pre>
+                          <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+                            <h5 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                              <i className="ri-information-line text-blue-500"></i>
+                              Detalhes da Sugestão
+                            </h5>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-3">
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Título</span>
+                                  <p className="text-sm font-semibold text-gray-900">{suggestion.data.title || suggestion.data.name}</p>
+                                </div>
+                                {suggestion.data.description && (
+                                  <div>
+                                    <span className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Descrição</span>
+                                    <p className="text-sm text-gray-600 line-clamp-2">{suggestion.data.description}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-3">
+                                <div className="flex gap-4">
+                                  {suggestion.data.time && (
+                                    <div>
+                                      <span className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Horário</span>
+                                      <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
+                                        <i className="ri-time-line text-blue-500 text-xs"></i>
+                                        {suggestion.data.time}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {suggestion.data.duration && (
+                                    <div>
+                                      <span className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Duração</span>
+                                      <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
+                                        <i className="ri-timer-line text-orange-500 text-xs"></i>
+                                        {suggestion.data.duration}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                {suggestion.data.location && (
+                                  <div>
+                                    <span className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Localização</span>
+                                    <p className="text-sm text-gray-600 flex items-center gap-1.5">
+                                      <i className="ri-map-pin-2-line text-red-500"></i>
+                                      {suggestion.data.location}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
+
+                            {suggestion.type === 'add_place' && suggestion.data.suggestedDayId !== undefined && (
+                              <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between">
+                                <span className="text-xs font-medium text-gray-500">Sugestão de inclusão para o:</span>
+                                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold uppercase">
+                                  Dia {suggestion.data.suggestedDayId + 1}
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Comments Section */}
@@ -2438,74 +2571,103 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
                               <h6 className="font-semibold text-gray-900 text-sm mb-3">💬 Comentários ({suggestion.comments.length})</h6>
                               {suggestion.comments.map((comment) => (
                                 <div key={comment.id} className="flex gap-3">
-                                  <img src={comment.userAvatar} alt={comment.userName} className="w-8 h-8 rounded-full object-cover" />
+                                  <UserAvatar
+                                    src={comment.userAvatar}
+                                    name={comment.userName}
+                                    size="sm"
+                                    className="border border-gray-100"
+                                  />
                                   <div className="flex-1">
                                     <div className="bg-gray-50 rounded-lg p-3">
                                       <h6 className="font-semibold text-gray-900 text-sm">{comment.userName}</h6>
                                       <p className="text-sm text-gray-700">{comment.text}</p>
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1">{getTimeAgo(comment.created_at)}</p>
+                                    <p className="text-xs text-gray-500 mt-1">{getTimeAgo(comment.createdAt || comment.created_at)}</p>
                                   </div>
                                 </div>
                               ))}
                             </div>
                           )}
 
-                          {/* Add Comment */}
-                          <div className="bg-white rounded-xl p-4 mb-4">
-                            <div className="flex gap-3">
-                              <input
-                                type="text"
-                                value={selectedSuggestion?.id === suggestion.id ? commentText : ''}
-                                onChange={(e) => {
-                                  setSelectedSuggestion(suggestion);
-                                  setCommentText(e.target.value);
-                                }}
-                                placeholder="Adicionar um comentário..."
-                                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
-                                onKeyPress={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleAddComment(suggestion.id);
-                                  }
-                                }}
-                              />
-                              <button
-                                onClick={() => handleAddComment(suggestion.id)}
-                                disabled={!commentText.trim()}
-                                className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                <i className="ri-send-plane-fill"></i>
-                              </button>
-                            </div>
-                          </div>
+                          {/* Actions or Status */}
+                          {suggestion.status === 'pending' ? (
+                            <div className="space-y-4">
+                              {/* Add Comment */}
+                              <div className="bg-white rounded-xl p-4">
+                                <div className="flex gap-3">
+                                  <input
+                                    type="text"
+                                    value={selectedSuggestion?.id === suggestion.id ? commentText : ''}
+                                    onChange={(e) => {
+                                      setSelectedSuggestion(suggestion);
+                                      setCommentText(e.target.value);
+                                    }}
+                                    placeholder="Adicionar um comentário..."
+                                    className="flex-1 px-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
+                                    onKeyPress={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleAddComment(suggestion.id);
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    onClick={() => handleAddComment(suggestion.id)}
+                                    disabled={!commentText.trim()}
+                                    className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    <i className="ri-send-plane-fill"></i>
+                                  </button>
+                                </div>
+                              </div>
 
-                          {/* Action Buttons */}
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleApproveSuggestion(suggestion.id)}
-                              className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                            >
-                              <i className="ri-check-line text-xl"></i>
-                              Aprovar e Aplicar
-                            </button>
-                            <button
-                              onClick={() => handleRejectSuggestion(suggestion.id)}
-                              className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                            >
-                              <i className="ri-close-line text-xl"></i>
-                              Rejeitar
-                            </button>
-                          </div>
+                              {/* Action Buttons */}
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleApproveSuggestion(suggestion.id)}
+                                  className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                                >
+                                  <i className="ri-check-line text-xl"></i>
+                                  Aprovar e Aplicar
+                                </button>
+                                <button
+                                  onClick={() => handleRejectSuggestion(suggestion.id)}
+                                  className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                                >
+                                  <i className="ri-close-line text-xl"></i>
+                                  Rejeitar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className={`p-4 rounded-xl border text-center font-medium ${suggestion.status === 'approved' ? 'bg-green-100/50 border-green-200 text-green-700' : 'bg-red-100/50 border-red-200 text-red-700'
+                              }`}>
+                              Esta sugestão foi {suggestion.status === 'approved' ? 'Aprovada e Aplicada' : 'Rejeitada'}.
+                            </div>
+                          )}
                         </div>
                       ))}
 
-                    {selectedTrip.pendingSuggestions.filter(s => s.status === 'pending').length === 0 && (
+                    {selectedTrip.pendingSuggestions.filter(s => s.status === suggestionTab).length === 0 && (
                       <div className="text-center py-12">
-                        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-green-100 to-emerald-100 flex items-center justify-center">
-                          <i className="ri-check-line text-4xl text-green-500"></i>
+                        <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${suggestionTab === 'pending'
+                          ? 'bg-gradient-to-r from-yellow-100 to-orange-100'
+                          : suggestionTab === 'approved'
+                            ? 'bg-gradient-to-r from-green-100 to-emerald-100'
+                            : 'bg-gradient-to-r from-red-100 to-pink-100'
+                          }`}>
+                          <i className={`${suggestionTab === 'pending'
+                            ? 'ri-lightbulb-line text-yellow-500'
+                            : suggestionTab === 'approved'
+                              ? 'ri-check-line text-green-500'
+                              : 'ri-close-line text-red-500'
+                            } text-4xl`}></i>
                         </div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">Tudo revisado!</h3>
-                        <p className="text-gray-600">Não há sugestões pendentes no momento.</p>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">
+                          {suggestionTab === 'pending' ? 'Nenhuma sugestão pendente' : suggestionTab === 'approved' ? 'Nenhuma sugestão aprovada' : 'Nenhuma sugestão rejeitada'}
+                        </h3>
+                        <p className="text-gray-600">
+                          {suggestionTab === 'pending' ? 'Tudo revisado por aqui!' : 'As sugestões aparecerão aqui após sua ação.'}
+                        </p>
                       </div>
                     )}
                   </div>

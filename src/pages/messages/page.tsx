@@ -1,37 +1,38 @@
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/services/supabase';
 import MessagesSidebar from './components/MessagesSidebar';
 import ChatWindow from './components/ChatWindow';
 import MobileNav from '../home/components/MobileNav';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 
 export default function MessagesPage() {
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   // 'type' is needed to distinguish between DM, Group, Community for the ChatWindow
   const [selectedChatType, setSelectedChatType] = useState<'direct' | 'group' | 'community'>('direct');
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setCurrentUser(user);
-    });
-  }, []);
+    if (!loading && !user) {
+      navigate('/login', { replace: true });
+    }
+  }, [loading, user, navigate]);
 
   const handleSelectChat = (id: string, type: 'direct' | 'group' | 'community') => {
     setSelectedChat(id);
     setSelectedChatType(type);
   };
 
-  const handleMobileNavTabChange = (tab: 'feed' | 'explore' | 'reels') => {
+  const handleMobileNavTabChange = () => {
     // Since we are in /messages, we need to navigate back to home
     // ideally passing the tab as state or query param if HomePage supports it.
     // For now, simple navigation.
     navigate('/');
   };
 
-  if (!currentUser) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -45,7 +46,7 @@ export default function MessagesPage() {
             ${selectedChat ? 'hidden md:flex' : 'flex'}
         `}>
           <MessagesSidebar
-            currentUser={currentUser}
+            currentUser={user}
             selectedChatId={selectedChat}
             onSelectChat={handleSelectChat}
           />

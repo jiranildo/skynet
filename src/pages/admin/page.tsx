@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MobileNav from '../home/components/MobileNav';
 import { useAuth } from '../../context/AuthContext';
+import { isUserAdmin } from '../../services/authz';
 
 interface User {
   id: string;
@@ -59,6 +60,9 @@ interface SystemStats {
 
 export default function AdminPage() {
   const navigate = useNavigate();
+  const { user, loading, signOut } = useAuth();
+  const [isAdminChecked, setIsAdminChecked] = useState(false);
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'marketplace' | 'reports' | 'analytics' | 'settings'>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
   const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([]);
@@ -78,21 +82,47 @@ export default function AdminPage() {
   const [filterRole, setFilterRole] = useState<'all' | 'user' | 'business' | 'admin'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'suspended' | 'banned'>('all');
 
-  const { user, loading, signOut } = useAuth();
-
   useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        navigate('/admin/login');
-      } else {
-        loadData();
-      }
-    }
-  }, [user, loading, navigate]);
+    let active = true;
 
-  if (loading) {
+    const validateAccess = async () => {
+      if (loading) return;
+
+      if (!user) {
+        if (active) {
+          setHasAdminAccess(false);
+          setIsAdminChecked(true);
+          navigate('/admin/login', { replace: true });
+        }
+        return;
+      }
+
+      const allowed = await isUserAdmin(user);
+      if (!active) return;
+
+      setHasAdminAccess(allowed);
+      setIsAdminChecked(true);
+
+      if (!allowed) {
+        await signOut();
+        navigate('/admin/login', { replace: true });
+        return;
+      }
+
+      loadData();
+    };
+
+    validateAccess();
+    return () => {
+      active = false;
+    };
+  }, [user, loading, navigate, signOut]);
+
+  if (loading || !isAdminChecked) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
+
+  if (!user || !hasAdminAccess) return null;
 
   const loadData = () => {
     // Carregar usuários mockados

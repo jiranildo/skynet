@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CellarWine, cellarService } from '../../../services/supabase';
-import { analyzeWineLabel } from '../../../services/gemini';
+import { analyzeWineLabel, searchWineInfo } from '../../../services/gemini';
 
 interface AddWineModalProps {
   onClose: () => void;
@@ -28,7 +28,12 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
     food_pairing: '',
     serving_temp: '',
     decant_time: '',
-    aging_potential: '',
+    best_drinking_window: '',
+    terroir: '',
+    intensity: 3,
+    visual_perception: '',
+    olfactory_perception: '',
+    palate_perception: '',
     notes: '',
     image_url: ''
   });
@@ -82,6 +87,12 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
             serving_temp: analysis.serving_temp || '',
             decant_time: analysis.decant_time || '',
             aging_potential: analysis.aging_potential || '',
+            best_drinking_window: analysis.best_drinking_window || '',
+            terroir: analysis.terroir || '',
+            intensity: analysis.intensity || 3,
+            visual_perception: analysis.visual_perception || '',
+            olfactory_perception: analysis.olfactory_perception || '',
+            palate_perception: analysis.palate_perception || '',
 
             section: '',
             shelf: '',
@@ -110,13 +121,51 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
     }
   };
 
-  // Keep for manual flow simulation if needed, but not used in scan/upload anymore
-  const simulateRecognition = (wineData: Partial<CellarWine>) => {
+  const handleSARASearch = async () => {
+    if (!formData.name) {
+      alert('Por favor, informe ao menos o nome do vinho para a SARA');
+      return;
+    }
+
     setIsProcessing(true);
-    setTimeout(() => {
-      // ... unused fallback
+    try {
+      const query = `${formData.name} ${formData.producer || ''} ${formData.vintage || ''}`.trim();
+      const analysis = await searchWineInfo(query);
+
+      if (analysis) {
+        setFormData({
+          ...formData,
+          name: analysis.name || formData.name,
+          producer: analysis.producer || formData.producer,
+          vintage: analysis.vintage || formData.vintage,
+          type: analysis.type || formData.type,
+          region: analysis.region || formData.region,
+          country: analysis.country || formData.country,
+          grapes: analysis.grapes || formData.grapes,
+          alcohol_content: analysis.alcohol_content || formData.alcohol_content,
+          description: analysis.description || formData.description,
+          food_pairing: analysis.food_pairing || formData.food_pairing,
+          serving_temp: analysis.serving_temp || formData.serving_temp,
+          decant_time: analysis.decant_time || formData.decant_time,
+          aging_potential: analysis.aging_potential || formData.aging_potential,
+          best_drinking_window: analysis.best_drinking_window || formData.best_drinking_window,
+          terroir: analysis.terroir || formData.terroir,
+          intensity: analysis.intensity || formData.intensity,
+          visual_perception: analysis.visual_perception || formData.visual_perception,
+          olfactory_perception: analysis.olfactory_perception || formData.olfactory_perception,
+          palate_perception: analysis.palate_perception || formData.palate_perception,
+        });
+        // Transition to details to see the result
+        setStep('details');
+      } else {
+        alert('Não foi possível encontrar informações detalhadas para este vinho.');
+      }
+    } catch (error) {
+      console.error('Error during SARA search:', error);
+      alert('Erro na pesquisa SARA AI. Por favor, tente novamente.');
+    } finally {
       setIsProcessing(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -447,13 +496,27 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-900 mb-2">Nome do Vinho</label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-semibold text-lg"
-                      placeholder="Ex: Château Margaux"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-semibold text-lg pr-32"
+                        placeholder="Ex: Château Margaux"
+                      />
+                      <button
+                        onClick={handleSARASearch}
+                        disabled={isProcessing || !formData.name}
+                        className="absolute right-2 top-2 bottom-2 px-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:shadow-md transition-all disabled:opacity-50"
+                      >
+                        {isProcessing ? (
+                          <i className="ri-loader-4-line animate-spin"></i>
+                        ) : (
+                          <i className="ri-sparkling-fill"></i>
+                        )}
+                        SARA AI
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-900 mb-2">Produtor</label>
@@ -598,124 +661,192 @@ export default function AddWineModal({ onClose, onAdd }: AddWineModalProps) {
                         className="w-full px-3 py-2 bg-white border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
                       />
                     </div>
-                  </div>
-                </div>
-
-                {/* Storage Location */}
-                <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                  <label className="block text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <i className="ri-map-pin-line text-red-600"></i>
-                    Localização na Adega
-                  </label>
-                  <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase text-center">Seção</label>
+                      <label className="block text-xs font-bold text-purple-700/70 mb-1">Janela de Consumo</label>
                       <input
                         type="text"
-                        value={formData.section}
-                        onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-                        placeholder="A"
-                        className="w-full py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-center font-bold text-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase text-center">Prateleira</label>
-                      <input
-                        type="text"
-                        value={formData.shelf}
-                        onChange={(e) => setFormData({ ...formData, shelf: e.target.value })}
-                        placeholder="2"
-                        className="w-full py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-center font-bold text-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase text-center">Posição</label>
-                      <input
-                        type="text"
-                        value={formData.position}
-                        onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                        placeholder="5"
-                        className="w-full py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-center font-bold text-xl"
+                        value={formData.best_drinking_window || ''}
+                        onChange={(e) => setFormData({ ...formData, best_drinking_window: e.target.value })}
+                        placeholder="Ex: 2024 - 2030"
+                        className="w-full px-3 py-2 bg-white border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
                       />
                     </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Quantity and Price */}
-                <div className="grid grid-cols-2 gap-4">
+              {/* Sensory Perception */}
+              <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
+                <h3 className="text-sm font-bold text-amber-900 mb-4 uppercase tracking-wide flex items-center gap-2">
+                  <i className="ri-eye-line"></i>
+                  Perfil Sensorial
+                </h3>
+                <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-bold text-gray-900 mb-2">Quantidade</label>
-                    <div className="relative">
-                      <i className="ri-stack-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                      <input
-                        type="number"
-                        min="1"
-                        value={formData.quantity}
-                        onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
-                        className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-semibold text-lg"
-                      />
+                    <label className="block text-xs font-bold text-amber-700/70 mb-2">Intensidade (1-5)</label>
+                    <div className="flex gap-2">
+                      {[1, 2, 3, 4, 5].map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, intensity: level })}
+                          className={`flex-1 py-2 rounded-lg border-2 transition-all ${formData.intensity === level
+                            ? 'bg-amber-500 border-amber-600 text-white shadow-inner'
+                            : 'bg-white border-amber-200 text-amber-400 hover:border-amber-400'
+                            }`}
+                        >
+                          {level}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-gray-900 mb-2">Preço (R$)</label>
-                    <div className="relative">
-                      <i className="ri-money-dollar-circle-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                        className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-semibold text-lg"
-                      />
-                    </div>
+                    <label className="block text-xs font-bold text-amber-700/70 mb-1">Exame Visual</label>
+                    <input
+                      type="text"
+                      value={formData.visual_perception || ''}
+                      onChange={(e) => setFormData({ ...formData, visual_perception: e.target.value })}
+                      placeholder="Ex: Rubi intenso, reflexos granada"
+                      className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-amber-700/70 mb-1">Exame Olfativo</label>
+                    <textarea
+                      value={formData.olfactory_perception || ''}
+                      onChange={(e) => setFormData({ ...formData, olfactory_perception: e.target.value })}
+                      placeholder="Ex: Frutas negras maduras, tabaco, especiarias"
+                      rows={2}
+                      className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-amber-700/70 mb-1">Exame Gustativo</label>
+                    <textarea
+                      value={formData.palate_perception || ''}
+                      onChange={(e) => setFormData({ ...formData, palate_perception: e.target.value })}
+                      placeholder="Ex: Encorpado, taninos sedosos, final longo"
+                      rows={2}
+                      className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"
+                    />
                   </div>
                 </div>
+              </div>
 
-                {/* Rating */}
-                <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-3">Sua Avaliação</label>
-                  <div className="flex justify-between px-2">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        onClick={() => setFormData({ ...formData, rating: star })}
-                        className="p-2 transition-all hover:scale-110 active:scale-90"
-                      >
-                        <i className={`text-3xl ${star <= (formData.rating || 0) ? 'ri-star-fill text-amber-400' : 'ri-star-line text-gray-300'}`}></i>
-                      </button>
-                    ))}
+              {/* Storage Location */}
+              <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                <label className="block text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <i className="ri-map-pin-line text-red-600"></i>
+                  Localização na Adega
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase text-center">Seção</label>
+                    <input
+                      type="text"
+                      value={formData.section}
+                      onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                      placeholder="A"
+                      className="w-full py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-center font-bold text-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase text-center">Prateleira</label>
+                    <input
+                      type="text"
+                      value={formData.shelf}
+                      onChange={(e) => setFormData({ ...formData, shelf: e.target.value })}
+                      placeholder="2"
+                      className="w-full py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-center font-bold text-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase text-center">Posição</label>
+                    <input
+                      type="text"
+                      value={formData.position}
+                      onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                      placeholder="5"
+                      className="w-full py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-center font-bold text-xl"
+                    />
                   </div>
                 </div>
+              </div>
 
-                {/* Notes */}
+              {/* Quantity and Price */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">Notas Pessoais</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    rows={4}
-                    placeholder="O que achou deste vinho?"
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none bg-gray-50 focus:bg-white transition-colors"
-                  ></textarea>
+                  <label className="block text-sm font-bold text-gray-900 mb-2">Quantidade</label>
+                  <div className="relative">
+                    <i className="ri-stack-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input
+                      type="number"
+                      min="1"
+                      value={formData.quantity}
+                      onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                      className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-semibold text-lg"
+                    />
+                  </div>
                 </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-900 mb-2">Preço (R$)</label>
+                  <div className="relative">
+                    <i className="ri-money-dollar-circle-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.price}
+                      onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                      className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-semibold text-lg"
+                    />
+                  </div>
+                </div>
+              </div>
 
-                {/* Actions */}
-                <div className="flex gap-3 pt-4 sticky bottom-0 bg-white pb-6 border-t border-gray-100 -mx-6 px-6 md:mx-0 md:px-0 md:relative md:border-none md:pb-0 md:bg-transparent">
-                  <button
-                    onClick={onClose}
-                    className="flex-1 py-4 border-2 border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-all"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    className="flex-[2] py-4 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-red-200 shadow-lg"
-                  >
-                    <i className="ri-check-line text-xl"></i>
-                    Salvar na Adega
-                  </button>
+              {/* Rating */}
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-3">Sua Avaliação</label>
+                <div className="flex justify-between px-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setFormData({ ...formData, rating: star })}
+                      className="p-2 transition-all hover:scale-110 active:scale-90"
+                    >
+                      <i className={`text-3xl ${star <= (formData.rating || 0) ? 'ri-star-fill text-amber-400' : 'ri-star-line text-gray-300'}`}></i>
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Notas Pessoais</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={4}
+                  placeholder="O que achou deste vinho?"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none bg-gray-50 focus:bg-white transition-colors"
+                ></textarea>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 sticky bottom-0 bg-white pb-6 border-t border-gray-100 -mx-6 px-6 md:mx-0 md:px-0 md:relative md:border-none md:pb-0 md:bg-transparent">
+                <button
+                  onClick={onClose}
+                  className="flex-1 py-4 border-2 border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  className="flex-[2] py-4 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-red-200 shadow-lg"
+                >
+                  <i className="ri-check-line text-xl"></i>
+                  Salvar na Adega
+                </button>
               </div>
             </div>
           )}

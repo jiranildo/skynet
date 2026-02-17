@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { getMarketplaceTrips, Trip, User } from '../../../services/supabase';
+import { UserAvatar } from '../../../components/UserAvatar';
 
 interface MarketplaceItem {
   id: string; // Trip ID
@@ -89,7 +90,7 @@ export default function MarketplaceTab() {
     try {
       const trips = await getMarketplaceTrips();
       console.log('DEBUG: Marketplace Trips fetched:', trips);
-      console.log('DEBUG: Current User:', (window as any).supabase?.auth?.currentUser?.id);
+      console.log('DEBUG: Current User:', currentUser?.id ?? null);
 
       const marketplaceItems: MarketplaceItem[] = trips.map(trip => {
         // Calculate days
@@ -486,10 +487,10 @@ export default function MarketplaceTab() {
                 <div className="p-4">
                   {/* Seller */}
                   <div className="flex items-center gap-3 mb-3 pb-3 border-b border-gray-100">
-                    <img
+                    <UserAvatar
                       src={item.seller.avatar}
-                      alt={item.seller.name}
-                      className="w-10 h-10 rounded-full object-cover"
+                      name={item.seller.name}
+                      size="md"
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-1.5">
@@ -603,10 +604,10 @@ export default function MarketplaceTab() {
                 <div className="p-4">
                   {/* Seller */}
                   <div className="flex items-center gap-3 mb-3 pb-3 border-b border-gray-100">
-                    <img
+                    <UserAvatar
                       src={item.seller.avatar}
-                      alt={item.seller.name}
-                      className="w-10 h-10 rounded-full object-cover"
+                      name={item.seller.name}
+                      size="md"
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-1.5">
@@ -742,10 +743,10 @@ export default function MarketplaceTab() {
               <div className="p-6 md:p-8 max-h-[60vh] overflow-y-auto">
                 {/* Seller Info */}
                 <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
-                  <img
+                  <UserAvatar
                     src={selectedItem.seller.avatar}
-                    alt={selectedItem.seller.name}
-                    className="w-16 h-16 rounded-full object-cover"
+                    name={selectedItem.seller.name}
+                    size="xl"
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">

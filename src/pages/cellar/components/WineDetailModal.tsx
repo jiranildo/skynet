@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { CellarWine } from '../../../services/supabase';
+import WineLifecycleChart from './WineLifecycleChart';
+import { searchWineInfo } from '../../../services/gemini';
 
 interface WineDetailModalProps {
   wine: CellarWine;
@@ -20,6 +22,52 @@ export default function WineDetailModal({
 }: WineDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<CellarWine>(wine);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const handleSARASearchForEnrichment = async () => {
+    if (!editForm.name) {
+      alert('Por favor, informe ao menos o nome do vinho para a SARA');
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const query = `${editForm.name} ${editForm.producer || ''} ${editForm.vintage || ''}`.trim();
+      const analysis = await searchWineInfo(query);
+
+      if (analysis) {
+        setEditForm({
+          ...editForm,
+          name: analysis.name || editForm.name,
+          producer: analysis.producer || editForm.producer,
+          vintage: analysis.vintage || editForm.vintage,
+          type: analysis.type || editForm.type,
+          region: analysis.region || editForm.region,
+          country: analysis.country || editForm.country,
+          grapes: analysis.grapes || editForm.grapes,
+          alcohol_content: analysis.alcohol_content || editForm.alcohol_content,
+          description: analysis.description || editForm.description,
+          food_pairing: analysis.food_pairing || editForm.food_pairing,
+          serving_temp: analysis.serving_temp || editForm.serving_temp,
+          decant_time: analysis.decant_time || editForm.decant_time,
+          aging_potential: analysis.aging_potential || editForm.aging_potential,
+          best_drinking_window: analysis.best_drinking_window || editForm.best_drinking_window,
+          terroir: analysis.terroir || editForm.terroir,
+          intensity: analysis.intensity || editForm.intensity,
+          visual_perception: analysis.visual_perception || editForm.visual_perception,
+          olfactory_perception: analysis.olfactory_perception || editForm.olfactory_perception,
+          palate_perception: analysis.palate_perception || editForm.palate_perception,
+        });
+      } else {
+        alert('Não foi possível encontrar informações detalhadas para este vinho.');
+      }
+    } catch (error) {
+      console.error('Error during SARA enrichment:', error);
+      alert('Erro na pesquisa SARA AI. Por favor, tente novamente.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   const handleSave = () => {
     if (onUpdate) {
@@ -57,12 +105,26 @@ export default function WineDetailModal({
           <div className="p-6 space-y-4 flex-1 overflow-y-auto">
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">Nome</label>
-              <input
-                type="text"
-                value={editForm.name}
-                onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none pr-32"
+                />
+                <button
+                  onClick={handleSARASearchForEnrichment}
+                  disabled={isSearching || !editForm.name}
+                  className="absolute right-2 top-2 bottom-2 px-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:shadow-md transition-all disabled:opacity-50"
+                >
+                  {isSearching ? (
+                    <i className="ri-loader-4-line animate-spin"></i>
+                  ) : (
+                    <i className="ri-sparkling-fill"></i>
+                  )}
+                  SARA AI
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -144,6 +206,96 @@ export default function WineDetailModal({
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Temperatura</label>
+                <input
+                  type="text"
+                  value={editForm.serving_temp || ''}
+                  onChange={e => setEditForm({ ...editForm, serving_temp: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Decantação</label>
+                <input
+                  type="text"
+                  value={editForm.decant_time || ''}
+                  onChange={e => setEditForm({ ...editForm, decant_time: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Janela de Consumo</label>
+                <input
+                  type="text"
+                  value={editForm.best_drinking_window || ''}
+                  onChange={e => setEditForm({ ...editForm, best_drinking_window: e.target.value })}
+                  placeholder="Ex: 2024 - 2030"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Terroir</label>
+                <input
+                  type="text"
+                  value={editForm.terroir || ''}
+                  onChange={e => setEditForm({ ...editForm, terroir: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4 pt-2 border-t border-gray-100">
+              <h3 className="font-bold text-gray-900">Perfil Sensorial</h3>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Intensidade (1-5)</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="5"
+                  value={editForm.intensity || 3}
+                  onChange={e => setEditForm({ ...editForm, intensity: parseInt(e.target.value) })}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                />
+                <div className="flex justify-between text-[10px] text-gray-400 font-bold uppercase mt-1">
+                  <span>Leve</span>
+                  <span>Médio</span>
+                  <span>Encropado</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Exame Visual</label>
+                <input
+                  type="text"
+                  value={editForm.visual_perception || ''}
+                  onChange={e => setEditForm({ ...editForm, visual_perception: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Exame Olfativo</label>
+                <textarea
+                  value={editForm.olfactory_perception || ''}
+                  onChange={e => setEditForm({ ...editForm, olfactory_perception: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-900 mb-2">Exame Gustativo</label>
+                <textarea
+                  value={editForm.palate_perception || ''}
+                  onChange={e => setEditForm({ ...editForm, palate_perception: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none resize-none"
+                />
+              </div>
+            </div>
+
             <div className="pt-4 flex gap-3 pb-safe-area md:pb-0">
               <button
                 onClick={() => setIsEditing(false)}
@@ -196,10 +348,10 @@ export default function WineDetailModal({
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${wine.type === 'red' ? 'bg-red-100 text-red-700' :
-                      wine.type === 'white' ? 'bg-amber-100 text-amber-700' :
-                        wine.type === 'rose' ? 'bg-pink-100 text-pink-700' :
-                          wine.type === 'sparkling' ? 'bg-blue-100 text-blue-700' :
-                            'bg-purple-100 text-purple-700'
+                    wine.type === 'white' ? 'bg-amber-100 text-amber-700' :
+                      wine.type === 'rose' ? 'bg-pink-100 text-pink-700' :
+                        wine.type === 'sparkling' ? 'bg-blue-100 text-blue-700' :
+                          'bg-purple-100 text-purple-700'
                     }`}>
                     {wine.type === 'red' ? 'Tinto' :
                       wine.type === 'white' ? 'Branco' :
@@ -256,6 +408,124 @@ export default function WineDetailModal({
                   <span className="font-bold text-gray-900 truncate px-2 block">
                     {wine.country || '-'}
                   </span>
+                </div>
+              </div>
+
+              {/* Lifecycle Chart */}
+              <WineLifecycleChart
+                vintage={wine.vintage || 0}
+                bestDrinkingWindow={wine.best_drinking_window}
+                agingPotential={wine.aging_potential}
+              />
+
+              {/* Service & Technical Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Service Column */}
+                <div className="bg-purple-50 rounded-2xl p-6 border border-purple-100">
+                  <h3 className="text-sm font-bold text-purple-900 mb-4 uppercase tracking-wide flex items-center gap-2">
+                    <i className="ri-temp-hot-line"></i>
+                    Serviço de Sommelier
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center border-b border-purple-200/50 pb-2">
+                      <span className="text-sm text-purple-700 font-medium">Temperatura</span>
+                      <span className="text-sm font-bold text-purple-900">{wine.serving_temp || '16-18°C'}</span>
+                    </div>
+                    <div className="flex justify-between items-center border-b border-purple-200/50 pb-2">
+                      <span className="text-sm text-purple-700 font-medium">Decantação</span>
+                      <span className="text-sm font-bold text-purple-900">{wine.decant_time || 'Não necessário'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-purple-700 font-medium">Potencial</span>
+                      <span className="text-sm font-bold text-purple-900">{wine.aging_potential || 'Longa guarda'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Technical / Terroir Column */}
+                <div className="bg-amber-50 rounded-2xl p-6 border border-amber-100">
+                  <h3 className="text-sm font-bold text-amber-900 mb-4 uppercase tracking-wide flex items-center gap-2">
+                    <i className="ri-earth-line"></i>
+                    Terroir e Composição
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center border-b border-amber-200/50 pb-2">
+                      <span className="text-sm text-amber-700 font-medium">Teor Alcoólico</span>
+                      <span className="text-sm font-bold text-amber-900">{wine.alcohol_content ? `${wine.alcohol_content}%` : '-'}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm text-amber-700 font-medium">Terroir</span>
+                      <span className="text-sm font-bold text-amber-900 leading-tight">{wine.terroir || 'Solo argilo-calcário'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sensory Profile Analysis */}
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-3xl p-6 md:p-8 border border-amber-100 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-200/20 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+
+                <h3 className="text-lg font-bold text-amber-900 mb-6 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i className="ri-eye-line text-amber-600 text-xl"></i>
+                  </div>
+                  Perfil Sensorial
+                </h3>
+
+                <div className="space-y-6">
+                  {/* Intensity Meter */}
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-sm font-bold text-amber-800 uppercase tracking-wider">Intensidade e Corpo</span>
+                      <span className="px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full">Nível {wine.intensity || 3}/5</span>
+                    </div>
+                    <div className="flex gap-1.5 h-3">
+                      {[1, 2, 3, 4, 5].map((level) => (
+                        <div
+                          key={level}
+                          className={`flex-1 rounded-full transition-all duration-500 ${level <= (wine.intensity || 3)
+                            ? 'bg-gradient-to-r from-amber-400 to-amber-600 shadow-sm shadow-amber-200'
+                            : 'bg-amber-200/30'
+                            }`}
+                        ></div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between text-[10px] text-amber-600/60 font-bold uppercase mt-2">
+                      <span>Leve</span>
+                      <span>Médio</span>
+                      <span>Encorpado</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-amber-700 uppercase tracking-widest flex items-center gap-1.5">
+                        <i className="ri-drop-line text-amber-600"></i>
+                        Visual
+                      </h4>
+                      <p className="text-sm text-amber-900 leading-relaxed font-medium">
+                        {wine.visual_perception || 'Análise visual não disponível.'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-amber-700 uppercase tracking-widest flex items-center gap-1.5">
+                        <i className="ri-windy-line text-amber-600"></i>
+                        Olfativa
+                      </h4>
+                      <p className="text-sm text-amber-900 leading-relaxed font-medium">
+                        {wine.olfactory_perception || 'Análise olfativa não disponível.'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-amber-700 uppercase tracking-widest flex items-center gap-1.5">
+                        <i className="ri-restaurant-line text-amber-600"></i>
+                        Gustativa
+                      </h4>
+                      <p className="text-sm text-amber-900 leading-relaxed font-medium">
+                        {wine.palate_perception || 'Análise gustativa não disponível.'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 

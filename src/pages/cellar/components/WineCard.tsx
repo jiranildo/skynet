@@ -7,9 +7,10 @@ interface WineCardProps {
     onConsume: (e: React.MouseEvent) => void;
     onAdd: (e: React.MouseEvent) => void;
     compact?: boolean;
+    isReadyToDrink?: boolean;
 }
 
-export default function WineCard({ wine, onClick, onConsume, onAdd, compact = false }: WineCardProps) {
+export default function WineCard({ wine, onClick, onConsume, onAdd, compact = false, isReadyToDrink = false }: WineCardProps) {
     const getTypeLabel = () => {
         switch (wine.type) {
             case 'red': return 'Tinto';
@@ -25,8 +26,17 @@ export default function WineCard({ wine, onClick, onConsume, onAdd, compact = fa
     return (
         <div
             onClick={onClick}
-            className={`group relative bg-white/80 backdrop-blur-sm rounded-xl border border-white/20 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer active:scale-95 touch-manipulation`}
+            className={`group relative bg-white/80 backdrop-blur-sm rounded-xl border ${isReadyToDrink ? 'border-amber-300' : 'border-white/20'} shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer active:scale-95 touch-manipulation`}
         >
+            {/* Ready to Drink Badge */}
+            {isReadyToDrink && (
+                <div className="absolute top-0 left-0 z-20">
+                    <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-br-lg shadow-sm uppercase tracking-tighter">
+                        Pronto
+                    </div>
+                </div>
+            )}
+
             {/* Image Container */}
             <div className={`relative ${compact ? 'aspect-square' : 'aspect-[3/4]'} overflow-hidden bg-gray-50`}>
                 <img

@@ -63,6 +63,7 @@ export interface Recommendation {
     decanting?: string;
     agingPotential?: string;
     reviewsCount?: number;
+    suggestedDayId?: number;
 }
 
 

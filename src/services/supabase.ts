@@ -5,9 +5,6 @@ const supabaseAnonKey = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Expose for debugging/signup
-(window as any).supabase = supabase;
-
 
 // ==================== TIPOS ====================
 
@@ -298,7 +295,13 @@ export interface CellarWine {
   serving_temp?: string;
   decant_time?: string;
   aging_potential?: string;
+  best_drinking_window?: string;
   food_pairing?: string;
+  terroir?: string;
+  intensity?: number;
+  visual_perception?: string;
+  olfactory_perception?: string;
+  palate_perception?: string;
   description?: string;
   created_at?: string;
   updated_at?: string;

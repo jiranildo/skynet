@@ -115,9 +115,8 @@ export default function LoginPage() {
                     <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
                         <p className="text-xs text-blue-600 text-center">
                             <i className="ri-information-line mr-1"></i>
-                            <strong>Conta de teste:</strong><br />
-                            E-mail: user@socialhub.com<br />
-                            Senha: user123
+                            <strong>Acesso:</strong><br />
+                            entre com uma conta válida cadastrada no sistema.
                         </p>
                     </div>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User, Trip } from '../../../services/supabase';
 import { ConfirmationModal } from '../../../components/ConfirmationModal';
+import { UserAvatar } from '../../../components/UserAvatar';
 
 interface ShareTripModalProps {
     isOpen: boolean;
@@ -220,10 +221,10 @@ export default function ShareTripModal({
                                             className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${selectedUsers.includes(user.id) ? 'bg-purple-100' : 'hover:bg-white'
                                                 }`}
                                         >
-                                            <img
-                                                src={user.avatar_url || `https://ui-avatars.com/api/?name=${user.full_name}&background=random`}
-                                                alt={user.full_name}
-                                                className="w-8 h-8 rounded-full object-cover"
+                                            <UserAvatar
+                                                src={user.avatar_url}
+                                                name={user.full_name}
+                                                size="sm"
                                             />
                                             <span className="text-sm font-medium text-gray-700 flex-1 text-left">{user.full_name}</span>
                                             {selectedUsers.includes(user.id) && <i className="ri-check-circle-fill text-purple-500"></i>}

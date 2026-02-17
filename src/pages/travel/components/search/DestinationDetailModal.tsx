@@ -1,4 +1,5 @@
 import React from 'react';
+import { UserAvatar } from '../../../../components/UserAvatar';
 
 interface DestinationDetailModalProps {
     isOpen: boolean;
@@ -224,14 +225,10 @@ export const DestinationDetailModal = ({
                                     }
                                 ].map((review, index) => (
                                     <div key={index} className="flex gap-4 p-4 bg-gray-50 rounded-xl">
-                                        <img
+                                        <UserAvatar
                                             src={review.avatar}
-                                            alt={review.name}
-                                            className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                                            onError={(e) => {
-                                                e.currentTarget.onerror = null;
-                                                e.currentTarget.src = `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format&fit=crop`;
-                                            }}
+                                            name={review.name}
+                                            size="md"
                                         />
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-2">

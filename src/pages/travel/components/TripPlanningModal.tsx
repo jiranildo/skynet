@@ -37,6 +37,8 @@ interface TripPlanningModalProps {
   onClose: () => void;
   trip: Trip;
   onTripUpdated?: (trip: Trip) => void;
+  onApproveSuggestion?: (suggestionId: string) => void;
+  onRejectSuggestion?: (suggestionId: string) => void;
 }
 
 // Special indices for Pre and Post trip
@@ -46,19 +48,35 @@ const POST_TRIP_INDEX = 999;
 // Helper to parse "YYYY-MM-DD" as local date to avoid timezone shifts
 const parseLocalDate = (dateStr: string) => {
   if (!dateStr) return new Date();
-  const datePart = dateStr.split('T')[0]; // Handle potentially full ISO strings
-  const [year, month, day] = datePart.split('-').map(Number);
-  return new Date(year, month - 1, day);
+  try {
+    const datePart = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+    const parts = datePart.split('-');
+    if (parts.length !== 3) return new Date();
+    const [year, month, day] = parts.map(Number);
+    if (isNaN(year) || isNaN(month) || isNaN(day)) return new Date();
+    return new Date(year, month - 1, day);
+  } catch (e) {
+    console.error("Error parsing date:", dateStr, e);
+    return new Date();
+  }
 };
 
-export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated }: TripPlanningModalProps) {
+export default function TripPlanningModal({
+  isOpen,
+  onClose,
+  trip,
+  onTripUpdated,
+  onApproveSuggestion,
+  onRejectSuggestion
+}: TripPlanningModalProps) {
   const { user } = useAuth();
-  const isAdmin = trip.permissions === 'admin';
+  const isAdmin = trip.permissions === 'admin' || trip.user_id === user?.id;
 
   // Calcular número de dias da viagem (Moved to top for scope access)
   const startDate = parseLocalDate(trip.start_date);
   const endDate = parseLocalDate(trip.end_date);
-  const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const diffTime = endDate.getTime() - startDate.getTime();
+  const totalDays = isNaN(diffTime) ? 1 : Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
 
   // Gerar dias da viagem
   const tripDays: DayPlan[] = Array.from({ length: totalDays }, (_, index) => {
@@ -88,6 +106,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
 
   // AI Preview State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [showSuggestionsModal, setShowSuggestionsModal] = useState(false);
   const [previewData, setPreviewData] = useState<{ [key: number]: Activity[] }>({});
 
   // Itinerary State (initialized from Supabase data)
@@ -102,7 +121,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
       Object.keys(trip.itinerary).forEach(key => {
         const numericKey = Number(key);
         if (!isNaN(numericKey)) {
-          normalizedItinerary[numericKey] = trip.itinerary[key];
+          normalizedItinerary[numericKey] = (trip.itinerary[key] || []).filter(Boolean);
         }
       });
 
@@ -194,7 +213,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
       }
 
       // 5.1 Build Existing Itinerary Context (To avoid duplicates)
-      const existingItems = Object.values(itinerary).flat().map(item => item.title).join(", ");
+      const existingItems = Object.values(itinerary).flat().filter(Boolean).map(item => item.title).join(", ");
       const existingContext = existingItems ? `
           JÁ AGENDADO (NÃO REPETIR ESTES LOCAIS):
           ${existingItems}
@@ -206,17 +225,23 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
         return { idx, label: `Dia ${idx + 1} (${tripDays[idx]?.fullDate || 'Data'})` };
       });
 
+      const isFirstDayIncluded = daysToGenerate.includes(0);
+      const isLastDayIncluded = daysToGenerate.includes(totalDays - 1);
+      const isPostTripIncluded = daysToGenerate.includes(POST_TRIP_INDEX);
+
       // 6. Build Prompts
       const systemInstruction = `
-          ATUE COMO: Um ESCPECIALISTA LOCAL nativo de ${trip.destination}. Você conhece os segredos, os melhores horários e a logística da cidade como ninguém.
+          ATUE COMO: Um ESPECIALISTA LOCAL nativo de ${trip.destination}. Você conhece os segredos, os melhores horários e a logística da cidade como ninguém.
           
           OBJETIVO: Gerar um roteiro profissional, lógico e imersivo para os dias solicitados.
           
-          REGRAS DE LOGÍSTICA (IMPORTANTE):
-          - NÃO sugira atividades que colidam com itens já agendados.
-          - Se for múltiplos dias, crie uma narrativa coesa (ex: "Dia Cultural" seguido de "Dia de Natureza").
-          - Para 'Dia 1': Incluir "Chegada/Transfer" e "Check-in" se não houver.
-          - Para 'Último Dia': Incluir "Check-out" e preparação para partida.
+          REGRAS DE CONTEÚDO (CRÍTICO):
+          1. NOMES ESPECÍFICOS: NUNCA use nomes genéricos como "Almoço", "Jantar", "Café da Manhã" ou "Passeio". O nome da atividade DEVE conter o local específico (ex: "Almoço no Disney Springs", "Jantar no Be Our Guest", "Passeio pela International Drive").
+          2. ORLANDO: Se o destino for Orlando, PRIORIZE os grandes parques temáticos (Disney, Universal, SeaWorld) de forma lógica, considerando o perfil do viajante.
+          3. LOGÍSTICA:
+             ${isFirstDayIncluded ? '- DIA 1: OBRIGATÓRIO incluir "Chegada/Transfer Aeroporto" e "Check-in no Hotel" como as primeiras atividades.' : ''}
+             ${isLastDayIncluded ? `- ÚLTIMO DIA DE VIAGEM (Dia ${totalDays}): OBRIGATÓRIO incluir "Check-out do Hotel", "Transfer para Aeroporto" e "Voo de Retorno" como as últimas atividades.` : ''}
+             ${isPostTripIncluded ? `- PÓS-VIAGEM (ID 999): Sugerir atividades para depois que as malas forem desfeitas, focado em "Postar fotos/vídeos nas redes sociais", "Fazer avaliações dos locais visitados", "Organizar despesas" e "Compartilhar roteiro com amigos".` : ''}
           
           REGRAS DE QUALIDADE:
           - NÃO repita locais listados em "JÁ AGENDADO".
@@ -268,8 +293,15 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
         // Copy array to modify
         const currentDayActivities = nextState[dIdx] ? [...nextState[dIdx]] : [];
 
-        // Check Duplicates
-        const isDupe = currentDayActivities.some(a => a.title.toLowerCase() === item.title.toLowerCase());
+        // Global Duplicate Check (Across all days)
+        // Only block if it's an activity/restaurant. Logistics like "Transfer" can repeat if names differ slightly or if we allow them.
+        const isDupe = Object.values(nextState).flat().some(a => {
+          const isSameTitle = a.title.trim().toLowerCase() === item.title.trim().toLowerCase();
+          // Allow duplicate logistical items (transport/accommodation/notes) if price and notes differ, 
+          // but for activities/restaurants we are stricter.
+          if (item.type === 'transport' || item.type === 'accommodation') return false;
+          return isSameTitle;
+        });
 
         if (!isDupe) {
           const newActivityData = {
@@ -431,8 +463,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
 
       // Check for Existing Hotel in Itinerary
       let hotelContext = "";
-      const confirmedHotel = Object.values(itinerary)
-        .flat()
+      const confirmedHotel = Object.values(itinerary).flat().filter(Boolean)
         .find(act => act.type === 'accommodation' && (act.status === 'confirmed' || act.status === 'pending'));
 
       if (confirmedHotel) {
@@ -906,17 +937,47 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
         endTime: newActivity.endTime,
         location: newActivity.location || '',
         type: newActivity.type as any,
-        status: newActivity.status || 'confirmed',
+        status: newActivity.status || (isAdmin ? 'confirmed' : 'pending'),
         icon: activityTypes.find(t => t.id === newActivity.type)?.icon || 'ri-map-pin-line',
         price: newActivity.price,
         notes: newActivity.notes,
         coordinates
       };
 
-      setItinerary(prev => ({
-        ...prev,
-        [activeDayIndex]: [...(prev[activeDayIndex] || []), activity].sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-      }));
+      if (isAdmin) {
+        setItinerary(prev => ({
+          ...prev,
+          [activeDayIndex]: [...(prev[activeDayIndex] || []), activity].sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+        }));
+      } else {
+        // Suggestion Mode logic for Inclusion
+        const newSuggestion = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          tripId: trip.id,
+          userId: user?.id || 'unknown',
+          userName: user?.user_metadata?.full_name || user?.email || 'Colaborador',
+          userAvatar: user?.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.user_metadata?.full_name || 'Colaborador')}&background=random`,
+          type: 'add_place' as const,
+          description: `Sugerido por ${user?.user_metadata?.full_name || 'Colaborador'}: ${activity.title}`,
+          data: { ...activity, suggestedDayId: activeDayIndex },
+          status: 'pending' as const,
+          createdAt: new Date().toISOString(),
+          comments: []
+        };
+
+        const updatedMetadata = {
+          ...trip.metadata,
+          pendingSuggestions: [...(trip.metadata?.pendingSuggestions || []), newSuggestion]
+        };
+
+        updateTrip(trip.id, { metadata: updatedMetadata }).then(res => {
+          if (onTripUpdated) onTripUpdated(res);
+          alert('Sua sugestão de inclusão foi enviada para o proprietário!');
+        }).catch(err => {
+          console.error('Failed to save inclusion suggestion:', err);
+          alert('Erro ao enviar sugestão de inclusão. Por favor, tente novamente.');
+        });
+      }
     }
 
     setIsAddingActivity(false);
@@ -949,8 +1010,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
     }));
   };
 
-  const deleteActivity = (dayIndex: number, activityId: string, e?: React.MouseEvent) => {
-    if (!isAdmin) return;
+  const deleteActivity = async (dayIndex: number, activityId: string, e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -958,37 +1018,97 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
 
     if (!window.confirm("Tem certeza que deseja remover este item?")) return;
 
-    setItinerary(prev => {
-      const currentDay = prev[dayIndex] || [];
-      const previousLength = currentDay.length;
-      const newDay = currentDay.filter(act => String(act.id) !== String(activityId));
+    if (isAdmin) {
+      setItinerary(prev => {
+        const currentDay = prev[dayIndex] || [];
+        const previousLength = currentDay.length;
+        const newDay = currentDay.filter(act => String(act.id) !== String(activityId));
 
-      console.log(`Deleting activity ${activityId} from day ${dayIndex}. Prev: ${previousLength}, New: ${newDay.length}`);
+        console.log(`Deleting activity ${activityId} from day ${dayIndex}. Prev: ${previousLength}, New: ${newDay.length}`);
 
-      if (previousLength === newDay.length) {
-        console.warn('Activity not found in state during delete!');
-        return prev;
-      }
+        if (previousLength === newDay.length) {
+          console.warn('Activity not found in state during delete!');
+          return prev;
+        }
 
-      const newState = {
-        ...prev,
-        [dayIndex]: newDay
+        const newState = {
+          ...prev,
+          [dayIndex]: newDay
+        };
+
+        // FORCE SAVE IMMEDIATELY (Bypass debounce)
+        updateTrip(trip.id, { itinerary: newState })
+          .then(res => {
+            console.log('Activity deleted and saved successfully:', res);
+            if (onTripUpdated) onTripUpdated(res);
+          })
+          .catch(err => {
+            console.error('Failed to save deletion:', err);
+            alert('Erro ao salvar exclusão: ' + err.message);
+          });
+
+        return newState;
+      });
+    } else {
+      // Suggestion Mode logic for Removal
+      const activityToRemove = (itinerary[dayIndex] || []).find(a => String(a.id) === String(activityId));
+      if (!activityToRemove) return;
+
+      const newSuggestion = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        tripId: trip.id,
+        userId: user?.id || 'unknown',
+        userName: user?.user_metadata?.full_name || user?.email || 'Collaborator',
+        userAvatar: user?.user_metadata?.avatar_url || '',
+        type: 'remove_place' as const,
+        description: `Sugeriu remover: ${activityToRemove.title}`,
+        data: { activityId, dayIndex },
+        status: 'pending' as const,
+        createdAt: new Date().toISOString(),
+        comments: []
       };
 
-      // FORCE SAVE IMMEDIATELY (Bypass debounce)
-      // This ensures that if the user closes the modal immediately, the change is persisted.
-      updateTrip(trip.id, { itinerary: newState })
-        .then(res => {
-          console.log('Activity deleted and saved successfully:', res);
-          if (onTripUpdated) onTripUpdated(res);
-        })
-        .catch(err => {
-          console.error('Failed to save deletion:', err);
-          alert('Erro ao salvar exclusão: ' + err.message);
-        });
+      const updatedMetadata = {
+        ...trip.metadata,
+        pendingSuggestions: [...(trip.metadata?.pendingSuggestions || []), newSuggestion]
+      };
 
-      return newState;
-    });
+      try {
+        const updatedTrip = await updateTrip(trip.id, { metadata: updatedMetadata });
+        if (onTripUpdated) onTripUpdated(updatedTrip);
+        alert('Sua sugestão de remoção foi enviada para o proprietário!');
+      } catch (err) {
+        console.error('Failed to save removal suggestion:', err);
+        alert('Erro ao enviar sugestão de remoção.');
+      }
+    }
+  };
+
+  const handleClearDay = async () => {
+    if (!isAdmin) return;
+
+    if (!window.confirm("Tem certeza que deseja limpar todas as atividades deste dia?")) {
+      return;
+    }
+
+    try {
+      setSaveStatus('saving');
+      const nextState = { ...itinerary };
+      nextState[activeDayIndex] = [];
+
+      setItinerary(nextState);
+      const updatedTrip = await updateTrip(trip.id, { itinerary: nextState });
+
+      if (onTripUpdated) {
+        onTripUpdated(updatedTrip);
+      }
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error("Error clearing day:", error);
+      setSaveStatus('error');
+      alert("Erro ao limpar dia. Tente novamente.");
+    }
   };
 
   const scrollTimeline = (direction: 'left' | 'right') => {
@@ -1031,15 +1151,15 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
   // Global Progress Logic
   const totalSlots = totalDays + 2; // Days + Pre + Post
   let filledSlots = 0;
-  if ((itinerary[PRE_TRIP_INDEX] || []).length > 0) filledSlots++;
-  if ((itinerary[POST_TRIP_INDEX] || []).length > 0) filledSlots++;
+  if ((itinerary[PRE_TRIP_INDEX] || []).filter(Boolean).length > 0) filledSlots++;
+  if ((itinerary[POST_TRIP_INDEX] || []).filter(Boolean).length > 0) filledSlots++;
   for (let i = 0; i < totalDays; i++) {
-    if ((itinerary[i] || []).length > 0) filledSlots++;
+    if ((itinerary[i] || []).filter(Boolean).length > 0) filledSlots++;
   }
   const progressPercentage = Math.round((filledSlots / totalSlots) * 100);
 
   // Map Logic
-  const allActivities = Object.values(itinerary).flat();
+  const allActivities = Object.values(itinerary).flat().filter(Boolean);
   const allLocations = allActivities
     .filter(activity => activity.coordinates)
     .map(activity => ({
@@ -1055,7 +1175,50 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
     return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${loc.lat},${loc.lng}`;
   };
 
-  const dayActivities = itinerary[activeDayIndex] || [];
+  const dayActivities = useMemo(() => {
+    let base = [...(itinerary[activeDayIndex] || [])];
+
+    // If owner, inject pending suggestions for this day
+    if (isAdmin && trip.pendingSuggestions) {
+      // 1. Add Place Suggestions
+      const addSuggestions = trip.pendingSuggestions.filter((s: any) =>
+        s.status === 'pending' &&
+        s.type === 'add_place' && s.data.suggestedDayId === activeDayIndex
+      );
+
+      const suggestedAdditions = addSuggestions.map((s: any) => ({
+        ...s.data,
+        isSuggestion: true,
+        suggestionId: s.id,
+        suggestedBy: s.userName,
+        suggestionType: 'add'
+      }));
+
+      base = [...base, ...suggestedAdditions];
+
+      // 2. Mark for Removal Suggestions
+      const removeSuggestions = trip.pendingSuggestions.filter((s: any) =>
+        s.status === 'pending' &&
+        s.type === 'remove_place'
+      );
+
+      base = base.map(act => {
+        const removeSug = removeSuggestions.find((s: any) => s.data.activityId === act.id);
+        if (removeSug) {
+          return {
+            ...act,
+            isSuggestion: true,
+            suggestionId: removeSug.id,
+            suggestedBy: removeSug.userName,
+            suggestionType: 'remove'
+          };
+        }
+        return act;
+      });
+    }
+
+    return base.filter(Boolean).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  }, [itinerary, activeDayIndex, isAdmin, trip.pendingSuggestions]);
 
   const getDayLabel = (index: number) => {
     if (index === PRE_TRIP_INDEX) return 'Pre-Trip';
@@ -1066,7 +1229,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
   const getFullDatelabel = (index: number) => {
     if (index === PRE_TRIP_INDEX) return 'Preparação da Viagem';
     if (index === POST_TRIP_INDEX) return 'Memórias e Review';
-    return tripDays[index].fullDate;
+    return tripDays[index]?.fullDate || 'Data Indisponível';
   };
 
   return (
@@ -1382,14 +1545,31 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
             </div>
           </div>
 
-          {/* Suggestion Mode Banner */}
-          {!isAdmin && (
+          {/* Suggestion Mode Banner / Owner Review Banner */}
+          {!isAdmin ? (
             <div className="mx-6 mb-4 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-3 text-blue-700">
               <i className="ri-information-line text-xl"></i>
               <div className="text-sm">
                 <span className="font-bold">Modo de Sugestão Ativado:</span> Como colaborador, você pode sugerir alterações e usar a IA, mas as mudanças precisam ser aprovadas pelo proprietário.
               </div>
             </div>
+          ) : (
+            trip.pendingSuggestions && trip.pendingSuggestions.some((s: any) => s.status === 'pending') && (
+              <div className="mx-6 mb-4 px-4 py-3 bg-yellow-50 border border-yellow-100 rounded-xl flex items-center justify-between gap-3 text-yellow-700 shadow-sm animate-pulse">
+                <div className="flex items-center gap-3">
+                  <i className="ri-notification-3-line text-xl"></i>
+                  <div className="text-sm">
+                    <span className="font-bold">Sugestões Pendentes:</span> Vanessa e outros colaboradores sugeriram alterações para esta viagem.
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSuggestionsModal(true)}
+                  className="px-3 py-1 bg-yellow-600 text-white rounded-lg text-xs font-bold hover:bg-yellow-700 transition-colors"
+                >
+                  Ver Sugestões
+                </button>
+              </div>
+            )
           )}
 
           {/* Day Header & Actions */}
@@ -1408,28 +1588,39 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
               </div>
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={handleGenerateDayItinerary}
-                disabled={isGeneratingItinerary}
-                className={`w-auto px-4 h-10 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center justify-center gap-2 ${isGeneratingItinerary ? 'opacity-70 cursor-wait' : ''}`}
-                title="Gerar com IA"
-              >
-                {isGeneratingItinerary ? (
-                  <>
-                    <i className="ri-loader-4-line animate-spin text-xl"></i>
-                    <span>Gerando...</span>
-                  </>
-                ) : (
-                  <>
-                    <i className="ri-magic-line text-xl"></i>
-                    {isSelectionMode && selectedIndices.size > 0
-                      ? <span className="font-bold text-sm">Gerar para ({selectedIndices.size}) dias</span>
-                      : ""
-                    }
-                  </>
-                )}
-              </button>
               {isAdmin && (
+                <button
+                  onClick={handleGenerateDayItinerary}
+                  disabled={isGeneratingItinerary}
+                  className={`w-auto px-4 h-10 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center justify-center gap-2 ${isGeneratingItinerary ? 'opacity-70 cursor-wait' : ''}`}
+                  title="Gerar com IA"
+                >
+                  {isGeneratingItinerary ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin text-xl"></i>
+                      <span>Gerando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-magic-line text-xl"></i>
+                      {isSelectionMode && selectedIndices.size > 0
+                        ? <span className="font-bold text-sm">Gerar para ({selectedIndices.size}) dias</span>
+                        : ""
+                      }
+                    </>
+                  )}
+                </button>
+              )}
+              <div className="flex gap-2">
+                {isAdmin && (
+                  <button
+                    onClick={handleClearDay}
+                    className="w-10 h-10 bg-gray-100 text-gray-500 rounded-xl shadow-lg hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center"
+                    title="Limpar Dia"
+                  >
+                    <i className="ri-delete-bin-line text-xl"></i>
+                  </button>
+                )}
                 <button
                   onClick={() => setIsAddingActivity(true)}
                   className="w-10 h-10 bg-blue-600 text-white rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
@@ -1437,7 +1628,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
                 >
                   <i className="ri-add-line text-xl"></i>
                 </button>
-              )}
+              </div>
             </div>
           </div>
 
@@ -1461,10 +1652,16 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
               </div>
             ) : (
               dayActivities.map((activity) => {
+                const styles = getStatusStyles(activity.status);
+                const isSuggestion = (activity as any).isSuggestion;
+                const suggestionType = (activity as any).suggestionType;
+                const suggestedBy = (activity as any).suggestedBy;
+                const suggestionId = (activity as any).suggestionId;
+
                 // SPECIAL RENDERING FOR POST-TRIP WIDGETS
                 if (activity.type === 'stats') {
                   // Quick calculation for demo stats
-                  const totalAct = Object.values(itinerary).flat().filter(a => a.type === 'activity').length;
+                  const totalAct = Object.values(itinerary || {}).flat().filter(Boolean).filter(a => a.type === 'activity').length;
 
                   return (
                     <div key={activity.id} className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-6 text-white shadow-lg animate-fadeIn mb-4">
@@ -1516,7 +1713,7 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
                 }
 
                 if (activity.type === 'map_summary') {
-                  const locationsCount = Object.values(itinerary).flat().filter(a => a.coordinates).length;
+                  const locationsCount = Object.values(itinerary || {}).flat().filter(Boolean).filter(a => a.coordinates).length;
                   return (
                     <div key={activity.id} className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all mb-4">
                       <div className="h-32 bg-blue-50 relative group cursor-pointer overflow-hidden">
@@ -1569,39 +1766,73 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
                         <h4 className={`font-bold text-gray-900 ${isChecked ? 'line-through text-gray-400' : ''}`}>{activity.title}</h4>
                         <p className="text-sm text-gray-500">{activity.description}</p>
                       </div>
-                      {isAdmin && (
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handleStartEditing(activity)}
-                            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 flex items-center justify-center transition-colors"
-                            title="Editar"
-                          >
-                            <i className="ri-pencil-line"></i>
-                          </button>
-                          <button
-                            onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
-                            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 flex items-center justify-center transition-colors"
-                            title="Excluir"
-                          >
-                            <i className="ri-delete-bin-line"></i>
-                          </button>
-                        </div>
-                      )}
+
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {isSuggestion ? (
+                          <>
+                            <button
+                              onClick={() => onApproveSuggestion?.(suggestionId)}
+                              className="px-3 py-1 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 transition-colors flex items-center gap-1"
+                              title="Aprovar"
+                            >
+                              <i className="ri-check-line"></i> Aprovar
+                            </button>
+                            <button
+                              onClick={() => onRejectSuggestion?.(suggestionId)}
+                              className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-bold hover:bg-red-600 transition-colors flex items-center gap-1"
+                              title="Rejeitar"
+                            >
+                              <i className="ri-close-line"></i> Rejeitar
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleStartEditing(activity)}
+                                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 flex items-center justify-center transition-colors"
+                                title="Editar"
+                              >
+                                <i className="ri-pencil-line"></i>
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
+                              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 flex items-center justify-center transition-colors"
+                              title="Excluir"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 }
 
-                const styles = getStatusStyles(activity.status);
                 return (
-                  <div key={activity.id} className={`rounded-xl border ${styles.border} ${styles.bg} p-4 transition-all hover:shadow-md`}>
+                  <div key={activity.id} className={`rounded-xl border ${isSuggestion ? (suggestionType === 'remove' ? 'border-red-200 bg-red-50/30' : 'border-yellow-200 bg-yellow-50/30') : `${styles.border} ${styles.bg}`} p-4 transition-all hover:shadow-md relative overflow-hidden group`}>
+                    {isSuggestion && (
+                      <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${suggestionType === 'remove' ? 'bg-red-500 text-white' : 'bg-yellow-500 text-white'} rounded-bl-lg shadow-sm z-10`}>
+                        {suggestionType === 'remove' ? 'Sugerido para Remoção' : 'Sugestão de Inclusão'}
+                      </div>
+                    )}
+
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex gap-4">
-                        <div className={`w-12 h-12 rounded-xl ${styles.iconBg} flex items-center justify-center text-white shadow-sm flex-shrink-0`}>
+                        <div className={`w-12 h-12 rounded-xl ${isSuggestion ? (suggestionType === 'remove' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600') : styles.iconBg} flex items-center justify-center ${!isSuggestion ? 'text-white' : ''} shadow-sm flex-shrink-0`}>
                           <i className={`${activity.icon} text-xl`}></i>
                         </div>
                         <div>
-                          <h4 className="font-bold text-gray-900 text-lg leading-tight">{activity.title}</h4>
-                          {activity.description && <p className="text-sm text-gray-600 mt-1">{activity.description}</p>}
+                          <div className="flex items-center gap-2">
+                            <h4 className={`font-bold text-gray-900 text-lg leading-tight ${isSuggestion && suggestionType === 'remove' ? 'line-through opacity-70' : ''}`}>{activity.title || (activity as any).name || 'Sem Título'}</h4>
+                            {isSuggestion && (
+                              <span className="text-[10px] bg-white/50 px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 whitespace-nowrap">
+                                Por {suggestedBy}
+                              </span>
+                            )}
+                          </div>
+                          {activity.description && <p className={`text-sm text-gray-600 mt-1 ${isSuggestion && suggestionType === 'remove' ? 'opacity-70' : ''}`}>{activity.description}</p>}
 
                           <div className="flex flex-wrap gap-2 mt-3">
                             {(activity.time || activity.endTime) && (
@@ -1625,8 +1856,8 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
                           </div>
                         </div>
                       </div>
-                      {isAdmin && (
-                        <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2">
+                        {isAdmin && (
                           <button
                             onClick={() => handleStartEditing(activity)}
                             className="text-gray-400 hover:text-blue-500 transition-colors p-1"
@@ -1634,15 +1865,15 @@ export default function TripPlanningModal({ isOpen, onClose, trip, onTripUpdated
                           >
                             <i className="ri-pencil-line text-lg"></i>
                           </button>
-                          <button
-                            onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
-                            className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                            title="Excluir"
-                          >
-                            <i className="ri-delete-bin-line text-lg"></i>
-                          </button>
-                        </div>
-                      )}
+                        )}
+                        <button
+                          onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
+                          className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                          title="Excluir"
+                        >
+                          <i className="ri-delete-bin-line text-lg"></i>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Footer / Status Selector */}

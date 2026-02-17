@@ -1,6 +1,7 @@
 import { useUnreadCounts } from '../hooks/useUnreadCounts';
 import { useSystemNotifications } from '../hooks/useSystemNotifications';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface HeaderActionsProps {
     onShowNotifications: () => void;
@@ -12,6 +13,7 @@ interface HeaderActionsProps {
 export default function HeaderActions({ onShowNotifications, showMenu, onShowMenu, menuIcon = 'ri-menu-3-line' }: HeaderActionsProps) {
     const { unreadMessages, unreadNotifications } = useUnreadCounts();
     const { signOut } = useAuth();
+    const navigate = useNavigate();
 
     // Auto-check for system notifications (Passport, Trips)
     useSystemNotifications();
@@ -30,7 +32,7 @@ export default function HeaderActions({ onShowNotifications, showMenu, onShowMen
                 )}
             </button>
             <button
-                onClick={() => window.location.href = '/messages'}
+                onClick={() => navigate('/messages')}
                 className="relative hover:scale-110 transition-transform w-[40px] h-[40px] flex items-center justify-center rounded-full hover:bg-gray-100"
             >
                 <i className="ri-message-3-line text-xl md:text-2xl text-gray-700"></i>
@@ -41,7 +43,7 @@ export default function HeaderActions({ onShowNotifications, showMenu, onShowMen
                 )}
             </button>
             <button
-                onClick={() => window.location.href = '/profile'}
+                onClick={() => navigate('/profile')}
                 className="relative hover:scale-110 transition-transform w-[40px] h-[40px] flex items-center justify-center rounded-full hover:bg-gray-100"
             >
                 <i className="ri-user-line text-xl md:text-2xl text-gray-700"></i>
@@ -50,7 +52,7 @@ export default function HeaderActions({ onShowNotifications, showMenu, onShowMen
                 onClick={async () => {
                     try {
                         await signOut();
-                        window.location.href = '/login';
+                        navigate('/login', { replace: true });
                     } catch (error) {
                         console.error('Error signing out:', error);
                     }

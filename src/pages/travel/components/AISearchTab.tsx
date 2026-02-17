@@ -11,6 +11,7 @@ export default function AISearchTab() {
     const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
     const [isTyping, setIsTyping] = useState(false);
     const [displayedResponse, setDisplayedResponse] = useState('');
+    const [searchHistory, setSearchHistory] = useState<string[]>([]);
 
     // State to control if location should be used
     const [useLocation, setUseLocation] = useState(false);
@@ -187,44 +188,58 @@ export default function AISearchTab() {
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
+            // Detect if this is a follow-up query for "more"
+            const moreKeywords = ['mais', 'more', 'outros', 'outras', 'outra', 'continua', 'prossiga', 'além disso', 'mais informações'];
+            const isFollowUp = moreKeywords.some(keyword => lowerText.includes(keyword)) && searchHistory.length > 0;
+
             // Construct a prompt that includes location context ONLY if enabled (or auto-enabled)
             let locationContext = "";
             if (effectiveUseLocation && userLocation && userLocation.name) {
-                locationContext = `CONTEXTO DE LOCALIZAÇÃO: O usuário está atualmente em ${userLocation.name}, ${userLocation.country}. Use essa informação para fornecer recomendações locais, distâncias e opções relevantes a essa área.`;
+                locationContext = `CONTEXTO DE LOCALIZAÇÃO: O usuário está atualmente em ${userLocation.name}, ${userLocation.country}. Use essa informação para fornecer recomendações locais EXTREMAMENTE específicas, incluindo EXATAMENTE onde ficam (bairro, rua ou área de referência).`;
             }
+
+            // Construct history context to avoid repeats
+            const historyContext = isFollowUp && searchHistory.length > 0
+                ? `HISTÓRICO DE RESULTADOS JÁ MOSTRADOS: [${searchHistory.join(', ')}]. VOCÊ NÃO PODE REPETIR NENHUM DESSES RESULTADOS. Traga apenas novas opções diferentes das que já foram mostradas.`
+                : "";
 
             const prompt = `
             ATUE COMO: "SARA" - O Agente de Viagens Pessoal Definitivo (Travel Concierge AI).
             
+            SUA PERSONALIDADE: Seja ASSERTIVA, DIRETA e MANTENHA O FOCO NO QUE O USUÁRIO PEDIU. Não seja prolixa.
+            
             SUA MISSÃO: Fornecer um resumo introdutório útil E uma lista estruturada de recomendações de viagem no formato JSON.
             
             ${locationContext}
+            ${historyContext}
 
             PERGUNTA DO USUÁRIO: "${text}"
 
-            FORMATO DE RESPOSTA OBRIGATÓRIO:
-            Você deve retornar UM ÚNICO objeto JSON com a seguinte estrutura estrita:
+            DIRETRIZES TÉCNICAS:
+            1. Se o usuário pedir "mais" ou continuar uma pesquisa, IGNORE os locais já mencionados: ${searchHistory.length > 0 ? searchHistory.join(', ') : 'nenhum'}.
+            2. Cada recomendação DEVE conter um endereço ou localização específica no campo "address".
+            3. Seja extremamente assertiva na escolha dos locais.
+
+            FORMATO DE RESPOSTA OBRIGATÓRIO (JSON PURO):
             {
-                "intro": "Um texto curto (max 3 parágrafos) introdutório de alto nível, estilo concierge, respondendo diretamente ao usuário com formatação Markdown.",
+                "intro": "Resuma a resposta de forma direta e assertiva.",
                 "recommendations": [
                 {
-                    "icon": "Um emoji que represente o local (Ex: 🏰, 🏖️, 🍝)",
-                    "name": "Nome do Local/Destino",
-                    "description": "Descrição curta e atraente (2 linhas)",
-                    "reason": "Explicação personalizada do porquê este destino é perfeito para o pedido do usuário (Ex: Perfeito porque combina x e y...)",
-                    "bestTime": "Melhor época/horário",
-                    "estimatedCost": "Custo estimado (Ex: R$ 150, $$$, Gratuito)",
-                    "michelin": "Se restaurante: '3 Estrelas Michelin', 'Bib Gourmand' (ou null)",
-                    "tripAdvisorRating": "Se hotel: Nota 0-5 (ex: 4.5)",
-                    "bookingRating": "Se hotel: Nota 0-10 (ex: 9.3)",
-                    "duration": "Duração sugerida (Ex: 3 dias, 2 horas)",
-                    "tags": ["tag1", "tag2", "tag3"],
-                    "highlights": ["Destaque 1", "Destaque 2", "Destaque 3"]
+                    "icon": "Emoji",
+                    "name": "Nome",
+                    "address": "Localização Exata (Rua, Bairro ou Ponto de Referência)",
+                    "description": "Descrição curta (2 linhas)",
+                    "reason": "Por que é assertivo para este pedido",
+                    "bestTime": "Melhor época",
+                    "estimatedCost": "Custo",
+                    "duration": "Duração sugerida",
+                    "tags": ["tag1", "tag2"],
+                    "highlights": ["Destaque 1", "Destaque 2"]
                 }
                 ]
             }
 
-            Não use blocos de código (\`\`\`json). Retorne apenas o JSON puro. Se não houver recomendações específicas (ex: pergunta sobre vistos), retorne a lista vazia de recomendações.
+            Retorne apenas o JSON.
             `;
 
             const result = await model.generateContent(prompt);
@@ -232,15 +247,23 @@ export default function AISearchTab() {
             const textResponse = response.text();
 
             try {
-                // Robust JSON extraction: Find the first '{' and the last '}'
+                // Robust JSON extraction
                 const start = textResponse.indexOf('{');
                 const end = textResponse.lastIndexOf('}');
 
                 if (start !== -1 && end !== -1) {
                     const jsonString = textResponse.substring(start, end + 1);
                     const parsed = JSON.parse(jsonString);
-                    setAiResponse(parsed.intro || "Aqui estão minhas recomendações:");
-                    setRecommendations(parsed.recommendations || []);
+                    setAiResponse(parsed.intro || "Aqui estão minhas novas recomendações:");
+
+                    const newRecs = parsed.recommendations || [];
+                    setRecommendations(newRecs);
+
+                    // Update history with new names to avoid repeats next time
+                    if (newRecs.length > 0) {
+                        const newNames = newRecs.map((r: any) => r.name);
+                        setSearchHistory(prev => [...prev, ...newNames]);
+                    }
                 } else {
                     // Fallback for non-JSON responses
                     throw new Error("No JSON found");
@@ -339,6 +362,7 @@ export default function AISearchTab() {
                                             setAiResponse(null);
                                             setRecommendations([]);
                                             setDisplayedResponse('');
+                                            setSearchHistory([]);
                                         }}
                                         className="p-2 rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all duration-300"
                                         title="Limpar pesquisa"
@@ -481,7 +505,18 @@ export default function AISearchTab() {
 
                             {!isTyping && (
                                 <div className="flex gap-3 mt-12 pt-6 border-t border-gray-100">
-                                    <button onClick={() => { setAiResponse(null); setRecommendations([]); setQuery(''); }} className="text-sm text-gray-400 hover:text-gray-600 ml-auto">
+                                    <button
+                                        onClick={() => {
+                                            const followUpText = `Me traga mais opções assertivas, diferentes das anteriores.`;
+                                            setQuery(followUpText);
+                                            handleSearch(followUpText);
+                                        }}
+                                        className="text-sm font-bold text-blue-600 hover:text-blue-800 flex items-center gap-2"
+                                    >
+                                        <i className="ri-add-circle-line"></i>
+                                        Trazer mais informações
+                                    </button>
+                                    <button onClick={() => { setAiResponse(null); setRecommendations([]); setQuery(''); setSearchHistory([]); }} className="text-sm text-gray-400 hover:text-gray-600 ml-auto">
                                         Nova Pesquisa
                                     </button>
                                 </div>

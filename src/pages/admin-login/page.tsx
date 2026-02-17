@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
+import { isUserAdmin } from '../../services/authz';
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
@@ -15,13 +16,20 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
         throw error;
+      }
+
+      const allowed = await isUserAdmin(data.user ?? null);
+      if (!allowed) {
+        await supabase.auth.signOut();
+        setError('Acesso negado. Esta conta não tem permissão de administrador.');
+        return;
       }
 
       navigate('/admin');
@@ -112,9 +120,8 @@ export default function AdminLoginPage() {
           <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
             <p className="text-xs text-blue-600 text-center">
               <i className="ri-information-line mr-1"></i>
-              <strong>Credenciais de teste:</strong><br />
-              E-mail: admin@socialhub.com<br />
-              Senha: admin123
+              <strong>Acesso administrativo:</strong><br />
+              use uma conta com permissão de administrador.
             </p>
           </div>
 

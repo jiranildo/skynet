@@ -191,97 +191,10 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
         </div>
       </div>
 
-      {/* Wines to Drink Soon Carousel */}
-      {drinkSoonWines.length > 0 && (
-        <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-3xl p-6 border border-amber-100">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-xl font-bold text-amber-900 flex items-center gap-2">
-                <i className="ri-time-line"></i>
-                Prontos para Beber
-              </h3>
-              <p className="text-sm text-amber-700/80">Sugestões baseadas na safra e avaliação</p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setDrinkSoonViewMode(drinkSoonViewMode === 'grid' ? 'list' : 'grid')}
-                className="flex items-center justify-center w-8 h-8 bg-white/50 rounded-lg hover:bg-white text-amber-900/60 hover:text-amber-900 transition-colors"
-                title={drinkSoonViewMode === 'grid' ? 'Visualizar em Lista' : 'Visualizar em Grade'}
-              >
-                <i className={drinkSoonViewMode === 'grid' ? 'ri-list-check' : 'ri-function-line'}></i>
-              </button>
-              <button className="text-sm font-bold text-amber-700 hover:text-amber-900 px-3 py-1 bg-white/50 rounded-lg transition-colors">
-                Ver todos
-              </button>
-            </div>
-          </div>
-
-          <div className={`
-            ${drinkSoonViewMode === 'grid'
-              ? 'flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-2 px-2'
-              : 'space-y-1'
-            }
-          `}>
-            {drinkSoonWines.map(wine => (
-              drinkSoonViewMode === 'grid' ? (
-                <div key={wine.id} className="min-w-[105px] w-[105px] bg-white rounded-xl p-2 shadow-sm border border-amber-100/50 cursor-pointer hover:scale-105 transition-transform" onClick={() => setSelectedWine(wine)}>
-                  <div className="relative aspect-square mb-2 rounded-lg overflow-hidden bg-gray-50">
-                    <img
-                      src={wine.image_url || "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop";
-                      }}
-                      className="w-full h-full object-contain p-1"
-                      alt={wine.name}
-                    />
-                    <div className="absolute bottom-1 right-1 bg-white/90 backdrop-blur-sm px-1 py-0.5 rounded text-[8px] font-bold shadow-sm">
-                      {wine.vintage}
-                    </div>
-                  </div>
-                  <h4 className="font-bold text-gray-900 truncate text-[10px] mb-0.5">{wine.name}</h4>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-gray-500 truncate max-w-[60px]">{wine.producer}</span>
-                    <div className="flex items-center gap-1 text-[9px] font-bold text-amber-500">
-                      <i className="ri-star-fill"></i> {wine.rating}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  key={wine.id}
-                  onClick={() => setSelectedWine(wine)}
-                  className="bg-white rounded-lg p-2 shadow-sm border border-amber-100/50 flex items-center gap-2 cursor-pointer hover:bg-amber-50/50 transition-colors"
-                >
-                  <div className="w-8 h-8 bg-gray-100 rounded overflow-hidden flex-shrink-0">
-                    <img
-                      src={wine.image_url || "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop";
-                      }}
-                      className="w-full h-full object-contain p-0.5"
-                      alt=""
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-gray-900 truncate text-xs">{wine.name}</h4>
-                    <p className="text-[10px] text-gray-500 truncate">{wine.producer} • {wine.vintage}</p>
-                  </div>
-                  <div className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-full">
-                    <i className="ri-star-fill"></i> {wine.rating}
-                  </div>
-                </div>
-              )
-            ))}
-          </div>
-        </div>
-      )
-      }
-
       {/* Main Collection */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-gray-900">Sua Coleção</h3>
+          <h3 className="text-xl font-bold text-gray-900">Minha Adega</h3>
         </div>
 
         {/* Filters & Actions */}
@@ -350,23 +263,32 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
               ? 'grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4 pb-12'
               : 'space-y-1 pb-12'
           }>
-            {sortedWines.filter(w => !w.status || w.status === 'in_cellar').map((wine) => (
-              viewMode === 'grid' ? (
+            {sortedWines.filter(w => !w.status || w.status === 'in_cellar').map((wine) => {
+              const isReadyToDrink = drinkSoonWines.some(w => w.id === wine.id);
+
+              return viewMode === 'grid' ? (
                 <WineCard
                   key={wine.id}
                   wine={wine}
                   compact={true}
+                  isReadyToDrink={isReadyToDrink}
                   onClick={() => setSelectedWine(wine)}
                   onConsume={(e) => handleConsumeBottle(e, wine)}
                   onAdd={(e) => handleAddBottle(e, wine)}
                 />
               ) : (
-                // Simple List Item Fallback (Enhanced)
                 <div
                   key={wine.id}
                   onClick={() => setSelectedWine(wine)}
-                  className="bg-white rounded-lg p-2 shadow-sm border border-gray-100 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                  className={`bg-white rounded-lg p-2 shadow-sm border ${isReadyToDrink ? 'border-amber-200 bg-amber-50/10' : 'border-gray-100'} flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors relative`}
                 >
+                  {isReadyToDrink && (
+                    <div className="absolute -top-1 -left-1 z-10">
+                      <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-br-lg rounded-tl-lg shadow-sm uppercase tracking-tighter">
+                        Pronto
+                      </div>
+                    </div>
+                  )}
                   <div className="w-10 h-14 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 relative">
                     <img
                       src={wine.image_url || "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
@@ -378,7 +300,10 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-gray-900 truncate text-sm">{wine.name}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-gray-900 truncate text-sm">{wine.name}</h4>
+                      {isReadyToDrink && <i className="ri-time-line text-amber-500 text-xs"></i>}
+                    </div>
                     <p className="text-xs text-gray-500 truncate">{wine.producer} • {wine.vintage}</p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -397,8 +322,8 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
                     </button>
                   </div>
                 </div>
-              )
-            ))}
+              );
+            })}
           </div>
         )}
 
