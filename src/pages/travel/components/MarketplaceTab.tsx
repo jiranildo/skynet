@@ -1,7 +1,8 @@
-
 import { useState, useEffect } from 'react';
 import { getMarketplaceTrips, Trip, User } from '../../../services/supabase';
 import { UserAvatar } from '../../../components/UserAvatar';
+import { useGamification } from '../../../hooks/queries/useGamification';
+import { useAddTransaction } from '../../../hooks/queries/useWallet';
 
 interface MarketplaceItem {
   id: string; // Trip ID
@@ -47,8 +48,11 @@ export default function MarketplaceTab() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'popular' | 'recent' | 'price-low' | 'price-high'>('popular');
   const [searchQuery, setSearchQuery] = useState('');
-  const [userBalance, setUserBalance] = useState(0);
   const [currentUser, setCurrentUser] = useState<any>(null);
+
+  const { data: gamification } = useGamification();
+  const addTransactionMut = useAddTransaction();
+  const userBalance = gamification?.tm_balance || 0;
 
   // Novo roteiro para vender (Not used for now as we use My Trips -> Publish)
 
@@ -58,7 +62,6 @@ export default function MarketplaceTab() {
 
   useEffect(() => {
     loadMarketplaceItems();
-    loadUserBalance();
 
     // Load current user for owner check
     const loadUser = async () => {
@@ -77,14 +80,6 @@ export default function MarketplaceTab() {
       window.removeEventListener('marketplace-updated', handleMarketplaceUpdate);
     };
   }, []);
-
-  const loadUserBalance = () => {
-    const wallet = localStorage.getItem('travel-money-wallet');
-    if (wallet) {
-      const data = JSON.parse(wallet);
-      setUserBalance(data.balance || 0);
-    }
-  };
 
   const loadMarketplaceItems = async () => {
     try {
@@ -221,27 +216,13 @@ export default function MarketplaceTab() {
         return;
       }
 
-      // Deduct balance logic (Mirroring handlePurchase)
-      const wallet = localStorage.getItem('travel-money-wallet');
-      if (wallet) {
-        const data = JSON.parse(wallet);
-        const newBalance = data.balance - item.price;
-
-        const newTransaction = {
-          id: Date.now().toString(),
-          type: 'expense' as const,
-          amount: item.price,
-          description: `Colaboração: ${item.title}`,
-          category: 'booking' as const,
-          date: new Date().toISOString()
-        };
-
-        data.balance = newBalance;
-        data.transactions = [newTransaction, ...(data.transactions || [])];
-        localStorage.setItem('travel-money-wallet', JSON.stringify(data));
-        setUserBalance(newBalance);
-        window.dispatchEvent(new Event('wallet-updated'));
-      }
+      // Deduct balance logic
+      await addTransactionMut.mutateAsync({
+        type: 'spend',
+        amount: item.price,
+        description: `Colaboração: ${item.title}`,
+        category: 'booking'
+      });
 
       alert('🤝 Agora você é um colaborador! O roteiro apareceu na aba "Compartilhadas" em Minhas Viagens.');
       setShowDetailModal(false);
@@ -271,28 +252,13 @@ export default function MarketplaceTab() {
 
       if (error) throw error;
 
-      // 2. Deduct from local wallet (Legacy/Client-side wallet)
-      const wallet = localStorage.getItem('travel-money-wallet');
-      if (wallet) {
-        const data = JSON.parse(wallet);
-        const newBalance = data.balance - item.price;
-
-        const newTransaction = {
-          id: Date.now().toString(),
-          type: 'expense' as const,
-          amount: item.price,
-          description: `Compra: ${item.title}`,
-          category: 'booking' as const,
-          date: new Date().toISOString()
-        };
-
-        data.balance = newBalance;
-        data.transactions = [newTransaction, ...(data.transactions || [])]; // Fix potential null
-
-        localStorage.setItem('travel-money-wallet', JSON.stringify(data));
-        setUserBalance(newBalance);
-        window.dispatchEvent(new Event('wallet-updated'));
-      }
+      // Deduct from local wallet
+      await addTransactionMut.mutateAsync({
+        type: 'spend',
+        amount: item.price,
+        description: `Compra: ${item.title}`,
+        category: 'booking'
+      });
 
       alert('🎉 Roteiro adquirido com sucesso! Uma cópia foi criada em "Minhas Viagens" onde você é o dono e tem controle total.');
       setShowDetailModal(false);

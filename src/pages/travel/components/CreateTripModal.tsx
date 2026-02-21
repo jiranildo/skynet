@@ -1,11 +1,17 @@
 import { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { createTrip } from '@/services/supabase';
 
 interface CreateTripModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onSuccess?: () => void;
 }
 
-export default function CreateTripModal({ isOpen, onClose }: CreateTripModalProps) {
+export default function CreateTripModal({ isOpen, onClose, onSuccess }: CreateTripModalProps) {
+    const { user } = useAuth();
+    const [isLoading, setIsLoading] = useState(false);
+
     // Create Trip Form State
     const [tripForm, setTripForm] = useState({
         name: '',
@@ -28,44 +34,63 @@ export default function CreateTripModal({ isOpen, onClose }: CreateTripModalProp
     ];
 
     const budgetOptions = [
-        { id: 'low', name: 'Econômica', range: 'Até R$ 3.000', color: 'text-green-500' },
-        { id: 'medium', name: 'Moderada', range: 'R$ 3.000 - R$ 8.000', color: 'text-blue-500' },
-        { id: 'high', name: 'Luxo', range: 'Acima de R$ 8.000', color: 'text-purple-500' }
+        { id: 'low', name: 'Econômica', range: 'Até R$ 3.000', color: 'text-green-500', value: 3000 },
+        { id: 'medium', name: 'Moderada', range: 'R$ 3.000 - R$ 8.000', color: 'text-blue-500', value: 8000 },
+        { id: 'high', name: 'Luxo', range: 'Acima de R$ 8.000', color: 'text-purple-500', value: 15000 }
     ];
 
-    const handleCreateTrip = () => {
+    const handleCreateTrip = async () => {
         // Validate form
         if (!tripForm.name || !tripForm.destination || !tripForm.startDate || !tripForm.endDate) {
             alert('Por favor, preencha todos os campos obrigatórios');
             return;
         }
 
-        // Save trip to localStorage
-        const trips = JSON.parse(localStorage.getItem('user-trips') || '[]');
-        const newTrip = {
-            id: Date.now().toString(),
-            ...tripForm,
-            createdAt: new Date().toISOString(),
-            status: 'planning'
-        };
-        trips.push(newTrip);
-        localStorage.setItem('user-trips', JSON.stringify(trips));
+        if (!user) {
+            alert('Você precisa estar logado para criar uma viagem.');
+            return;
+        }
 
-        // Reset form and close modal
-        setTripForm({
-            name: '',
-            destination: '',
-            startDate: '',
-            endDate: '',
-            travelers: 2,
-            tripType: 'leisure',
-            budget: 'medium',
-            description: ''
-        });
-        onClose();
+        setIsLoading(true);
 
-        // Show success message
-        alert('Viagem criada com sucesso! 🎉');
+        try {
+            const budgetValue = budgetOptions.find(b => b.id === tripForm.budget)?.value || 8000;
+
+            await createTrip({
+                user_id: user.id,
+                title: tripForm.name,
+                destination: tripForm.destination,
+                start_date: tripForm.startDate,
+                end_date: tripForm.endDate,
+                travelers: tripForm.travelers,
+                trip_type: tripForm.tripType as any,
+                budget: budgetValue,
+                description: tripForm.description,
+                status: 'planning'
+            });
+
+            // Reset form and close modal
+            setTripForm({
+                name: '',
+                destination: '',
+                startDate: '',
+                endDate: '',
+                travelers: 2,
+                tripType: 'leisure',
+                budget: 'medium',
+                description: ''
+            });
+            onClose();
+            if (onSuccess) onSuccess();
+
+            alert('Viagem criada com sucesso! 🎉');
+            window.location.reload(); // Quick refresh to show new trip
+        } catch (error) {
+            console.error("Error creating trip:", error);
+            alert('Um erro ocorreu ao criar a viagem.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -186,8 +211,8 @@ export default function CreateTripModal({ isOpen, onClose }: CreateTripModalProp
                                         key={type.id}
                                         onClick={() => setTripForm({ ...tripForm, tripType: type.id })}
                                         className={`p-3 sm:p-4 rounded-xl border-2 transition-all text-left ${tripForm.tripType === type.id
-                                                ? 'border-orange-500 bg-orange-50'
-                                                : 'border-gray-200 hover:border-gray-300'
+                                            ? 'border-orange-500 bg-orange-50'
+                                            : 'border-gray-200 hover:border-gray-300'
                                             }`}
                                     >
                                         <i className={`${type.icon} text-2xl ${type.color} mb-2 block`}></i>
@@ -208,8 +233,8 @@ export default function CreateTripModal({ isOpen, onClose }: CreateTripModalProp
                                         key={budget.id}
                                         onClick={() => setTripForm({ ...tripForm, budget: budget.id })}
                                         className={`w-full p-4 rounded-xl border-2 transition-all text-left ${tripForm.budget === budget.id
-                                                ? 'border-orange-500 bg-orange-50'
-                                                : 'border-gray-200 hover:border-gray-300'
+                                            ? 'border-orange-500 bg-orange-50'
+                                            : 'border-gray-200 hover:border-gray-300'
                                             }`}
                                     >
                                         <div className="flex items-center justify-between">
@@ -218,8 +243,8 @@ export default function CreateTripModal({ isOpen, onClose }: CreateTripModalProp
                                                 <p className="text-gray-600 text-xs">{budget.range}</p>
                                             </div>
                                             <div className={`w-5 h-5 rounded-full border-2 ${tripForm.budget === budget.id
-                                                    ? 'border-orange-500 bg-orange-500'
-                                                    : 'border-gray-300'
+                                                ? 'border-orange-500 bg-orange-500'
+                                                : 'border-gray-300'
                                                 }`}>
                                                 {tripForm.budget === budget.id && (
                                                     <div className="w-full h-full rounded-full bg-white scale-50"></div>
@@ -256,9 +281,17 @@ export default function CreateTripModal({ isOpen, onClose }: CreateTripModalProp
                         </button>
                         <button
                             onClick={handleCreateTrip}
-                            className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
+                            disabled={isLoading}
+                            className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                         >
-                            Criar Viagem
+                            {isLoading ? (
+                                <>
+                                    <i className="ri-loader-4-line animate-spin"></i>
+                                    Criando...
+                                </>
+                            ) : (
+                                "Criar Viagem"
+                            )}
                         </button>
                     </div>
                 </div>

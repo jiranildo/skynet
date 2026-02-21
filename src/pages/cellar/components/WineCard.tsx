@@ -4,114 +4,134 @@ import { CellarWine } from '../../../services/supabase';
 interface WineCardProps {
     wine: CellarWine;
     onClick: () => void;
-    onConsume: (e: React.MouseEvent) => void;
+    onConsume: (e: React.MouseEvent) => void; // Keep for compatibility if needed elsewhere
     onAdd: (e: React.MouseEvent) => void;
-    compact?: boolean;
+    onEvaluate?: (e: React.MouseEvent) => void;
+    onMoreOptions?: (e: React.MouseEvent) => void;
+    onToggleStatus?: (e: React.MouseEvent) => void;
+    onToggleFavorite?: (e: React.MouseEvent) => void;
     isReadyToDrink?: boolean;
 }
 
-export default function WineCard({ wine, onClick, onConsume, onAdd, compact = false, isReadyToDrink = false }: WineCardProps) {
-    const getTypeLabel = () => {
-        switch (wine.type) {
-            case 'red': return 'Tinto';
-            case 'white': return 'Branco';
-            case 'rose': return 'Rosé';
-            case 'sparkling': return 'Espumante';
-            case 'fortified': return 'Fortificado';
-            case 'dessert': return 'Sobremesa';
-            default: return wine.type;
-        }
-    };
+export default function WineCard({
+    wine,
+    onClick,
+    onConsume,
+    onAdd,
+    onEvaluate,
+    onMoreOptions,
+    onToggleStatus,
+    onToggleFavorite,
+    isReadyToDrink = false
+}: WineCardProps) {
+
+    // Fallback image
+    const wineImage = wine.image_url || "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop";
 
     return (
         <div
             onClick={onClick}
-            className={`group relative bg-white/80 backdrop-blur-sm rounded-xl border ${isReadyToDrink ? 'border-amber-300' : 'border-white/20'} shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer active:scale-95 touch-manipulation`}
+            className={`bg-[#f2f4f5] rounded-[32px] p-4 flex flex-col gap-3 relative cursor-pointer active:scale-[0.98] transition-transform touch-manipulation`}
         >
-            {/* Ready to Drink Badge */}
-            {isReadyToDrink && (
-                <div className="absolute top-0 left-0 z-20">
-                    <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-br-lg shadow-sm uppercase tracking-tighter">
-                        Pronto
-                    </div>
-                </div>
-            )}
-
-            {/* Image Container */}
-            <div className={`relative ${compact ? 'aspect-square' : 'aspect-[3/4]'} overflow-hidden bg-gray-50`}>
-                <img
-                    src={wine.image_url || "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
-                    onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop";
-                    }}
-                    alt={wine.name}
-                    className="w-full h-full object-contain p-1 transition-transform duration-700 group-hover:scale-110"
-                    loading="lazy"
-                />
-
-                {/* Gradients Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
-
-                {/* Quantity Badge */}
-                <div className={`absolute ${compact ? 'top-2 right-2' : 'top-3 right-3'}`}>
-                    <span className={`px-2 py-0.5 rounded-full ${compact ? 'text-[10px]' : 'text-xs'} font-bold shadow-lg backdrop-blur-md ${wine.quantity > 0
-                        ? 'bg-white/90 text-gray-900'
-                        : 'bg-red-500/90 text-white'
-                        }`}>
-                        {wine.quantity > 0 ? `${wine.quantity}x` : 'Esgotado'}
-                    </span>
+            <div className="flex gap-4">
+                {/* Image Container */}
+                <div className="w-[100px] h-[130px] bg-white rounded-2xl flex-shrink-0 relative overflow-hidden shadow-sm flex items-center justify-center">
+                    <img
+                        src={wineImage}
+                        onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"; }}
+                        alt={wine.name}
+                        className="h-[90%] w-auto object-contain"
+                        loading="lazy"
+                    />
                 </div>
 
-                {/* Rating Badge */}
-                {wine.rating ? (
-                    <div className={`absolute ${compact ? 'top-2 left-2' : 'top-3 left-3'} flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/90 backdrop-blur-md shadow-lg`}>
-                        <i className={`ri-star-fill text-amber-400 ${compact ? 'text-[10px]' : 'text-xs'}`}></i>
-                        <span className={`${compact ? 'text-[10px]' : 'text-xs'} font-bold text-gray-900`}>{wine.rating}</span>
-                    </div>
-                ) : null}
+                {/* Content */}
+                <div className="flex-1 flex flex-col pt-1">
+                    <span className="text-gray-500 text-[13px] mb-0.5 font-medium">{wine.producer || 'Sem produtor'}</span>
+                    <h3 className="font-bold text-gray-900 text-[17px] leading-tight mb-2 pr-2">{wine.name}</h3>
 
-
-                {/* Content on Image (Mobile style) */}
-                <div className={`absolute bottom-0 left-0 right-0 ${compact ? 'p-1.5' : 'p-4'} text-white`}>
-                    <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`px-1 py-0.5 rounded text-[7px] font-bold uppercase tracking-wider bg-white/20 backdrop-blur-md border border-white/10`}>
-                            {getTypeLabel()}
-                        </span>
-                        {!compact && wine.vintage && (
-                            <span className="text-xs font-medium text-white/90">
-                                {wine.vintage}
-                            </span>
+                    <div className="flex items-center gap-1.5 text-gray-600 text-[13px] mb-auto">
+                        {wine.country ? (
+                            <>
+                                {/* Simple country representation */}
+                                <span className="w-[18px] h-[18px] rounded-full bg-gray-200 flex items-center justify-center text-[10px] uppercase font-bold overflow-hidden shadow-sm">
+                                    {wine.country.substring(0, 2)}
+                                </span>
+                                <span>{wine.region ? `${wine.region}, ` : ''}{wine.country}</span>
+                            </>
+                        ) : (
+                            <span>{wine.region ? `🍷 ${wine.region}` : 'Origem Indefinida'}</span>
                         )}
                     </div>
-                    <h3 className={`font-bold ${compact ? 'text-[10px]' : 'text-lg'} leading-tight mb-0 line-clamp-1 text-shadow-sm`}>
-                        {wine.name}
-                    </h3>
-                    {!compact && (
-                        <p className="text-xs text-white/80 line-clamp-1">
-                            {wine.producer}
-                        </p>
-                    )}
+
+                    {/* Bottom stats row */}
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                        <div className="flex items-center mr-1">
+                            <i className="ri-star-fill text-[#e85d04] text-lg mr-1"></i>
+                            <span className="font-bold text-gray-900 text-base">{wine.rating ? wine.rating.toFixed(1).replace('.', ',') : 'S/N'}</span>
+                            <span className="text-gray-400 text-[13px] ml-1">({(wine as any).rating_count || "0"})</span>
+                        </div>
+
+                        <div className="bg-gray-200/60 px-2 py-0.5 rounded text-[15px] font-bold text-gray-900 tracking-tight">
+                            {wine.price ? `R$ ${wine.price.toFixed(2).replace('.', ',')}` : 'Sem preço'}
+                        </div>
+                    </div>
                 </div>
+
+
             </div>
 
-            {/* Quick Actions (Visible on cards, especially mobile friendly) */}
-            <div className={`${compact ? 'p-1 h-8' : 'p-3'} bg-white/50 backdrop-blur-sm border-t border-gray-100 flex items-center gap-1`}>
+            {/* Bottom Actions Row */}
+            <div className="flex items-center gap-2 mt-1">
                 <button
-                    onClick={onConsume}
-                    disabled={!wine.quantity}
-                    className="flex-1 h-full flex items-center justify-center rounded bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    onClick={(e) => { e.stopPropagation(); onEvaluate && onEvaluate(e); }}
+                    className="flex-1 border border-gray-400/40 py-2.5 rounded-full font-semibold text-gray-900 bg-transparent active:bg-gray-200/50 transition-colors"
                 >
-                    <i className={`${compact ? 'text-xs' : 'text-lg'} ri-subtract-line`}></i>
-                    <span className="sr-only">Consumir</span>
+                    Avaliar
                 </button>
-                <div className="w-px h-3 bg-gray-200" />
-                <button
-                    onClick={onAdd}
-                    className="flex-1 h-full flex items-center justify-center rounded bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-600 transition-colors"
-                >
-                    <i className={`${compact ? 'text-xs' : 'text-lg'} ri-add-line`}></i>
-                    <span className="sr-only">Adicionar</span>
-                </button>
+
+                <div className="flex items-center gap-2">
+                    {/* Quantity Control */}
+                    <div className="border border-gray-400/40 rounded-full h-[42px] px-1.5 flex items-center justify-between min-w-[90px] font-semibold text-gray-900 bg-transparent">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onConsume(e); }}
+                            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200/50 active:bg-gray-300/50 text-gray-700 transition-colors shrink-0"
+                        >
+                            <i className="ri-subtract-line text-lg"></i>
+                        </button>
+                        <span className="text-[15px] min-w-[1.5rem] text-center">{wine.quantity || 0}</span>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onAdd(e); }}
+                            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200/50 active:bg-gray-300/50 text-gray-700 transition-colors shrink-0"
+                        >
+                            <i className="ri-add-line text-lg"></i>
+                        </button>
+                    </div>
+
+                    {/* Favorite */}
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onToggleFavorite && onToggleFavorite(e); }}
+                        className={`w-[42px] h-[42px] border ${wine.is_favorite ? 'bg-red-50 border-red-200' : 'border-gray-400/40'} rounded-full flex items-center justify-center text-gray-900 active:bg-gray-200/50 transition-colors shrink-0`}
+                    >
+                        <i className={`text-lg ri-heart-3-${wine.is_favorite ? 'fill text-red-500' : 'line'}`}></i>
+                    </button>
+
+                    {/* Bookmark */}
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onToggleStatus && onToggleStatus(e); }}
+                        className={`w-[42px] h-[42px] border ${wine.status === 'wishlist' ? 'bg-purple-50 border-purple-200' : 'border-gray-400/40'} rounded-full flex items-center justify-center text-gray-900 active:bg-gray-200/50 transition-colors shrink-0`}
+                    >
+                        <i className={`text-lg ri-bookmark-${wine.status === 'wishlist' ? 'fill text-purple-600' : 'line'}`}></i>
+                    </button>
+
+                    {/* More Options */}
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onMoreOptions && onMoreOptions(e); }}
+                        className="w-[42px] h-[42px] border border-gray-400/40 rounded-full flex items-center justify-center text-gray-900 active:bg-gray-200/50 transition-colors text-xl"
+                    >
+                        •••
+                    </button>
+                </div>
             </div>
         </div>
     );

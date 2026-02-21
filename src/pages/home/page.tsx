@@ -7,6 +7,7 @@ import NotificationsPanel from './components/NotificationsPanel';
 import CreateReelModal from './components/CreateReelModal';
 import CreateStoryModal from './components/CreateStoryModal';
 import CreateMenu from '../../components/CreateMenu';
+import CheckInModal from '../../components/CheckInModal';
 import ReelsModal from './components/ReelsModal';
 import ReelsView from './components/ReelsView';
 import GamificationWidget from '../../components/GamificationWidget';
@@ -31,6 +32,7 @@ export default function HomePage() {
   const [showWallet, setShowWallet] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [showCheckIn, setShowCheckIn] = useState(false);
   // Unified Modal State: We can use a single state object or just reuse showCreateStory
   // Let's refactor to `createModalTab: 'POST' | 'STORY' | 'REEL' | 'TEMPLATES' | null`
   const [createModalTab, setCreateModalTab] = useState<'POST' | 'STORY' | 'REEL' | 'TEMPLATES' | null>(null);
@@ -76,6 +78,8 @@ export default function HomePage() {
       }, 100);
     } else if (option === 'food') {
       window.REACT_APP_NAVIGATE('/drinks-food');
+    } else if (option === 'checkin') {
+      setShowCheckIn(true);
     }
   };
 
@@ -171,6 +175,11 @@ export default function HomePage() {
           onClose={() => { setShowCreateMenu(false); }}
           onSelectOption={handleCreateOption}
         />
+      )}
+
+      {/* Check-In Modal */}
+      {showCheckIn && (
+        <CheckInModal onClose={() => setShowCheckIn(false)} />
       )}
 
       {/* Unified Create Modal */}

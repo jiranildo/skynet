@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 type SearchContext = 'NEARBY' | 'EXPLORE_COUNTRY' | 'DESTINATION_DISCOVERY' | 'SPECIFIC_CATEGORY' | 'MANUAL_PLACE';
 
 interface TravelAgentState {
-    userLocation: { name: string; country: string; coords: { lat: number; lon: number } | null, types?: string[] };
+    userLocation: { name: string; city?: string; state?: string; country: string; coords: { lat: number; lon: number } | null, types?: string[] };
     locationStatus: 'idle' | 'detecting' | 'success' | 'error';
     results: any[];
     isLoading: boolean;
@@ -122,8 +122,19 @@ export const useSmartTravelAgent = () => {
                 const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
                 const data = await res.json();
 
-                const city = data.address.city || data.address.town || data.address.municipality || 'Sua Região';
+                const city = data.address.city || data.address.town || data.address.village || data.address.municipality || 'Sua Região';
+                const state = data.address.state || '';
                 const country = data.address.country || 'Brasil';
+                const road = data.address.road || '';
+                const houseNumber = data.address.house_number || '';
+                const suburb = data.address.suburb || data.address.neighbourhood || data.address.city_district || '';
+
+                const clean = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '');
+
+                // Deduplicate Suburb and City
+                const neighborhoodCity = (suburb && city && clean(suburb) === clean(city))
+                    ? city
+                    : [suburb, city].filter(Boolean).join(', ');
 
                 // Extract types/categories
                 const types = [];
@@ -131,11 +142,39 @@ export const useSmartTravelAgent = () => {
                 if (data.category) types.push(data.category);
                 if (data.addresstype) types.push(data.addresstype);
 
+                // Brazilian State Abbreviation Mapper
+                const stateMap: { [key: string]: string } = {
+                    'Acre': 'AC', 'Alagoas': 'AL', 'Amapá': 'AP', 'Amazonas': 'AM', 'Bahia': 'BA',
+                    'Ceará': 'CE', 'Distrito Federal': 'DF', 'Espírito Santo': 'ES', 'Goiás': 'GO',
+                    'Maranhão': 'MA', 'Mato Grosso': 'MT', 'Mato Grosso do Sul': 'MS', 'Minas Gerais': 'MG',
+                    'Pará': 'PA', 'Paraíba': 'PB', 'Paraná': 'PR', 'Pernambuco': 'PE', 'Piauí': 'PI',
+                    'Rio de Janeiro': 'RJ', 'Rio Grande do Norte': 'RN', 'Rio Grande do Sul': 'RS',
+                    'Rondônia': 'RO', 'Roraima': 'RR', 'Santa Catarina': 'SC', 'São Paulo': 'SP',
+                    'Sergipe': 'SE', 'Tocantins': 'TO'
+                };
+                const stateAbbr = stateMap[state] || state;
+
+                // Precise Name: [POI], [Road, Num]
+                const poiClean = clean(data.name);
+                const roadClean = clean(road);
+
+                let preciseName = data.name || city;
+                const roadWithNumber = houseNumber ? `${road}, ${houseNumber}` : road;
+
+                if (road && poiClean !== roadClean && !poiClean.includes(roadClean) && !roadClean.includes(poiClean)) {
+                    preciseName = data.name ? `${data.name}, ${roadWithNumber}` : roadWithNumber;
+                } else if (roadClean && (poiClean === roadClean || poiClean.includes(roadClean) || roadClean.includes(poiClean))) {
+                    const bestMain = (data.name?.length || 0) >= road.length ? data.name : road;
+                    preciseName = houseNumber ? `${bestMain}, ${houseNumber}` : bestMain;
+                }
+
                 setState(prev => ({
                     ...prev,
                     locationStatus: 'success',
                     userLocation: {
-                        name: data.name || city, // Prefer precise name if available (POI)
+                        name: preciseName,
+                        city: city,
+                        state: stateAbbr,
                         country: country,
                         coords: { lat: latitude, lon: longitude },
                         types: types
@@ -208,7 +247,9 @@ export const useSmartTravelAgent = () => {
         // Logic for Known Topics with Semantic Mapping
         else if (topic) {
             context = topic.id === 'nearby' ? 'NEARBY' : (topic.id === 'explore_country' ? 'EXPLORE_COUNTRY' : 'SPECIFIC_CATEGORY');
-            const locationName = userLocation.name || 'São Paulo';
+            const locationName = userLocation.city
+                ? `${userLocation.city}${userLocation.state ? `, ${userLocation.state}` : ''}`
+                : (userLocation.name || 'São Paulo');
 
             // Semantic Logic Switch
             switch (topic.id) {
@@ -304,7 +345,10 @@ export const useSmartTravelAgent = () => {
         }
         else {
             // Fallback for completely unknown categories
-            finalQuery = `${category} em ${userLocation.name || 'Brasil'}`;
+            const loc = userLocation.city
+                ? `${userLocation.city}${userLocation.state ? `, ${userLocation.state}` : ''}`
+                : (userLocation.name || 'Brasil');
+            finalQuery = `${category} em ${loc}`;
         }
 
         // --- Execute Search ---

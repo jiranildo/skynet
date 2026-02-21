@@ -1,118 +1,47 @@
-import { useState, useEffect } from 'react';
-
-interface Transaction {
-  id: string;
-  type: 'earn' | 'spend';
-  amount: number;
-  description: string;
-  date: string;
-  category: 'travel' | 'food' | 'reward' | 'booking' | 'social';
-}
+import { useState } from 'react';
+import { useGamification } from '@/hooks/queries/useGamification';
+import { useTransactions, useAddTransaction, useEarnOptions, useSpendOptions, useBuyPackages } from '@/hooks/queries/useWallet';
 
 interface WalletWidgetProps {
   onClose?: () => void;
 }
 
 export default function WalletWidget({ onClose }: WalletWidgetProps) {
-  const [balance, setBalance] = useState(0);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'earn'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'earn' | 'spend' | 'buy'>('overview');
 
-  useEffect(() => {
-    // Carregar saldo do localStorage
-    const savedBalance = localStorage.getItem('travel-money-balance');
-    if (savedBalance) {
-      setBalance(parseFloat(savedBalance));
-    } else {
-      // Saldo inicial de boas-vindas
-      setBalance(500);
-      localStorage.setItem('travel-money-balance', '500');
+  const { data: gamification } = useGamification();
+  const { data: transactions } = useTransactions();
+  const addTransactionMut = useAddTransaction();
+
+  const balance = gamification?.tm_balance || 0;
+  const safeTransactions = transactions || [];
+
+  const addTransaction = async (transaction: { type: 'earn' | 'spend'; amount: number; description: string; category: string }) => {
+    try {
+      await addTransactionMut.mutateAsync(transaction);
+    } catch (e) {
+      console.error(e);
     }
-
-    // Carregar transações
-    const savedTransactions = localStorage.getItem('travel-money-transactions');
-    if (savedTransactions) {
-      setTransactions(JSON.parse(savedTransactions));
-    } else {
-      // Transações iniciais de exemplo
-      const initialTransactions: Transaction[] = [
-        {
-          id: '1',
-          type: 'earn',
-          amount: 500,
-          description: 'Bônus de boas-vindas',
-          date: new Date().toISOString(),
-          category: 'reward'
-        }
-      ];
-      setTransactions(initialTransactions);
-      localStorage.setItem('travel-money-transactions', JSON.stringify(initialTransactions));
-    }
-  }, []);
-
-  const addTransaction = (transaction: Omit<Transaction, 'id' | 'date'>) => {
-    const newTransaction: Transaction = {
-      ...transaction,
-      id: Date.now().toString(),
-      date: new Date().toISOString()
-    };
-
-    const updatedTransactions = [newTransaction, ...transactions];
-    setTransactions(updatedTransactions);
-    localStorage.setItem('travel-money-transactions', JSON.stringify(updatedTransactions));
-
-    const newBalance = transaction.type === 'earn' 
-      ? balance + transaction.amount 
-      : balance - transaction.amount;
-    
-    setBalance(newBalance);
-    localStorage.setItem('travel-money-balance', newBalance.toString());
   };
 
-  const earnWays = [
-    {
-      icon: 'ri-camera-line',
-      title: 'Compartilhar Viagens',
-      description: 'Poste fotos da sua viagem',
-      reward: 50,
-      color: 'from-blue-500 to-cyan-500'
-    },
-    {
-      icon: 'ri-star-line',
-      title: 'Avaliar Experiência',
-      description: 'Avalie restaurantes e hotéis',
-      reward: 25,
-      color: 'from-yellow-500 to-orange-500'
-    },
-    {
-      icon: 'ri-user-add-line',
-      title: 'Convidar Amigos',
-      description: 'Ganhe por cada amigo que se cadastrar',
-      reward: 100,
-      color: 'from-purple-500 to-pink-500'
-    },
-    {
-      icon: 'ri-map-pin-line',
-      title: 'Check-in',
-      description: 'Faça check-in em destinos',
-      reward: 30,
-      color: 'from-green-500 to-teal-500'
-    },
-    {
-      icon: 'ri-calendar-check-line',
-      title: 'Completar Viagens',
-      description: 'Complete uma viagem planejada',
-      reward: 200,
-      color: 'from-red-500 to-pink-500'
-    },
-    {
-      icon: 'ri-trophy-line',
-      title: 'Conquistas',
-      description: 'Desbloqueie badges e conquistas',
-      reward: 150,
-      color: 'from-indigo-500 to-purple-500'
+  const { data: earnWays = [] } = useEarnOptions();
+  const { data: spendWays = [] } = useSpendOptions();
+  const { data: buyPackages = [] } = useBuyPackages();
+
+  const handleBuyPackage = async (pkg: any) => {
+    try {
+      await addTransactionMut.mutateAsync({
+        type: 'earn',
+        amount: pkg.amount + pkg.bonus,
+        description: `Compra de Pacote TM`,
+        category: 'reward'
+      });
+      alert(`Compra de ${pkg.price} simulada com sucesso! Você recebeu ${pkg.amount + pkg.bonus} TM.`);
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao processar compra.');
     }
-  ];
+  };
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -140,7 +69,7 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Agora mesmo';
     if (diffInHours < 24) return `${diffInHours}h atrás`;
     if (diffInHours < 48) return 'Ontem';
@@ -184,40 +113,57 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-gray-200 px-6 pt-4">
-        <div className="flex gap-2">
+      <div className="bg-white border-b border-gray-200">
+        <div className="flex overflow-x-auto scrollbar-none px-2 pt-2">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`flex-1 px-4 py-3 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'overview'
-                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white shadow-md'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`px-4 py-3 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'overview'
+              ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white shadow-md'
+              : 'text-gray-600 hover:bg-gray-100 border-b-2 border-transparent hover:border-gray-200'
+              }`}
           >
             <i className="ri-dashboard-line mr-2"></i>
             Visão Geral
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 px-4 py-3 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'history'
-                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white shadow-md'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`px-4 py-3 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'history'
+              ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white shadow-md'
+              : 'text-gray-600 hover:bg-gray-100 border-b-2 border-transparent hover:border-gray-200'
+              }`}
           >
             <i className="ri-history-line mr-2"></i>
             Histórico
           </button>
           <button
             onClick={() => setActiveTab('earn')}
-            className={`flex-1 px-4 py-3 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'earn'
-                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white shadow-md'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`px-4 py-3 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'earn'
+              ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white shadow-md'
+              : 'text-gray-600 hover:bg-gray-100 border-b-2 border-transparent hover:border-gray-200'
+              }`}
           >
             <i className="ri-gift-line mr-2"></i>
             Ganhar
+          </button>
+          <button
+            onClick={() => setActiveTab('spend')}
+            className={`px-4 py-3 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'spend'
+              ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white shadow-md'
+              : 'text-gray-600 hover:bg-gray-100 border-b-2 border-transparent hover:border-gray-200'
+              }`}
+          >
+            <i className="ri-shopping-cart-2-line mr-2"></i>
+            Gastar
+          </button>
+          <button
+            onClick={() => setActiveTab('buy')}
+            className={`px-4 py-3 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'buy'
+              ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white shadow-md'
+              : 'text-gray-600 hover:bg-gray-100 border-b-2 border-transparent hover:border-gray-200'
+              }`}
+          >
+            <i className="ri-bank-card-line mr-2"></i>
+            Comprar
           </button>
         </div>
       </div>
@@ -232,20 +178,20 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
               <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
                 <i className="ri-arrow-down-line text-2xl text-green-600 mb-2"></i>
                 <p className="text-2xl font-bold text-gray-900">
-                  {transactions.filter(t => t.type === 'earn').reduce((sum, t) => sum + t.amount, 0)}
+                  {safeTransactions.filter(t => t.type === 'earn').reduce((sum, t) => sum + Number(t.amount), 0)}
                 </p>
                 <p className="text-xs text-gray-600">Ganhos</p>
               </div>
               <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-xl p-4 border border-red-200">
                 <i className="ri-arrow-up-line text-2xl text-red-600 mb-2"></i>
                 <p className="text-2xl font-bold text-gray-900">
-                  {transactions.filter(t => t.type === 'spend').reduce((sum, t) => sum + t.amount, 0)}
+                  {safeTransactions.filter(t => t.type === 'spend').reduce((sum, t) => sum + Number(t.amount), 0)}
                 </p>
                 <p className="text-xs text-gray-600">Gastos</p>
               </div>
               <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-200">
                 <i className="ri-exchange-line text-2xl text-blue-600 mb-2"></i>
-                <p className="text-2xl font-bold text-gray-900">{transactions.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{safeTransactions.length}</p>
                 <p className="text-xs text-gray-600">Transações</p>
               </div>
             </div>
@@ -254,7 +200,7 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
             <div>
               <h3 className="text-lg font-bold text-gray-900 mb-4">Transações Recentes</h3>
               <div className="space-y-3">
-                {transactions.slice(0, 5).map((transaction) => (
+                {safeTransactions.slice(0, 5).map((transaction) => (
                   <div
                     key={transaction.id}
                     className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
@@ -264,7 +210,7 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 text-sm">{transaction.description}</p>
-                      <p className="text-xs text-gray-500">{formatDate(transaction.date)}</p>
+                      <p className="text-xs text-gray-500">{formatDate(transaction.created_at || '')}</p>
                     </div>
                     <div className={`text-right ${transaction.type === 'earn' ? 'text-green-600' : 'text-red-600'}`}>
                       <p className="font-bold text-lg">
@@ -282,8 +228,8 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
         {/* History Tab */}
         {activeTab === 'history' && (
           <div className="space-y-3">
-            {transactions.length > 0 ? (
-              transactions.map((transaction) => (
+            {safeTransactions.length > 0 ? (
+              safeTransactions.map((transaction) => (
                 <div
                   key={transaction.id}
                   className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
@@ -293,7 +239,7 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 text-sm">{transaction.description}</p>
-                    <p className="text-xs text-gray-500">{formatDate(transaction.date)}</p>
+                    <p className="text-xs text-gray-500">{formatDate(transaction.created_at || '')}</p>
                   </div>
                   <div className={`text-right ${transaction.type === 'earn' ? 'text-green-600' : 'text-red-600'}`}>
                     <p className="font-bold text-lg">
@@ -333,18 +279,9 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
               {earnWays.map((way, index) => (
                 <div
                   key={index}
-                  className="bg-white rounded-xl p-5 border-2 border-gray-200 hover:border-yellow-400 transition-all cursor-pointer group"
-                  onClick={() => {
-                    addTransaction({
-                      type: 'earn',
-                      amount: way.reward,
-                      description: way.title,
-                      category: 'reward'
-                    });
-                    alert(`🎉 Você ganhou ${way.reward} TM!`);
-                  }}
+                  className="bg-white rounded-xl p-5 border border-gray-100"
                 >
-                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${way.color} flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform`}>
+                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${way.color} flex items-center justify-center text-white mb-4`}>
                     <i className={`${way.icon} text-2xl`}></i>
                   </div>
                   <h4 className="font-bold text-gray-900 mb-1">{way.title}</h4>
@@ -354,6 +291,88 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
                     <span className="text-lg font-bold text-yellow-600">+{way.reward} TM</span>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Spend Tab */}
+        {activeTab === 'spend' && (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-4 border border-indigo-200">
+              <div className="flex items-start gap-3">
+                <i className="ri-shopping-bag-3-line text-2xl text-indigo-600"></i>
+                <div>
+                  <h4 className="font-bold text-gray-900 mb-1">Use seu Saldo</h4>
+                  <p className="text-sm text-gray-700">
+                    Troque seu Travel Money por benefícios reais na plataforma.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {spendWays.map((way, index) => (
+                <div
+                  key={index}
+                  className="bg-white rounded-xl p-5 border border-gray-100"
+                >
+                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${way.color} flex items-center justify-center text-white mb-4`}>
+                    <i className={`${way.icon} text-2xl`}></i>
+                  </div>
+                  <h4 className="font-bold text-gray-900 mb-1">{way.title}</h4>
+                  <p className="text-sm text-gray-600 mb-3">{way.description}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Custo</span>
+                    <span className="text-lg font-bold text-indigo-600">-{way.cost} TM</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Buy Tab */}
+        {activeTab === 'buy' && (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-xl p-4 border border-teal-200">
+              <div className="flex items-start gap-3">
+                <i className="ri-secure-payment-line text-2xl text-teal-600"></i>
+                <div>
+                  <h4 className="font-bold text-gray-900 mb-1">Recarregue sua Carteira</h4>
+                  <p className="text-sm text-gray-700">
+                    Compre pacotes de Travel Money com PIX ou Cartão de Crédito de forma segura.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {buyPackages.map((pkg, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleBuyPackage(pkg)}
+                  className="w-full text-left bg-white rounded-xl p-5 border-2 border-gray-100 hover:border-teal-400 hover:shadow-md transition-all group flex items-center justify-between relative overflow-hidden"
+                >
+                  {pkg.bonus > 0 && (
+                    <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 font-bold text-[10px] px-3 py-1 rounded-bl-xl uppercase tracking-wider">
+                      +{pkg.bonus} TM Bônus
+                    </div>
+                  )}
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className="w-12 h-12 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <i className="ri-vip-diamond-line text-xl"></i>
+                    </div>
+                    <div>
+                      <h4 className="font-black text-xl text-gray-900">{pkg.amount} TM</h4>
+                      <p className="text-sm text-gray-500">Adicionar à carteira</p>
+                    </div>
+                  </div>
+                  <div className="text-right relative z-10">
+                    <p className="font-bold text-lg text-teal-600">{pkg.price}</p>
+                    <p className="text-[10px] uppercase font-bold text-gray-400 mt-0.5">Comprar agora</p>
+                  </div>
+                </button>
               ))}
             </div>
           </div>

@@ -11,6 +11,7 @@ import FloatingMenu from '../../components/FloatingMenu';
 import NotificationsPanel from '../home/components/NotificationsPanel';
 import HeaderActions from '../../components/HeaderActions';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
+import CheckInModal from '../../components/CheckInModal';
 
 export default function CellarPage() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export default function CellarPage() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showCheckIn, setShowCheckIn] = useState(false);
   const { refreshCounts } = useUnreadCounts();
 
   const tabs = [
@@ -50,7 +52,7 @@ export default function CellarPage() {
     }
   };
 
-  const handleCreateOption = (option: 'post' | 'travel' | 'cellar' | 'food') => {
+  const handleCreateOption = (option: 'post' | 'travel' | 'cellar' | 'food' | 'checkin') => {
     setShowCreateMenu(false);
 
     switch (option) {
@@ -66,6 +68,9 @@ export default function CellarPage() {
         break;
       case 'food':
         navigate('/drinks-food');
+        break;
+      case 'checkin':
+        setShowCheckIn(true);
         break;
     }
   };
@@ -215,6 +220,9 @@ export default function CellarPage() {
       {showFloatingMenu && (
         <FloatingMenu />
       )}
+
+      {/* Check-In Modal */}
+      {showCheckIn && <CheckInModal onClose={() => setShowCheckIn(false)} />}
 
       {/* Notifications Panel */}
       {showNotifications && (

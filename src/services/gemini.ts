@@ -124,3 +124,29 @@ export const searchWineInfo = async (query: string): Promise<AIWineAnalysis | nu
         return null;
     }
 };
+
+export const generateCheckInCaption = async (location: string, feeling?: string, context?: string): Promise<string> => {
+    try {
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+        const prompt = `
+      Crie uma legenda curta e envolvente para um check-in em uma rede social de viagens.
+      Localização: ${location}
+      ${feeling ? `Sentimento/Emoji: ${feeling}` : ''}
+      ${context ? `Contexto adicional: ${context}` : ''}
+
+      Instruções:
+      1. Seja criativo e amigável.
+      2. Use emojis relacionados ao local.
+      3. A legenda deve ser curta (máximo 2 sentenças).
+      4. Retorne APENAS o texto da legenda, sem aspas ou explicações.
+    `;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text().trim();
+    } catch (error) {
+        console.error('Error generating check-in caption:', error);
+        return '';
+    }
+};

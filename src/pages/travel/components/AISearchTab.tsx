@@ -149,7 +149,14 @@ export default function AISearchTab() {
 
     const handleCategorySelect = (category: Category) => {
         setIsCategoryModalOpen(false);
-        const locationText = userLocation?.name ? ` em ${userLocation.name}` : '';
+        const fullLocation = [
+            userLocation?.name,
+            userLocation?.city,
+            userLocation?.state,
+            userLocation?.country
+        ].filter(Boolean).join(', ');
+
+        const locationText = fullLocation ? ` em ${fullLocation}` : '';
         const promptText = `Quero recomendações de ${category.label} (${category.description})${locationText}. Por favor, liste as melhores opções com detalhes.`;
         handleSearch(promptText);
     }
@@ -194,8 +201,15 @@ export default function AISearchTab() {
 
             // Construct a prompt that includes location context ONLY if enabled (or auto-enabled)
             let locationContext = "";
-            if (effectiveUseLocation && userLocation && userLocation.name) {
-                locationContext = `CONTEXTO DE LOCALIZAÇÃO: O usuário está atualmente em ${userLocation.name}, ${userLocation.country}. Use essa informação para fornecer recomendações locais EXTREMAMENTE específicas, incluindo EXATAMENTE onde ficam (bairro, rua ou área de referência).`;
+            if (effectiveUseLocation && userLocation && (userLocation.name || userLocation.city)) {
+                const fullLocation = [
+                    userLocation.name,
+                    userLocation.city,
+                    userLocation.state,
+                    userLocation.country
+                ].filter(Boolean).join(', ');
+
+                locationContext = `CONTEXTO DE LOCALIZAÇÃO: O usuário está atualmente em ${fullLocation}. Use essa informação para fornecer recomendações locais EXTREMAMENTE específicas para esta cidade/região, garantindo que os locais sugeridos estejam REALMENTE nesta área geográfica e não em cidades homônimas em outros países. No campo "address", inclua EXATAMENTE onde ficam (bairro, rua ou área de referência).`;
             }
 
             // Construct history context to avoid repeats
@@ -227,7 +241,7 @@ export default function AISearchTab() {
                 {
                     "icon": "Emoji",
                     "name": "Nome",
-                    "address": "Localização Exata (Rua, Bairro ou Ponto de Referência)",
+                    "address": "Obrigatório: POI (Ponto de Interesse), Endereço completo, Cidade, Estado, País",
                     "description": "Descrição curta (2 linhas)",
                     "reason": "Por que é assertivo para este pedido",
                     "bestTime": "Melhor época",
@@ -329,7 +343,7 @@ export default function AISearchTab() {
                         </h1>
                         <p className="text-xl text-gray-500 font-light max-w-2xl mx-auto">
                             {useLocation && userLocation && userLocation.name ?
-                                `Considerando sua localização em ${userLocation.name}.` :
+                                `Considerando sua localização em ${userLocation.name}${userLocation.city && userLocation.city !== userLocation.name ? `, ${userLocation.city}` : ''}.` :
                                 "Planejamento completo, dicas locais e itinerários personalizados."}
                         </p>
                     </div>
@@ -349,7 +363,11 @@ export default function AISearchTab() {
                                         handleSearch();
                                     }
                                 }}
-                                placeholder={useLocation && userLocation?.name ? `Pergunte algo sobre ${userLocation.name}...` : "Ex: Roteiro romântico de 10 dias na Itália com orçamento médio..."}
+                                placeholder={
+                                    useLocation && (userLocation?.name || userLocation?.city)
+                                        ? `Pergunte algo sobre ${[userLocation.name, userLocation.city, userLocation.state, userLocation.country].filter(Boolean).join(', ')}...`
+                                        : "Ex: Roteiro romântico de 10 dias na Itália com orçamento médio..."
+                                }
                                 className="w-full bg-transparent border-none focus:ring-0 p-4 min-h-[60px] md:min-h-[80px] text-lg resize-none text-gray-800 placeholder-gray-400"
                                 style={{ borderRadius: '1rem', paddingRight: '120px' }}
                             />
@@ -481,7 +499,7 @@ export default function AISearchTab() {
                                 <div>
                                     <h3 className="font-bold text-gray-900">Resposta da SARA</h3>
                                     <p className="text-xs text-gray-500">
-                                        Baseado em IA Google Gemini {useLocation && userLocation?.name && `• 📍 ${userLocation.name}`}
+                                        Baseado em IA Google Gemini {useLocation && userLocation?.name && `• 📍 ${userLocation.name}${userLocation.city && userLocation.city !== userLocation.name ? `, ${userLocation.city}` : ''}`}
                                     </p>
                                 </div>
                             </div>

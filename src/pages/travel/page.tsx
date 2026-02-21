@@ -22,6 +22,7 @@ import GamificationWidget from '../../components/GamificationWidget';
 import WalletWidget from '../../components/WalletWidget';
 import HeaderActions from '../../components/HeaderActions';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
+import CheckInModal from '../../components/CheckInModal';
 
 type TabType = 'search' | 'ai-search' | 'flights' | 'hotels' | 'packages' | 'cars' | 'cruises' | 'tickets' | 'transfer' | 'insurance' | 'mytrips' | 'favorites' | 'offers' | 'marketplace' | 'blogs';
 
@@ -44,6 +45,7 @@ export default function TravelPage() {
   const [showGamification, setShowGamification] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showCheckIn, setShowCheckIn] = useState(false);
   const [mytripsSubTab, setMytripsSubTab] = useState<string>('trips');
   const { refreshCounts } = useUnreadCounts();
 
@@ -81,6 +83,8 @@ export default function TravelPage() {
       window.REACT_APP_NAVIGATE('/cellar');
     } else if (option === 'food') {
       window.REACT_APP_NAVIGATE('/drinks-food');
+    } else if (option === 'checkin') {
+      setShowCheckIn(true);
     }
   };
 
@@ -377,6 +381,9 @@ export default function TravelPage() {
 
       {/* Create Post Modal */}
       {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+
+      {/* Check-In Modal */}
+      {showCheckIn && <CheckInModal onClose={() => setShowCheckIn(false)} />}
 
       {/* Gamification Modal */}
       {showGamification && (

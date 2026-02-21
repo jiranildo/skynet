@@ -151,8 +151,12 @@ export const personas: Record<PersonaType, PersonaConfig> = {
         gradient: 'from-indigo-500 to-purple-500',
         greeting: 'Como posso aplicar minha expertise para ajudar você agora?',
         suggestions: [
-            { icon: 'ri-list-check', text: 'Resumo do dia', keywords: ['resumo', 'agenda', 'hoje'] },
-            { icon: 'ri-search-2-line', text: 'Buscar Informações', keywords: ['pesquisa', 'informação', 'busca'] }
+            {
+                icon: 'ri-list-check',
+                text: 'Resumo do dia',
+                description: 'Clima, horário, moeda, notícias locais e turismo',
+                keywords: ['resumo do dia contendo horário local', 'clima atual', 'cotação da moeda local', 'resumo das principais notícias locais', 'dicas de turismo local, passeios na região e cidades próximas', 'sugira outras informações úteis para hoje']
+            }
         ]
     }
 };

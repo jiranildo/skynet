@@ -24,7 +24,9 @@ export default function Post({ post, onEdit }: PostProps) {
   const [replyTo, setReplyTo] = useState<any | null>(null);
   const { user } = useAuth();
 
-  const media = post.media_urls && post.media_urls.length > 0 ? post.media_urls : [post.image];
+  const media = (post.media_urls && post.media_urls.length > 0)
+    ? post.media_urls
+    : (post.image ? [post.image] : []);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
 
   // Modal State
@@ -321,60 +323,62 @@ export default function Post({ post, onEdit }: PostProps) {
       </div>
 
       {/* Post Image / Carousel */}
-      <div className="relative w-full bg-gray-50 flex items-center justify-center group p-2">
-        <img
-          src={media[currentMediaIndex]}
-          alt={`Post ${currentMediaIndex + 1}`}
-          className="w-full h-auto max-h-[600px] object-contain rounded-lg"
-        />
+      {media.length > 0 && (
+        <div className="relative w-full bg-gray-50 flex items-center justify-center group p-2">
+          <img
+            src={media[currentMediaIndex]}
+            alt={`Post ${currentMediaIndex + 1}`}
+            className="w-full h-auto max-h-[600px] object-contain rounded-lg"
+          />
 
-        {/* Carousel Controls */}
-        {media.length > 1 && (
-          <>
-            {/* Previous */}
-            {currentMediaIndex > 0 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation(); // Prevent opening post details if implemented
-                  setCurrentMediaIndex(prev => prev - 1);
-                }}
-                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
-              >
-                <i className="ri-arrow-left-s-line text-xl"></i>
-              </button>
-            )}
+          {/* Carousel Controls */}
+          {media.length > 1 && (
+            <>
+              {/* Previous */}
+              {currentMediaIndex > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent opening post details if implemented
+                    setCurrentMediaIndex(prev => prev - 1);
+                  }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <i className="ri-arrow-left-s-line text-xl"></i>
+                </button>
+              )}
 
-            {/* Next */}
-            {currentMediaIndex < media.length - 1 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCurrentMediaIndex(prev => prev + 1);
-                }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
-              >
-                <i className="ri-arrow-right-s-line text-xl"></i>
-              </button>
-            )}
+              {/* Next */}
+              {currentMediaIndex < media.length - 1 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentMediaIndex(prev => prev + 1);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <i className="ri-arrow-right-s-line text-xl"></i>
+                </button>
+              )}
 
-            {/* Indicators */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 px-3 py-1.5 bg-black/30 backdrop-blur-sm rounded-full">
-              {media.map((_, index) => (
-                <div
-                  key={index}
-                  className={`w-1.5 h-1.5 rounded-full transition-all ${index === currentMediaIndex ? 'bg-white scale-125' : 'bg-white/50'
-                    }`}
-                />
-              ))}
-            </div>
+              {/* Indicators */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 px-3 py-1.5 bg-black/30 backdrop-blur-sm rounded-full">
+                {media.map((_, index) => (
+                  <div
+                    key={index}
+                    className={`w-1.5 h-1.5 rounded-full transition-all ${index === currentMediaIndex ? 'bg-white scale-125' : 'bg-white/50'
+                      }`}
+                  />
+                ))}
+              </div>
 
-            {/* Counter Badge */}
-            <div className="absolute top-4 right-4 px-2 py-1 bg-black/60 backdrop-blur-sm rounded-full text-[10px] text-white font-medium">
-              {currentMediaIndex + 1}/{media.length}
-            </div>
-          </>
-        )}
-      </div>
+              {/* Counter Badge */}
+              <div className="absolute top-4 right-4 px-2 py-1 bg-black/60 backdrop-blur-sm rounded-full text-[10px] text-white font-medium">
+                {currentMediaIndex + 1}/{media.length}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Post Actions & Content */}
       <div className="p-3 sm:p-4">
@@ -433,15 +437,11 @@ export default function Post({ post, onEdit }: PostProps) {
             <div className="space-y-3 mb-4 max-h-80 overflow-y-auto pr-2">
               {commentsData.map((comment) => (
                 <div key={comment.id} className={`flex gap-2 text-left ${comment.parent_id ? 'ml-8' : ''}`}>
-                  <div className="w-6 h-6 rounded-full bg-gray-200 flex-shrink-0 overflow-hidden mt-1">
-                    {comment.users?.avatar_url ? (
+                  {comment.users?.avatar_url && (
+                    <div className="w-6 h-6 rounded-full bg-gray-200 flex-shrink-0 overflow-hidden mt-1">
                       <img src={comment.users.avatar_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-r from-orange-400 to-pink-500 flex items-center justify-center text-[10px] text-white font-bold">
-                        {comment.users?.username?.[0].toUpperCase()}
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <div className="flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">

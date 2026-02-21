@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { cellarService, CellarWine } from '../../../services/supabase';
 import WineDetailModal from './WineDetailModal';
 import WineCard from './WineCard';
+import RatingBottomSheet from './RatingBottomSheet';
 
 interface MyWinesTabProps {
   searchQuery: string;
@@ -10,12 +11,13 @@ interface MyWinesTabProps {
 
 export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) {
   const [selectedWine, setSelectedWine] = useState<CellarWine | null>(null);
+  const [evaluatingWine, setEvaluatingWine] = useState<CellarWine | null>(null);
   const [wines, setWines] = useState<CellarWine[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [sortBy, setSortBy] = useState('recent');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [drinkSoonViewMode, setDrinkSoonViewMode] = useState<'grid' | 'list'>('grid');
+  const [wishlistFilter, setWishlistFilter] = useState('all');
+  const [wishlistSortBy, setWishlistSortBy] = useState('recent');
 
   useEffect(() => {
     loadWines();
@@ -56,6 +58,31 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
     }
   };
 
+  const handleToggleStatus = async (e: React.MouseEvent, wine: CellarWine) => {
+    e.stopPropagation();
+    if (!wine.id) return;
+    const newStatus = wine.status === 'wishlist' ? 'in_cellar' : 'wishlist';
+    try {
+      await cellarService.update(wine.id, { status: newStatus });
+      await loadWines();
+    } catch (error) {
+      console.error('Erro ao alterar status do vinho:', error);
+      alert('Erro ao alterar status. Por favor, tente novamente.');
+    }
+  };
+
+  const handleToggleFavorite = async (e: React.MouseEvent, wine: CellarWine) => {
+    e.stopPropagation();
+    if (!wine.id) return;
+    try {
+      await cellarService.update(wine.id, { is_favorite: !wine.is_favorite });
+      await loadWines();
+    } catch (error) {
+      console.error('Erro ao favoritar vinho:', error);
+      alert('Erro ao alterar favorito. Por favor, tente novamente.');
+    }
+  };
+
   const handleConsumeBottle = async (e: React.MouseEvent, wine: CellarWine) => {
     e.stopPropagation();
     if (!wine.id || !wine.quantity || wine.quantity <= 0) return;
@@ -82,33 +109,42 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
     }
   };
 
-  const filteredWines = wines.filter(wine => {
-    const matchesSearch = !searchQuery ||
-      wine.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      wine.producer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      wine.region?.toLowerCase().includes(searchQuery.toLowerCase());
+  const getFilteredAndSorted = (list: CellarWine[], currentFilter: string, currentSort: string) => {
+    const filtered = list.filter(wine => {
+      const matchesSearch = !searchQuery ||
+        wine.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        wine.producer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        wine.region?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesFilter = filter === 'all' || wine.type === filter;
+      const matchesFilter = currentFilter === 'all'
+        ? true
+        : currentFilter === 'favorites'
+          ? !!wine.is_favorite
+          : wine.type === currentFilter;
 
-    return matchesSearch && matchesFilter;
-  });
+      return matchesSearch && matchesFilter;
+    });
 
-  const sortedWines = [...filteredWines].sort((a, b) => {
-    switch (sortBy) {
-      case 'recent':
-        return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime();
-      case 'name':
-        return a.name.localeCompare(b.name);
-      case 'vintage':
-        return (b.vintage || 0) - (a.vintage || 0);
-      case 'rating':
-        return (b.rating || 0) - (a.rating || 0);
-      case 'price':
-        return (b.price || 0) - (a.price || 0);
-      default:
-        return 0;
-    }
-  });
+    return filtered.sort((a, b) => {
+      switch (currentSort) {
+        case 'recent':
+          return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime();
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'vintage':
+          return (b.vintage || 0) - (a.vintage || 0);
+        case 'rating':
+          return (b.rating || 0) - (a.rating || 0);
+        case 'price':
+          return (b.price || 0) - (a.price || 0);
+        default:
+          return 0;
+      }
+    });
+  };
+
+  const cellarFilteredAndSorted = getFilteredAndSorted(wines.filter(w => !w.status || w.status === 'in_cellar'), filter, sortBy);
+  const wishlistFilteredAndSorted = getFilteredAndSorted(wines.filter(w => w.status === 'wishlist'), wishlistFilter, wishlistSortBy);
 
   // Logic for "Wines to Drink Soon": Wines older than 3 years with good rating, or explicitly short aging potential
   // Logic for "Wines to Drink Soon": Simply the oldest vintages currently in stock
@@ -193,32 +229,29 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
 
       {/* Main Collection */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-gray-900">Minha Adega</h3>
+        <div className="flex items-center justify-between mb-2 mt-4 px-2">
+          <div className="flex items-center gap-3">
+            <button className="w-10 h-10 flex items-center justify-center -ml-2 text-gray-900 active:bg-gray-100 rounded-full transition-colors">
+              <i className="ri-arrow-left-line text-2xl font-light"></i>
+            </button>
+            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              Minha adega <span className="text-gray-400 text-sm font-semibold">{wines.length}</span>
+            </h3>
+          </div>
+          <button className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-900 transition-colors">
+            <i className="ri-search-line text-2xl font-light"></i>
+          </button>
         </div>
 
         {/* Filters & Actions */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-3 border border-purple-100 shadow-sm sticky top-[70px] z-20 mb-6">
-          <div className="flex flex-row items-center justify-between gap-3 overflow-x-auto pb-1 scrollbar-hide">
-            <div className="flex items-center gap-2">
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer min-w-[140px]"
-              >
-                <option value="all">Todas</option>
-                <option value="red">🍷 Tinto</option>
-                <option value="white">🥂 Branco</option>
-                <option value="rose">🌸 Rosé</option>
-                <option value="sparkling">🍾 Espumante</option>
-                <option value="fortified">🛡️ Fortificado</option>
-                <option value="dessert">🍰 Sobremesa</option>
-              </select>
+        <div className="bg-white/95 backdrop-blur-md rounded-none pb-2 pt-2 sticky top-[60px] z-20 mb-4 -mx-4 px-4 border-b border-gray-100">
 
+          <div className="flex items-center justify-center gap-6 py-2">
+            <button className="relative flex items-center gap-1.5 font-bold text-gray-900 text-[15px] border-b-2 border-transparent hover:border-gray-900 transition-all pb-1 cursor-pointer">
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer min-w-[140px]"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
               >
                 <option value="recent">Mais Recentes</option>
                 <option value="name">Nome A-Z</option>
@@ -226,24 +259,59 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
                 <option value="rating">Avaliação</option>
                 <option value="price">Preço</option>
               </select>
-            </div>
-
-            <button
-              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-              className="flex items-center justify-center w-10 h-10 bg-gray-50 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors flex-shrink-0"
-            >
-              <i className={viewMode === 'grid' ? 'ri-list-check' : 'ri-grid-fill'}></i>
+              <div className="relative pointer-events-none">
+                <i className="ri-sort-desc text-xl font-medium"></i>
+                <div className="absolute top-0 -right-1 w-2.5 h-2.5 bg-gray-800 rounded-full border-2 border-white"></div>
+              </div>
+              Classificar
             </button>
+            <button className="relative flex items-center gap-1.5 font-medium text-gray-600 hover:text-gray-900 text-[15px] transition-colors pb-1 cursor-pointer">
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
+              >
+                <option value="all">Todos</option>
+                <option value="red">Tinto</option>
+                <option value="white">Branco</option>
+                <option value="rose">Rosé</option>
+                <option value="sparkling">Espumante</option>
+                <option value="fortified">Fortificado</option>
+                <option value="dessert">Sobremesa</option>
+              </select>
+              <div className="relative pointer-events-none flex items-center gap-1.5">
+                <i className="ri-filter-3-line text-xl"></i> Filtrar
+              </div>
+            </button>
+          </div>
+
+          {/* Chips Row */}
+          <div className="flex items-center gap-2 overflow-x-auto py-3 scrollbar-hide -mx-4 px-4 w-screen mt-2">
+            <button onClick={() => setFilter('all')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium transition-colors ${filter === 'all' ? 'border-gray-900 text-gray-900 bg-gray-100/50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>Pronto para beber</button>
+            <button onClick={() => setFilter('favorites')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium flex items-center gap-1.5 transition-colors ${filter === 'favorites' ? 'border-red-500 text-red-600 bg-red-50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>
+              <i className={filter === 'favorites' ? 'ri-heart-3-fill' : 'ri-heart-3-line text-gray-400'}></i> Favoritos
+            </button>
+            <button onClick={() => setFilter('red')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium flex items-center gap-1.5 transition-colors ${filter === 'red' ? 'border-gray-900 text-gray-900 bg-gray-100/50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>
+              <i className="ri-goblet-fill text-gray-400"></i> Tinto
+            </button>
+            <button onClick={() => setFilter('white')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium flex items-center gap-1.5 transition-colors ${filter === 'white' ? 'border-gray-900 text-gray-900 bg-gray-100/50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>
+              <i className="ri-goblet-fill text-[#f3e5ab]"></i> Branco
+            </button>
+            <button onClick={() => setFilter('rose')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium flex items-center gap-1.5 transition-colors ${filter === 'rose' ? 'border-gray-900 text-gray-900 bg-gray-100/50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>
+              <i className="ri-goblet-fill text-pink-300"></i> Rosé
+            </button>
+            <button onClick={() => setFilter('sparkling')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium transition-colors ${filter === 'sparkling' ? 'border-gray-900 text-gray-900 bg-gray-100/50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>Espumante</button>
+            <button className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium transition-colors border-gray-300 text-gray-700 bg-white hover:bg-gray-50`}>Sem preço</button>
           </div>
         </div>
 
         {/* Empty State */}
-        {sortedWines.filter(w => !w.status || w.status === 'in_cellar').length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 bg-white/50 backdrop-blur-sm rounded-3xl border border-dashed border-gray-300">
+        {cellarFilteredAndSorted.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 bg-white/50 backdrop-blur-sm rounded-3xl border border-dashed border-gray-300 mx-2">
             <div className="w-24 h-24 bg-purple-50 rounded-full flex items-center justify-center mb-6 animate-bounce-slow">
               <i className="ri-goblet-line text-5xl text-purple-300"></i>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Sua adega está vazia</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Alista de vinhos está vazia</h3>
             <p className="text-gray-500 mb-8 max-w-xs text-center">
               Comece a construir sua coleção adicionando seus vinhos favoritos.
             </p>
@@ -256,118 +324,70 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
           </div>
         )}
 
-        {/* Grid: Cellar Wines */}
-        {sortedWines.filter(w => !w.status || w.status === 'in_cellar').length > 0 && (
-          <div className={
-            viewMode === 'grid'
-              ? 'grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4 pb-12'
-              : 'space-y-1 pb-12'
-          }>
-            {sortedWines.filter(w => !w.status || w.status === 'in_cellar').map((wine) => {
+        {/* List: Cellar Wines */}
+        {cellarFilteredAndSorted.length > 0 && (
+          <div className="flex flex-col gap-4 pb-12 mt-2 px-2">
+            {cellarFilteredAndSorted.map((wine) => {
               const isReadyToDrink = drinkSoonWines.some(w => w.id === wine.id);
 
-              return viewMode === 'grid' ? (
+              return (
                 <WineCard
                   key={wine.id}
                   wine={wine}
-                  compact={true}
                   isReadyToDrink={isReadyToDrink}
                   onClick={() => setSelectedWine(wine)}
                   onConsume={(e) => handleConsumeBottle(e, wine)}
                   onAdd={(e) => handleAddBottle(e, wine)}
+                  onEvaluate={(e) => { e.stopPropagation(); setEvaluatingWine(wine); }}
+                  onToggleStatus={(e) => handleToggleStatus(e, wine)}
+                  onToggleFavorite={(e) => handleToggleFavorite(e, wine)}
+                  onMoreOptions={(e) => { e.stopPropagation(); setSelectedWine(wine); }}
                 />
-              ) : (
-                <div
-                  key={wine.id}
-                  onClick={() => setSelectedWine(wine)}
-                  className={`bg-white rounded-lg p-2 shadow-sm border ${isReadyToDrink ? 'border-amber-200 bg-amber-50/10' : 'border-gray-100'} flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors relative`}
-                >
-                  {isReadyToDrink && (
-                    <div className="absolute -top-1 -left-1 z-10">
-                      <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-br-lg rounded-tl-lg shadow-sm uppercase tracking-tighter">
-                        Pronto
-                      </div>
-                    </div>
-                  )}
-                  <div className="w-10 h-14 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 relative">
-                    <img
-                      src={wine.image_url || "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop";
-                      }}
-                      className="w-full h-full object-contain p-1"
-                      alt=""
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-gray-900 truncate text-sm">{wine.name}</h4>
-                      {isReadyToDrink && <i className="ri-time-line text-amber-500 text-xs"></i>}
-                    </div>
-                    <p className="text-xs text-gray-500 truncate">{wine.producer} • {wine.vintage}</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={(e) => handleConsumeBottle(e, wine)}
-                      className="w-7 h-7 flex items-center justify-center bg-gray-100 rounded-md text-gray-600 hover:text-red-600 hover:bg-red-50"
-                    >
-                      <i className="ri-subtract-line text-sm"></i>
-                    </button>
-                    <span className="font-bold w-5 text-center text-sm">{wine.quantity}</span>
-                    <button
-                      onClick={(e) => handleAddBottle(e, wine)}
-                      className="w-7 h-7 flex items-center justify-center bg-gray-100 rounded-md text-gray-600 hover:text-emerald-600 hover:bg-emerald-50"
-                    >
-                      <i className="ri-add-line text-sm"></i>
-                    </button>
-                  </div>
-                </div>
               );
             })}
           </div>
         )}
 
         {/* Wishlist Section */}
-        {sortedWines.filter(w => w.status === 'wishlist').length > 0 && (
-          <div className="pb-24 pt-4 border-t border-gray-100">
+        {/* Wishlist Section */}
+        {wines.filter(w => w.status === 'wishlist').length > 0 && (
+          <div className="pb-24 pt-4 mt-8 px-2">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                 <i className="ri-bookmark-3-fill text-purple-500"></i>
-                Wishlist
+                Wishlist <span className="text-gray-400 text-sm font-semibold">{wishlistFilteredAndSorted.length}</span>
               </h3>
-              <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{sortedWines.filter(w => w.status === 'wishlist').length} vinhos</span>
             </div>
 
-            <div className={
-              viewMode === 'grid'
-                ? 'grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4'
-                : 'space-y-1'
-            }>
-              {sortedWines.filter(w => w.status === 'wishlist').map((wine) => (
-                <div
+            {/* Wishlist Filters & Actions */}
+            <div className="bg-white/95 backdrop-blur-md rounded-none pb-2 pt-2 z-20 mb-4 -mx-6 px-6 border-b border-gray-100">
+              {/* Chips Row */}
+              <div className="flex items-center gap-2 overflow-x-auto py-2 scrollbar-hide -mx-2 px-2 w-screen">
+                <button onClick={() => setWishlistFilter('all')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium transition-colors ${wishlistFilter === 'all' ? 'border-gray-900 text-gray-900 bg-gray-100/50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>Todos</button>
+                <button onClick={() => setWishlistFilter('red')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium flex items-center gap-1.5 transition-colors ${wishlistFilter === 'red' ? 'border-gray-900 text-gray-900 bg-gray-100/50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>
+                  <i className="ri-goblet-fill text-gray-400"></i> Tinto
+                </button>
+                <button onClick={() => setWishlistFilter('white')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium flex items-center gap-1.5 transition-colors ${wishlistFilter === 'white' ? 'border-gray-900 text-gray-900 bg-gray-100/50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>
+                  <i className="ri-goblet-fill text-[#f3e5ab]"></i> Branco
+                </button>
+                <button onClick={() => setWishlistFilter('rose')} className={`whitespace-nowrap px-4 py-1.5 rounded-full border text-[13px] font-medium flex items-center gap-1.5 transition-colors ${wishlistFilter === 'rose' ? 'border-gray-900 text-gray-900 bg-gray-100/50' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}>
+                  <i className="ri-goblet-fill text-pink-300"></i> Rosé
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {wishlistFilteredAndSorted.map((wine) => (
+                <WineCard
                   key={wine.id}
+                  wine={{ ...wine, quantity: 0 }}
                   onClick={() => setSelectedWine(wine)}
-                  className="relative group bg-white rounded-xl border-2 border-dashed border-purple-200 p-2 hover:border-purple-300 transition-all cursor-pointer"
-                >
-                  <div className="absolute top-2 right-2 z-10">
-                    <span className="bg-purple-100 text-purple-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">Desejado</span>
-                  </div>
-                  <div className="relative aspect-square mb-2 rounded-lg overflow-hidden bg-gray-50 opacity-80 group-hover:opacity-100 transition-opacity">
-                    <img
-                      src={wine.image_url || "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
-                      onError={(e) => e.currentTarget.src = "https://images.unsplash.com/photo-1559563362-c667ba5f5480?q=80&w=300&auto=format&fit=crop"}
-                      className="w-full h-full object-contain p-1 grayscale group-hover:grayscale-0 transition-all duration-300"
-                      alt={wine.name}
-                    />
-                  </div>
-                  <h4 className="font-bold text-gray-900 truncate text-[10px] mb-0.5">{wine.name}</h4>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-gray-500 truncate max-w-[60px]">{wine.producer}</span>
-                    <div className="flex items-center gap-1 text-[9px] font-bold text-purple-500">
-                      <i className="ri-add-line"></i> Adicionar
-                    </div>
-                  </div>
-                </div>
+                  onConsume={() => { }}
+                  onAdd={(e) => handleAddBottle(e, wine)}
+                  onEvaluate={(e) => { e.stopPropagation(); setEvaluatingWine(wine); }}
+                  onToggleStatus={(e) => handleToggleStatus(e, wine)}
+                  onMoreOptions={(e) => { e.stopPropagation(); setSelectedWine(wine); }}
+                />
               ))}
             </div>
           </div>
@@ -384,6 +404,24 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
             onDelete={() => selectedWine.id && handleDeleteWine(selectedWine.id)}
             onConsumeBottle={() => selectedWine && handleConsumeBottle({ stopPropagation: () => { } } as any, selectedWine)}
             onAddBottle={() => selectedWine && handleAddBottle({ stopPropagation: () => { } } as any, selectedWine)}
+          />
+        )
+      }
+
+      {/* Rating Bottom Sheet */}
+      {
+        evaluatingWine && (
+          <RatingBottomSheet
+            wine={evaluatingWine}
+            onClose={() => setEvaluatingWine(null)}
+            onSubmit={(rating, review) => {
+              // Real implementation would save to DB
+              console.log('Evaluated:', rating, review);
+              if (evaluatingWine.id) {
+                handleUpdateWine(evaluatingWine.id, { rating: rating });
+              }
+              setEvaluatingWine(null);
+            }}
           />
         )
       }

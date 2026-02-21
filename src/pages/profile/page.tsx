@@ -30,6 +30,7 @@ import {
 import UserListModal from './components/UserListModal';
 import { supabase } from '../../services/supabase';
 import StoryViewer from '../home/components/StoryViewer';
+import CheckInModal from '../../components/CheckInModal';
 
 type TabType = 'posts' | 'reels' | 'saved' | 'tagged';
 
@@ -77,6 +78,7 @@ export default function ProfilePage() {
   // const [showGamification, setShowGamification] = useState(false); // Removed
   // const [showWallet, setShowWallet] = useState(false); // Removed
   const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [showCheckIn, setShowCheckIn] = useState(false);
 
   // Follower/Following Modal State
   const [showFollowersModal, setShowFollowersModal] = useState(false);
@@ -262,6 +264,8 @@ export default function ProfilePage() {
       window.REACT_APP_NAVIGATE('/cellar');
     } else if (option === 'food') {
       window.REACT_APP_NAVIGATE('/drinks-food');
+    } else if (option === 'checkin') {
+      setShowCheckIn(true);
     }
   };
 
@@ -645,6 +649,7 @@ export default function ProfilePage() {
       {showNotifications && <NotificationsPanel onClose={() => setShowNotifications(false)} />}
       {showCreateMenu && <CreateMenu onClose={() => setShowCreateMenu(false)} onSelectOption={handleCreateOption} />}
       {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+      {showCheckIn && <CheckInModal onClose={() => setShowCheckIn(false)} />}
 
       {showFollowersModal && (
         <UserListModal
