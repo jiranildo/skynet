@@ -188,7 +188,7 @@ export default function DrinksFoodPage() {
       </div>
 
       {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-40">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-50">
         <div className="flex items-center justify-around px-2 py-2 sm:py-3">
           <button
             onClick={() => window.REACT_APP_NAVIGATE('/')}

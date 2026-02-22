@@ -558,3 +558,122 @@ export const leaveCommunity = async (communityId: string) => {
         .eq('user_id', user.id);
     if (error) throw error;
 };
+// --- GROUP INVITES (NEW) ---
+
+export const createGroupInvite = async (groupId: string, email?: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    const { data, error } = await supabase
+        .from('group_invites')
+        .insert({
+            group_id: groupId,
+            email,
+            invite_code: inviteCode,
+            created_by: user.id
+        })
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+};
+
+export const getGroupInvites = async (groupId: string) => {
+    const { data, error } = await supabase
+        .from('group_invites')
+        .select('*')
+        .eq('group_id', groupId)
+        .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+};
+
+export const revokeGroupInvite = async (inviteId: string) => {
+    const { error } = await supabase
+        .from('group_invites')
+        .update({ status: 'revoked' })
+        .eq('id', inviteId);
+
+    if (error) throw error;
+};
+
+export const remindGroupInvite = async (inviteId: string) => {
+    const { data: invite, error: fetchError } = await supabase
+        .from('group_invites')
+        .select('*, groups(name)')
+        .eq('id', inviteId)
+        .single();
+
+    if (fetchError || !invite) throw new Error('Invite not found');
+
+    // Simulate sending an invitation reminder
+    // In a real app, this might trigger an Edge Function to send an email.
+    // For now, we can check if the user exists and send a system notification.
+    if (invite.email) {
+        // Search if user with this email exists
+        const { data: targetUser } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', invite.email)
+            .maybeSingle();
+
+        if (targetUser) {
+            await supabase.from('notifications').insert({
+                user_id: targetUser.id,
+                type: 'system',
+                title: 'Lembrete de Convite',
+                message: `Lembrete: Você foi convidado para o grupo "${(invite as any).groups.name}". Clique para aceitar.`,
+                is_read: false
+            });
+        }
+    }
+
+    return true;
+};
+
+export const getInviteByCode = async (code: string) => {
+    const { data, error } = await supabase
+        .from('group_invites')
+        .select('*, groups(name, avatar_url)')
+        .eq('invite_code', code)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+    if (error) throw error;
+    return data;
+};
+
+export const acceptInviteByCode = async (code: string, userId: string) => {
+    // 1. Fetch user to check email if needed
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || user.id !== userId) throw new Error('User mismatch');
+
+    const { data: invite, error: fetchError } = await supabase
+        .from('group_invites')
+        .select('*')
+        .eq('invite_code', code)
+        .eq('status', 'pending')
+        .single();
+
+    if (fetchError || !invite) throw new Error('Convite inválido ou expirado');
+
+    // 2. Verify email if specific one was provided (targeted invite)
+    if (invite.email && invite.email.toLowerCase() !== user.email?.toLowerCase()) {
+        throw new Error('Este convite foi destinado a outro e-mail.');
+    }
+
+    // 3. Add to group
+    await addGroupMember(invite.group_id, userId);
+
+    // 4. Mark invite as accepted
+    await supabase
+        .from('group_invites')
+        .update({ status: 'accepted' })
+        .eq('id', invite.id);
+
+    return invite.group_id;
+};

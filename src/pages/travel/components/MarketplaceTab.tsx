@@ -38,6 +38,7 @@ interface MarketplaceItem {
   tags: string[];
   createdAt: string;
   featured?: boolean;
+  isPurchased?: boolean;
 }
 
 export default function MarketplaceTab() {
@@ -147,7 +148,8 @@ export default function MarketplaceTab() {
           itinerary: mappedItinerary,
           tags: [trip.trip_type, trip.destination],
           createdAt: trip.created_at || new Date().toISOString(),
-          featured: false
+          featured: false,
+          isPurchased: (trip as any).isPurchased || false
         };
       });
 
@@ -244,10 +246,9 @@ export default function MarketplaceTab() {
     try {
       const { supabase } = await import('../../../services/supabase');
 
-      // 1. Call RPC to buy and clone trip
-      const { data: newTripId, error } = await supabase.rpc('buy_trip', {
-        original_trip_id: item.id,
-        sale_price: item.price
+      // 1. Call RPC to buy trip via new method
+      const { data, error } = await supabase.rpc('purchase_trip_with_tm', {
+        p_trip_id: item.id
       });
 
       if (error) throw error;
@@ -260,7 +261,7 @@ export default function MarketplaceTab() {
         category: 'booking'
       });
 
-      alert('🎉 Roteiro adquirido com sucesso! Uma cópia foi criada em "Minhas Viagens" onde você é o dono e tem controle total.');
+      alert('🎉 Roteiro adquirido com sucesso! Você agora tem acesso total a ele na aba "Minhas Viagens".');
       setShowDetailModal(false);
       // Force refresh
       window.dispatchEvent(new Event('marketplace-updated'));
@@ -808,23 +809,29 @@ export default function MarketplaceTab() {
                         </button>
                         <p className="text-xs text-gray-500">Este roteiro é seu.</p>
                       </div>
+                    ) : selectedItem.isPurchased ? (
+                      <div className="flex flex-col items-end gap-2">
+                        <button
+                          onClick={() => {
+                            setShowDetailModal(false);
+                            alert("Vá para a aba 'Minhas Viagens' para ver o roteiro completo.");
+                          }}
+                          className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-xl hover:shadow-lg transition-all whitespace-nowrap"
+                        >
+                          <i className="ri-checkbox-circle-line mr-2"></i>
+                          Roteiro Adquirido
+                        </button>
+                        <p className="text-xs text-green-600 font-medium">Você já possui acesso a este roteiro.</p>
+                      </div>
                     ) : (
                       <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-                        <button
-                          onClick={() => handleCollaborate(selectedItem)}
-                          disabled={userBalance < selectedItem.price}
-                          className="px-6 py-4 bg-white text-purple-600 font-semibold rounded-xl border-2 border-purple-500 hover:bg-purple-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                        >
-                          <i className="ri-group-line mr-2"></i>
-                          Colaborar (Manter Link)
-                        </button>
                         <button
                           onClick={() => handlePurchase(selectedItem)}
                           disabled={userBalance < selectedItem.price}
                           className="px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                         >
                           <i className="ri-shopping-cart-line mr-2"></i>
-                          {userBalance < selectedItem.price ? 'Saldo Insuficiente' : 'Comprar (Cópia)'}
+                          {userBalance < selectedItem.price ? 'Saldo Insuficiente' : 'Desbloquear Roteiro'}
                         </button>
                       </div>
                     )}

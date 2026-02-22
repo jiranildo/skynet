@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGamification } from '@/hooks/queries/useGamification';
 import { useTransactions, useAddTransaction, useEarnOptions, useSpendOptions, useBuyPackages } from '@/hooks/queries/useWallet';
+import { supabase } from '@/services/db/client';
 
 interface WalletWidgetProps {
   onClose?: () => void;
@@ -9,8 +10,13 @@ interface WalletWidgetProps {
 export default function WalletWidget({ onClose }: WalletWidgetProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'earn' | 'spend' | 'buy'>('overview');
 
-  const { data: gamification } = useGamification();
-  const { data: transactions } = useTransactions();
+  // Checkout State
+  const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [checkoutStep, setCheckoutStep] = useState<'select_method' | 'processing' | 'success' | 'error'>('select_method');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('pix');
+
+  const { data: gamification, refetch: refetchGamification } = useGamification();
+  const { data: transactions, refetch: refetchTransactions } = useTransactions();
   const addTransactionMut = useAddTransaction();
 
   const balance = gamification?.tm_balance || 0;
@@ -28,18 +34,52 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
   const { data: spendWays = [] } = useSpendOptions();
   const { data: buyPackages = [] } = useBuyPackages();
 
-  const handleBuyPackage = async (pkg: any) => {
+  const handleBuyPackage = (pkg: any) => {
+    setSelectedPackage(pkg);
+    setCheckoutStep('select_method');
+  };
+
+  const processCheckout = async () => {
+    if (!selectedPackage || !gamification?.user_id) return;
+
+    setCheckoutStep('processing');
     try {
-      await addTransactionMut.mutateAsync({
-        type: 'earn',
-        amount: pkg.amount + pkg.bonus,
-        description: `Compra de Pacote TM`,
-        category: 'reward'
-      });
-      alert(`Compra de ${pkg.price} simulada com sucesso! Você recebeu ${pkg.amount + pkg.bonus} TM.`);
+      // 1. Convert price string "R$ 10,00" to number
+      const priceVal = parseFloat(selectedPackage.price.replace('R$', '').replace(',', '.').trim());
+
+      // 2. Insert pending purchase
+      const { data: purchaseData, error: insertError } = await supabase
+        .from('tm_purchases')
+        .insert({
+          user_id: gamification.user_id,
+          package_id: selectedPackage.id,
+          amount_tm: selectedPackage.amount + selectedPackage.bonus,
+          payment_amount: priceVal,
+          currency: 'BRL',
+          status: 'pending',
+          payment_method: paymentMethod
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // 3. Simulate Gateway Delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // 4. Complete Purchase via Secure RPC
+      const { error: rpcError } = await supabase.rpc('complete_tm_purchase', { purchase_id: purchaseData.id });
+
+      if (rpcError) throw rpcError;
+
+      // 5. Success UI & Refetch
+      setCheckoutStep('success');
+      refetchGamification();
+      refetchTransactions();
+
     } catch (e) {
-      console.error(e);
-      alert('Erro ao processar compra.');
+      console.error('Checkout error:', e);
+      setCheckoutStep('error');
     }
   };
 
@@ -275,6 +315,50 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
               </div>
             </div>
 
+            {/* Referral Banner */}
+            {gamification?.user_id && (
+              <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
+                <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+                <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-2">
+                    <i className="ri-group-line text-2xl text-purple-200"></i>
+                    <h4 className="font-bold text-lg">Convide e Ganhe!</h4>
+                  </div>
+                  <p className="text-sm text-purple-100 mb-4 line-clamp-2">
+                    Ganhe +10 TM por cada amigo que se cadastrar usando seu link.
+                  </p>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/signup?ref=${gamification.user_id}`);
+                        alert('Link copiado!');
+                      }}
+                      className="flex-1 bg-white/20 hover:bg-white/30 transition-colors py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 backdrop-blur-sm"
+                    >
+                      <i className="ri-file-copy-line"></i> Copiar Link
+                    </button>
+
+                    <a
+                      href={`whatsapp://send?text=${encodeURIComponent(`Ei! Vem participar do SARA Travel comigo e ganhe benefícios incríveis na sua próxima viagem:\n\n${window.location.origin}/signup?ref=${gamification.user_id}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-10 h-10 bg-[#25D366] hover:bg-[#20bd5a] transition-colors rounded-lg flex items-center justify-center flex-shrink-0 shadow-md"
+                    >
+                      <i className="ri-whatsapp-line text-xl"></i>
+                    </a>
+
+                    <a
+                      href={`mailto:?subject=${encodeURIComponent('Convite para o SARA Travel')}&body=${encodeURIComponent(`Ei! Vem participar do SARA Travel comigo e planejar viagens incríveis:\n\n${window.location.origin}/signup?ref=${gamification.user_id}`)}`}
+                      className="w-10 h-10 bg-white/20 hover:bg-white/30 transition-colors rounded-lg flex items-center justify-center flex-shrink-0 backdrop-blur-sm"
+                    >
+                      <i className="ri-mail-send-line text-xl"></i>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {earnWays.map((way, index) => (
                 <div
@@ -378,6 +462,125 @@ export default function WalletWidget({ onClose }: WalletWidgetProps) {
           </div>
         )}
       </div>
+
+      {/* Checkout Modal Overlay */}
+      {selectedPackage && (
+        <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl relative">
+            {/* Steps */}
+            {checkoutStep === 'select_method' && (
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-bold text-xl text-gray-900">Método de Pagamento</h3>
+                  <button
+                    onClick={() => { setSelectedPackage(null); setCheckoutStep('select_method'); }}
+                    className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200"
+                  >
+                    <i className="ri-close-line text-xl"></i>
+                  </button>
+                </div>
+
+                <div className="mb-6 pb-6 border-b border-gray-100">
+                  <p className="text-gray-500 text-sm mb-1">Resumo da compra</p>
+                  <div className="flex justify-between items-center bg-teal-50 p-3 rounded-lg">
+                    <span className="font-bold text-teal-800">{selectedPackage.amount + selectedPackage.bonus} TM</span>
+                    <span className="font-bold text-teal-800">{selectedPackage.price}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setPaymentMethod('pix')}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${paymentMethod === 'pix' ? 'border-teal-500 bg-teal-50' : 'border-gray-200 hover:border-gray-300'}`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-600">
+                      <i className="ri-qr-code-line text-xl"></i>
+                    </div>
+                    <div className="text-left flex-1">
+                      <h4 className="font-bold text-gray-900">PIX</h4>
+                      <p className="text-xs text-gray-500">Aprovação imediata</p>
+                    </div>
+                    {paymentMethod === 'pix' && <i className="ri-checkbox-circle-fill text-teal-500 text-xl"></i>}
+                  </button>
+
+                  <button
+                    onClick={() => setPaymentMethod('credit_card')}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${paymentMethod === 'credit_card' ? 'border-teal-500 bg-teal-50' : 'border-gray-200 hover:border-gray-300'}`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                      <i className="ri-bank-card-line text-xl"></i>
+                    </div>
+                    <div className="text-left flex-1">
+                      <h4 className="font-bold text-gray-900">Cartão de Crédito</h4>
+                      <p className="text-xs text-gray-500">Em até 12x</p>
+                    </div>
+                    {paymentMethod === 'credit_card' && <i className="ri-checkbox-circle-fill text-teal-500 text-xl"></i>}
+                  </button>
+                </div>
+
+                <div className="mt-6 pt-6">
+                  <button
+                    onClick={processCheckout}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                  >
+                    <i className="ri-lock-2-line"></i> Pagar {selectedPackage.price}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {checkoutStep === 'processing' && (
+              <div className="p-10 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 border-4 border-gray-200 border-t-teal-500 rounded-full animate-spin mb-6"></div>
+                <h3 className="font-bold text-xl text-gray-900 mb-2">Processando...</h3>
+                <p className="text-gray-500 text-sm">Validando pagamento de {selectedPackage.price}</p>
+              </div>
+            )}
+
+            {checkoutStep === 'success' && (
+              <div className="p-10 flex flex-col items-center justify-center text-center">
+                <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6">
+                  <i className="ri-check-line text-4xl font-bold"></i>
+                </div>
+                <h3 className="font-bold text-2xl text-gray-900 mb-2">Pagamento Aprovado!</h3>
+                <p className="text-gray-500 text-sm mb-6">
+                  Você adicionou <span className="font-bold text-gray-900">{selectedPackage.amount + selectedPackage.bonus} TM</span> à sua carteira.
+                </p>
+                <button
+                  onClick={() => { setSelectedPackage(null); setCheckoutStep('select_method'); setActiveTab('overview'); }}
+                  className="w-full bg-gray-900 hover:bg-gray-800 text-white font-bold py-3 rounded-xl transition-colors"
+                >
+                  Voltar para Carteira
+                </button>
+              </div>
+            )}
+
+            {checkoutStep === 'error' && (
+              <div className="p-10 flex flex-col items-center justify-center text-center">
+                <div className="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-6">
+                  <i className="ri-error-warning-line text-4xl font-bold"></i>
+                </div>
+                <h3 className="font-bold text-xl text-gray-900 mb-2">Erro no Pagamento</h3>
+                <p className="text-gray-500 text-sm mb-6">Não foi possível processar sua compra neste momento.</p>
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={() => { setSelectedPackage(null); setCheckoutStep('select_method'); }}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => setCheckoutStep('select_method')}
+                    className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl transition-colors"
+                  >
+                    Tentar Novamente
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

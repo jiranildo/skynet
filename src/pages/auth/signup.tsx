@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
+import { acceptInviteByCode } from '@/services/messages/groupService';
 
 export default function SignupPage() {
     const navigate = useNavigate();
@@ -121,8 +122,29 @@ export default function SignupPage() {
                 throw signUpError;
             }
 
+            // Capture search params
+            const searchParams = new URLSearchParams(window.location.search);
+
             // Check if session was created
             const { data: { session } } = await supabase.auth.getSession();
+
+            // Handle Referral Reward
+            const refId = searchParams.get('ref');
+            if (refId) {
+                console.log("Triggering referral reward for", refId);
+                await supabase.rpc('reward_referrer', { referrer_uuid: refId });
+            }
+
+            // Handle Group Invite Onboarding
+            const inviteCode = searchParams.get('invite');
+            if (inviteCode && session) {
+                try {
+                    await acceptInviteByCode(inviteCode, session.user.id);
+                    console.log("Successfully onboarded to group via invite code:", inviteCode);
+                } catch (inviteErr) {
+                    console.error("Failed to accept invite during signup:", inviteErr);
+                }
+            }
 
             if (session) {
                 navigate('/');

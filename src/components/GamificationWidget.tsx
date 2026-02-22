@@ -8,7 +8,8 @@ import {
   useCompleteMission,
   useUnlockBadge,
   useCatalogBadges,
-  useCatalogMissions
+  useCatalogMissions,
+  useRanking
 } from '@/hooks/queries/useGamification';
 import { useAddTransaction } from '@/hooks/queries/useWallet';
 import {
@@ -58,35 +59,37 @@ export default function GamificationWidget({ onClose }: GamificationWidgetProps)
   const [showBadgeUnlock, setShowBadgeUnlock] = useState(false);
   const [unlockedBadge, setUnlockedBadge] = useState<Badge | null>(null);
 
-  const { data: userGamification, isLoading: isGamiLoading } = useGamification();
+  const { data: gamificationData, isLoading: isGamiLoading } = useGamification();
   const { data: dbBadges, isLoading: isBadgesLoading } = useDbBadges();
   const { data: dbMissions, isLoading: isMissionsLoading } = useDbMissions();
-  const { data: dbCatalogBadges, isLoading: isCatalogBadgesLoading } = useCatalogBadges();
-  const { data: dbCatalogMissions, isLoading: isCatalogMissionsLoading } = useCatalogMissions();
+  const { data: catalogBadges, isLoading: isCatalogBadgesLoading } = useCatalogBadges();
+  const { data: catalogMissions } = useCatalogMissions();
+  const { data: rankingData, isLoading: isRankingLoading } = useRanking();
 
   const addXPMut = useAddXP();
   const completeMissionMut = useCompleteMission();
   const unlockBadgeMut = useUnlockBadge();
   const addTransactionMut = useAddTransaction();
 
-  const userLevel = userGamification ? {
-    level: userGamification.level,
-    currentXP: userGamification.current_xp,
-    nextLevelXP: userGamification.next_level_xp,
-    title: getLevelTitle(userGamification.level),
-    perks: getLevelPerks(userGamification.level)
-  } : { level: 1, currentXP: 0, nextLevelXP: 100, title: 'Viajante Iniciante', perks: [] };
+  // Mapeamentos
+  const userLevel: UserLevel = {
+    level: gamificationData?.level || 1,
+    currentXP: gamificationData?.current_xp || 0,
+    nextLevelXP: gamificationData?.next_level_xp || 100,
+    title: getLevelTitle(gamificationData?.level || 1),
+    perks: getLevelPerks(gamificationData?.level || 1)
+  };
 
-  const badges = (dbCatalogBadges || []).map(b => {
+  const badges = (catalogBadges || []).map(b => {
     const dbB = dbBadges?.find(db => db.badge_id === b.id);
     return {
       ...b,
       unlocked: !!dbB?.unlocked,
-      currentProgress: dbB?.unlocked ? b.requirement : (dbB?.current_progress || 0)
+      currentProgress: dbB?.unlocked ? b.requirement : 0 // Simple progress logic for MVP
     };
   });
 
-  const missions = (dbCatalogMissions || []).map(m => {
+  const missions = (catalogMissions || []).map(m => {
     const dbM = dbMissions?.find(db => db.mission_id === m.id);
     const isCompletedToday = dbM?.completed_at &&
       new Date(dbM.completed_at).toDateString() === new Date().toDateString();
@@ -98,54 +101,10 @@ export default function GamificationWidget({ onClose }: GamificationWidgetProps)
     };
   });
 
-  const [ranking, setRanking] = useState([
-    {
-      rank: 1,
-      name: 'Ana Costa',
-      avatar: 'https://readdy.ai/api/search-image?query=professional%20portrait%20young%20woman%20confident%20smile%20travel%20enthusiast&width=80&height=80&seq=rank-1&orientation=squarish',
-      level: 15,
-      xp: 12500,
-      badges: 28,
-      trips: 45
-    },
-    {
-      rank: 2,
-      name: 'Carlos Silva',
-      avatar: 'https://readdy.ai/api/search-image?query=professional%20portrait%20young%20man%20friendly%20smile%20adventure%20traveler&width=80&height=80&seq=rank-2&orientation=squarish',
-      level: 14,
-      xp: 11800,
-      badges: 25,
-      trips: 42
-    },
-    {
-      rank: 3,
-      name: 'Marina Santos',
-      avatar: 'https://readdy.ai/api/search-image?query=professional%20portrait%20woman%20cheerful%20smile%20world%20traveler&width=80&height=80&seq=rank-3&orientation=squarish',
-      level: 13,
-      xp: 10900,
-      badges: 23,
-      trips: 38
-    },
-    {
-      rank: 4,
-      name: 'Pedro Oliveira',
-      avatar: 'https://readdy.ai/api/search-image?query=professional%20portrait%20man%20happy%20smile%20travel%20blogger&width=80&height=80&seq=rank-4&orientation=squarish',
-      level: 12,
-      xp: 9500,
-      badges: 20,
-      trips: 35
-    },
-    {
-      rank: 5,
-      name: 'Você',
-      avatar: 'https://readdy.ai/api/search-image?query=professional%20portrait%20young%20person%20warm%20smile%20confident%20traveler&width=80&height=80&seq=rank-you&orientation=squarish',
-      level: userLevel.level,
-      xp: userLevel.currentXP,
-      badges: badges.filter(b => b.unlocked).length,
-      trips: 8,
-      isYou: true
-    }
-  ]);
+  const ranking = (rankingData || []).map(r => ({
+    ...r,
+    isYou: r.user_id === gamificationData?.user_id
+  }));
 
   const completeMission = async (missionId: string) => {
     const mission = missions.find(m => m.id === missionId);

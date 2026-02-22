@@ -127,6 +127,8 @@ export interface Trip {
   created_at?: string;
   updated_at?: string;
   metadata?: any;
+  price_tm?: number;
+  isPurchased?: boolean;
   // UI bridging fields (optional)
   places?: any[]; // legacy alias for itinerary
   sharedWith?: any[];
@@ -140,6 +142,15 @@ export interface Trip {
     currency: 'TM' | 'BRL';
     description?: string;
   };
+  expenses?: TripExpense[];
+}
+
+export interface TripExpense {
+  id: string;
+  category: 'Transporte' | 'Hospedagem' | 'Alimentação' | 'Passeios' | 'Seguro' | 'Outros';
+  title: string;
+  amount: number;
+  date?: string;
 }
 
 export interface Message {

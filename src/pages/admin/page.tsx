@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import MobileNav from '../home/components/MobileNav';
 import { useAuth } from '../../context/AuthContext';
 import { isUserAdmin } from '../../services/authz';
@@ -82,6 +83,8 @@ export default function AdminPage() {
   const [filterRole, setFilterRole] = useState<'all' | 'user' | 'business' | 'admin'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'suspended' | 'banned'>('all');
 
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+
   useEffect(() => {
     let active = true;
 
@@ -124,7 +127,7 @@ export default function AdminPage() {
 
   if (!user || !hasAdminAccess) return null;
 
-  const loadData = () => {
+  const loadData = async () => {
     // Carregar usuários mockados
     const mockUsers: User[] = [
       {
@@ -265,26 +268,26 @@ export default function AdminPage() {
 
     setReports(mockReports);
 
-    // Calcular estatísticas
-    const totalUsers = mockUsers.length;
-    const activeUsers = mockUsers.filter(u => u.status === 'active').length;
-    const totalPosts = mockUsers.reduce((sum, u) => sum + u.stats.posts, 0);
-    const totalTrips = mockUsers.reduce((sum, u) => sum + u.stats.trips, 0);
-    const totalMarketplaceItems = savedMarketplace ? JSON.parse(savedMarketplace).length : 0;
-    const totalRevenue = mockUsers.reduce((sum, u) => sum + u.stats.travelMoney, 0);
-    const pendingReports = mockReports.filter(r => r.status === 'pending').length;
-    const pendingApprovals = 0;
-
-    setStats({
-      totalUsers,
-      activeUsers,
-      totalPosts,
-      totalTrips,
-      totalMarketplaceItems,
-      totalRevenue,
-      pendingReports,
-      pendingApprovals
-    });
+    // Load actual RPC analytics from Supabase
+    try {
+      const { supabase } = await import('../../services/db/client');
+      const { data, error } = await supabase.rpc('get_admin_analytics');
+      if (data && !error) {
+        setAnalyticsData(data);
+        setStats({
+          totalUsers: data.totalUsers || mockUsers.length,
+          activeUsers: data.activeUsers || mockUsers.filter(u => u.status === 'active').length,
+          totalPosts: data.totalPosts || mockUsers.reduce((sum, u) => sum + u.stats.posts, 0),
+          totalTrips: data.totalTrips || mockUsers.reduce((sum, u) => sum + u.stats.trips, 0),
+          totalMarketplaceItems: savedMarketplace ? JSON.parse(savedMarketplace).length : 0,
+          totalRevenue: data.totalRevenue || mockUsers.reduce((sum, u) => sum + u.stats.travelMoney, 0),
+          pendingReports: mockReports.filter(r => r.status === 'pending').length,
+          pendingApprovals: 0
+        });
+      }
+    } catch (e) {
+      console.error('Failed to fetch analytics', e);
+    }
   };
 
   const handleUserAction = (userId: string, action: 'verify' | 'suspend' | 'ban' | 'activate' | 'promote' | 'demote') => {
@@ -859,12 +862,82 @@ export default function AdminPage() {
         {/* Analytics Tab */}
         {activeTab === 'analytics' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-purple-100 to-pink-100 flex items-center justify-center">
-                <i className="ri-line-chart-line text-4xl text-purple-500"></i>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl font-bold text-gray-900">Métricas Principais</h2>
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button className="px-3 py-1 text-sm font-medium rounded-md bg-white shadow-sm text-gray-900">30 Dias</button>
+                <button className="px-3 py-1 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">90 Dias</button>
+                <button className="px-3 py-1 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">1 Ano</button>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Analytics em Desenvolvimento</h3>
-              <p className="text-gray-600">Gráficos e relatórios detalhados em breve!</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* User Growth Chart */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="font-bold text-gray-900">Crescimento de Usuários</h3>
+                    <p className="text-sm text-gray-500">Acúmulo diário de novos registros</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
+                    <i className="ri-user-add-line text-xl"></i>
+                  </div>
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={analyticsData?.usersGrowth || []}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <Tooltip
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Area type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Travel Money Velocity */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="font-bold text-gray-900">Economia Travel Money</h3>
+                    <p className="text-sm text-gray-500">TM Gerado vs TM Gasto</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-500">
+                    <i className="ri-money-dollar-circle-line text-xl"></i>
+                  </div>
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={analyticsData?.tmVelocity || []}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
+                      <Tooltip
+                        cursor={{ fill: '#f9fafb' }}
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                      <Bar dataKey="earn" name="TM Ganho" fill="#4ade80" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="spend" name="TM Gasto" fill="#f87171" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
           </div>
         )}

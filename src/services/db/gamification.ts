@@ -14,6 +14,27 @@ export const gamificationService = {
         return data as GamificationMissionCatalog[];
     },
 
+    async getRanking(): Promise<any[]> {
+        const { data, error } = await supabase
+            .from('gamification_ranking_view')
+            .select('*')
+            .order('xp', { ascending: false })
+            .limit(100);
+
+        if (error) throw error;
+
+        return data.map((item, index) => ({
+            rank: index + 1,
+            user_id: item.user_id,
+            name: item.name || 'Viajante',
+            avatar: item.avatar || 'https://via.placeholder.com/80',
+            level: item.level,
+            xp: item.xp,
+            badges: item.badges_count,
+            trips: item.trips_count
+        }));
+    },
+
     async getUserGamification(): Promise<UserGamification> {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('Not authenticated');

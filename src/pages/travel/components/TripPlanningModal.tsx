@@ -7,6 +7,7 @@ import TripPreferencesModal from './TripPreferencesModal';
 import TripAiPreviewModal from './TripAiPreviewModal';
 import AiResearchStartModal from './AiResearchStartModal';
 import AiResearchResultsModal from './AiResearchResultsModal';
+import TripFinanceTab from './TripFinanceTab';
 import { Recommendation } from './RecommendationCard';
 
 interface Activity {
@@ -95,6 +96,9 @@ export default function TripPlanningModal({
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
+
+  // Main Tabs State
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'finance'>('itinerary');
 
   // Activity Form State
   const [isAddingActivity, setIsAddingActivity] = useState(false);
@@ -229,76 +233,108 @@ export default function TripPlanningModal({
       const isLastDayIncluded = daysToGenerate.includes(totalDays - 1);
       const isPostTripIncluded = daysToGenerate.includes(POST_TRIP_INDEX);
 
-      // 6. Build Prompts
-      const systemInstruction = `
-          ATUE COMO: Um ESPECIALISTA LOCAL nativo de ${trip.destination}. Você conhece os segredos, os melhores horários e a logística da cidade como ninguém.
-          
-          OBJETIVO: Gerar um roteiro profissional, lógico e imersivo para os dias solicitados.
-          
-          REGRAS DE CONTEÚDO (CRÍTICO):
-          1. NOMES ESPECÍFICOS: NUNCA use nomes genéricos como "Almoço", "Jantar", "Café da Manhã" ou "Passeio". O nome da atividade DEVE conter o local específico (ex: "Almoço no Disney Springs", "Jantar no Be Our Guest", "Passeio pela International Drive").
-          2. ORLANDO: Se o destino for Orlando, PRIORIZE os grandes parques temáticos (Disney, Universal, SeaWorld) de forma lógica, considerando o perfil do viajante.
-          3. LOGÍSTICA:
-             ${isFirstDayIncluded ? '- DIA 1: OBRIGATÓRIO incluir "Chegada/Transfer Aeroporto" e "Check-in no Hotel" como as primeiras atividades.' : ''}
-             ${isLastDayIncluded ? `- ÚLTIMO DIA DE VIAGEM (Dia ${totalDays}): OBRIGATÓRIO incluir "Check-out do Hotel", "Transfer para Aeroporto" e "Voo de Retorno" como as últimas atividades.` : ''}
-             ${isPostTripIncluded ? `- PÓS-VIAGEM (ID 999): Sugerir atividades para depois que as malas forem desfeitas, focado em "Postar fotos/vídeos nas redes sociais", "Fazer avaliações dos locais visitados", "Organizar despesas" e "Compartilhar roteiro com amigos".` : ''}
-          
-          REGRAS DE QUALIDADE:
-          - NÃO repita locais listados em "JÁ AGENDADO".
-          - Otimize a rota: Agrupe atrações vizinhas.
-          - Considere o tempo de deslocamento real na cidade.
-          
-          ${prefsContext}
+      // 6. Split days into chunks of 4 to avoid AI response truncation on long trips
+      const chunkSize = 4;
+      const dayChunks = [];
+      for (let i = 0; i < dayLabels.length; i += chunkSize) {
+        dayChunks.push(dayLabels.slice(i, i + chunkSize));
+      }
 
+      let allGeneratedItems: any[] = [];
+
+      for (const chunk of dayChunks) {
+        // 7. Build Prompts per chunk
+        const chunkIsFirstDayIncluded = chunk.some(d => d.idx === 0);
+        const chunkIsLastDayIncluded = chunk.some(d => d.idx === totalDays - 1);
+        const chunkIsPostTripIncluded = chunk.some(d => d.idx === POST_TRIP_INDEX);
+
+        // Update existing context to include items generated in previous chunks of this SAME session
+        const sessionGeneratedTitles = allGeneratedItems.map(i => i.title).join(", ");
+        const currentExistingContext = `
           ${existingContext}
+          ${sessionGeneratedTitles ? `\nRECÉM GERADOS NESTA SESSÃO (NÃO REPETIR):\n${sessionGeneratedTitles}` : ""}
+        `;
 
-          IDS DOS DIAS PARA PREENCHER:
-          ${dayLabels.map(d => `${d.idx} (${d.label})`).join(', ')}
-      `;
+        const systemInstruction = `
+            ATUE COMO: Um ESPECIALISTA LOCAL nativo de ${trip.destination}. Você conhece os segredos, os melhores horários e a logística da cidade como ninguém.
+            
+            OBJETIVO: Gerar um roteiro profissional, lógico e imersivo para os dias solicitados.
+            
+            REGRAS DE CONTEÚDO (CRÍTICO):
+            1. NOMES ESPECÍFICOS: NUNCA use nomes genéricos como "Almoço", "Jantar", "Café da Manhã" ou "Passeio". O nome da atividade DEVE conter o local específico (ex: "Almoço no Disney Springs", "Jantar no Be Our Guest", "Passeio pela International Drive").
+            2. ORLANDO: Se o destino for Orlando, PRIORIZE os grandes parques temáticos (Disney, Universal, SeaWorld) de forma lógica, considerando o perfil do viajante.
+            3. LOGÍSTICA:
+               ${chunkIsFirstDayIncluded ? '- DIA 1: OBRIGATÓRIO incluir "Chegada/Transfer Aeroporto" e "Check-in no Hotel" como as primeiras atividades.' : ''}
+               ${chunkIsLastDayIncluded ? `- ÚLTIMO DIA DE VIAGEM (Dia ${totalDays}): OBRIGATÓRIO incluir "Check-out do Hotel", "Transfer para Aeroporto" e "Voo de Retorno" como as últimas atividades.` : ''}
+               ${chunkIsPostTripIncluded ? `- PÓS-VIAGEM (ID 999): Sugerir atividades para depois que as malas forem desfeitas, focado em "Postar fotos/vídeos nas redes sociais", "Fazer avaliações dos locais visitados", "Organizar despesas" e "Compartilhar roteiro com amigos".` : ''}
+            
+            REGRAS DE QUALIDADE:
+            - NÃO repita locais listados em "JÁ AGENDADO" ou "RECÉM GERADOS".
+            - Otimize a rota: Agrupe atrações vizinhas.
+            - Considere o tempo de deslocamento real na cidade.
+            
+            ${prefsContext}
 
-      const userPrompt = `
-          Gere a lista detalhada de atividades para estes dias.
-          
-          FORMATO JSON ESTRITO (Array):
-          [
-            {
-                "title": "Nome Curto e Claro",
-                "description": "Por que ir? (Dica de especialista)",
-                "time": "HH:MM",
-                "type": "activity" | "restaurant" | "transport" | "accommodation",
-                "price": "R$ Estimado",
-                "suggestedDayId": number (Obrigatório: ID do dia correspondente),
-                "notes": "Dica logística (ex: 'Melhor ir de metrô')"
+            ${currentExistingContext}
+
+            IDS DOS DIAS PARA PREENCHER AGORA:
+            ${chunk.map(d => `${d.idx} (${d.label})`).join(', ')}
+            
+            ATENÇÃO: Retorne dados APENAS para os IDS listados acima. Ignore os outros dias da viagem nesta resposta.
+        `;
+
+        const userPrompt = `
+            Gere a lista detalhada de atividades APENAS para os DIAS SOLICITADOS (IDs: ${chunk.map(d => d.idx).join(', ')}).
+            
+            FORMATO JSON ESTRITO (Array):
+            [
+              {
+                  "title": "Nome Curto e Claro",
+                  "description": "Por que ir? (Dica de especialista)",
+                  "time": "HH:MM",
+                  "type": "activity" | "restaurant" | "transport" | "accommodation",
+                  "price": "R$ Estimado",
+                  "suggestedDayId": number (Obrigatório: ID exato do dia solicitado),
+                  "notes": "Dica logística (ex: 'Melhor ir de metrô')"
+              }
+            ]
+        `;
+
+        // 8. Execute AI for this chunk
+        try {
+          const result = await model.generateContent(systemInstruction + "\n" + userPrompt);
+          const text = await result.response.text();
+
+          // 9. Parse JSON
+          const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
+          const jsonStr = match ? match[1] : text.replace(/^[\s\S]*?\[/, '[').replace(/\][\s\S]*?$/, ']');
+
+          try {
+            const chunkItems: any[] = JSON.parse(jsonStr);
+            if (Array.isArray(chunkItems)) {
+              allGeneratedItems = [...allGeneratedItems, ...chunkItems];
             }
-          ]
-      `;
+          } catch (e) {
+            console.warn("Falha ao fazer parse do JSON deste lote de dias.", e, jsonStr);
+          }
+        } catch (e) {
+          console.error("Falha de comunicação com a IA neste lote.", e);
+        }
+      }
 
-      // 7. Execute AI
-      const result = await model.generateContent(systemInstruction + "\n" + userPrompt);
-      const text = await result.response.text();
-
-      // 8. Parse JSON
-      const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
-      const jsonStr = match ? match[1] : text.replace(/^[\s\S]*?\[/, '[').replace(/\][\s\S]*?$/, ']');
-      const items: any[] = JSON.parse(jsonStr);
-
-      // 9. Process & Save
-      // Immutable Copy: Avoid mutating state references
+      // 10. Process & Save all generated items
       const nextState = { ...itinerary };
       let addedCount = 0;
       const suggestionsToAdd: any[] = [];
 
-      items.forEach(item => {
+      allGeneratedItems.forEach(item => {
         const dIdx = typeof item.suggestedDayId === 'number' ? item.suggestedDayId : activeDayIndex;
         // Copy array to modify
         const currentDayActivities = nextState[dIdx] ? [...nextState[dIdx]] : [];
 
         // Global Duplicate Check (Across all days)
-        // Only block if it's an activity/restaurant. Logistics like "Transfer" can repeat if names differ slightly or if we allow them.
         const isDupe = Object.values(nextState).flat().some(a => {
           const isSameTitle = a.title.trim().toLowerCase() === item.title.trim().toLowerCase();
-          // Allow duplicate logistical items (transport/accommodation/notes) if price and notes differ, 
-          // but for activities/restaurants we are stricter.
           if (item.type === 'transport' || item.type === 'accommodation') return false;
           return isSameTitle;
         });
@@ -310,7 +346,7 @@ export default function TripPlanningModal({
             description: item.description,
             time: item.time,
             type: item.type || 'activity',
-            status: 'confirmed' as const, // Auto-confirm for owner, pending if suggestion?
+            status: 'confirmed' as const,
             price: item.price,
             notes: item.notes,
             icon: activityTypes.find(t => t.id === item.type)?.icon || 'ri-map-pin-line'
@@ -1364,556 +1400,588 @@ export default function TripPlanningModal({
             </div>
           </div>
 
-          {/* Timeline */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <i className="ri-calendar-line text-blue-500"></i>
-                Timeline
-              </h3>
-              <div className="flex gap-2 items-center">
-                <button
-                  onClick={openResearchModal}
-                  disabled={isPerformingResearch}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm rounded-lg hover:shadow-lg hover:opacity-90 transition-all font-medium disabled:opacity-50 h-8"
-                >
-                  {isPerformingResearch ? (
-                    <>
-                      <i className="ri-loader-4-line animate-spin"></i>
-                      <span className="hidden sm:inline">Pesquisando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-compass-3-line"></i>
-                      <span className="hidden sm:inline">Pesquisa AI</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => setIsPreferencesOpen(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all font-medium h-8"
-                  title="Personalizar IA"
-                >
-                  <i className="ri-equalizer-line text-purple-600"></i>
-                  <span className="hidden sm:inline">Personalizar IA</span>
-                </button>
-                <button onClick={() => scrollTimeline('left')} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
-                  <i className="ri-arrow-left-s-line"></i>
-                </button>
-                <button onClick={() => scrollTimeline('right')} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
-                  <i className="ri-arrow-right-s-line"></i>
-                </button>
-              </div>
-            </div>
+          {/* Main Tabs Selector */}
+          <div className="flex bg-gray-200/50 p-1 rounded-xl mb-4 max-w-sm mx-auto">
+            <button
+              onClick={() => setActiveTab('itinerary')}
+              className={`flex-1 py-1.5 font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 ${activeTab === 'itinerary' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <i className="ri-calendar-event-line"></i> Itinerário
+            </button>
+            <button
+              onClick={() => setActiveTab('finance')}
+              className={`flex-1 py-1.5 font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 ${activeTab === 'finance' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <i className="ri-wallet-3-line"></i> Financeiro
+            </button>
+          </div>
 
-            <div className="flex gap-2 justify-end mb-2 px-1">
-              {isSelectionMode && (
-                <button
-                  onClick={() => {
-                    const allIndices = new Set<number>();
-                    allIndices.add(PRE_TRIP_INDEX);
-                    tripDays.forEach((_, i) => allIndices.add(i));
-                    allIndices.add(POST_TRIP_INDEX);
-                    setSelectedIndices(allIndices);
-                  }}
-                  className="text-xs font-bold px-3 py-1 rounded-full text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors flex items-center gap-1"
-                >
-                  <i className="ri-check-double-line"></i>
-                  Selecionar Tudo
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setIsSelectionMode(!isSelectionMode);
-                  setSelectedIndices(new Set());
-                }}
-                className={`text-xs font-bold px-3 py-1 rounded-full transition-colors flex items-center gap-1 ${isSelectionMode ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'text-gray-500 hover:bg-gray-100'
-                  }`}
-              >
-                <i className={`ri-${isSelectionMode ? 'close-circle-line' : 'checkbox-multiple-line'}`}></i>
-                {isSelectionMode ? 'Cancelar Seleção' : 'Selecionar Múltiplos Dias'}
-              </button>
-            </div>
-
-            <div ref={timelineRef} className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
-              {/* Pre-Trip */}
-              {/* Pre-Trip */}
-              <button
-                onClick={() => {
-                  if (isSelectionMode) {
-                    toggleDaySelection(PRE_TRIP_INDEX);
-                  } else {
-                    setActiveDayIndex(PRE_TRIP_INDEX);
-                  }
-                }}
-                className={`flex-shrink-0 w-28 p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 relative ${isSelectionMode && selectedIndices.has(PRE_TRIP_INDEX)
-                  ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-300 ring-offset-2'
-                  : activeDayIndex === PRE_TRIP_INDEX && !isSelectionMode
-                    ? 'border-purple-600 bg-purple-50'
-                    : 'border-gray-100 hover:border-purple-200'
-                  }`}
-              >
-                {isSelectionMode && (
-                  <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border flex items-center justify-center ${selectedIndices.has(PRE_TRIP_INDEX) ? 'bg-purple-500 border-purple-500' : 'border-gray-300'
-                    }`}>
-                    {selectedIndices.has(PRE_TRIP_INDEX) && <i className="ri-check-line text-white text-xs"></i>}
-                  </div>
-                )}
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${activeDayIndex === PRE_TRIP_INDEX ? 'bg-purple-200 text-purple-700' : 'bg-gray-100 text-gray-500'}`}>
-                  <i className="ri-luggage-cart-line text-lg"></i>
-                </div>
-                <div className="text-center">
-                  <div className={`text-sm font-bold ${activeDayIndex === PRE_TRIP_INDEX ? 'text-purple-700' : 'text-gray-700'}`}>Pre-Trip</div>
-                  <div className="text-xs text-gray-500">Preparação</div>
-                </div>
-              </button>
-
-              {/* Days */}
-              {tripDays.map((day, index) => (
-                <button
-                  key={index}
-                  onClick={() => {
-                    if (isSelectionMode) {
-                      toggleDaySelection(index);
-                    } else {
-                      setActiveDayIndex(index);
-                    }
-                  }}
-                  className={`flex-shrink-0 w-28 p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 relative ${isSelectionMode && selectedIndices.has(index)
-                    ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300 ring-offset-2'
-                    : activeDayIndex === index && !isSelectionMode
-                      ? 'border-gray-800 bg-gray-800 text-white shadow-lg'
-                      : 'border-gray-100 hover:border-gray-300 bg-white'
-                    }`}
-                >
-                  {isSelectionMode && (
-                    <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border flex items-center justify-center ${selectedIndices.has(index) ? 'bg-indigo-500 border-indigo-500' : 'border-gray-300'
-                      }`}>
-                      {selectedIndices.has(index) && <i className="ri-check-line text-white text-xs"></i>}
-                    </div>
-                  )}
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${activeDayIndex === index && !isSelectionMode ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                    {day.day}
-                  </div>
-                  <div className="text-center">
-                    <div className={`text-sm font-bold leading-tight ${activeDayIndex === index && !isSelectionMode ? 'text-white' : 'text-gray-900'
-                      }`}>{day.date}</div>
-                    <div className="flex items-center justify-center gap-1">
-                      <span className={`text-xs ${activeDayIndex === index && !isSelectionMode ? 'text-gray-200' : 'text-gray-500'}`}>
-                        {itinerary[index]?.length || 0} itens
-                      </span>
-                      {itinerary[index]?.length > 0 && (
-                        <div className={`w-1.5 h-1.5 rounded-full ${activeDayIndex === index ? 'bg-white' : 'bg-green-500'}`}></div>
+          {activeTab === 'itinerary' && (
+            <>
+              {/* Timeline */}
+              <div className="bg-white rounded-2xl p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                    <i className="ri-calendar-line text-blue-500"></i>
+                    Timeline
+                  </h3>
+                  <div className="flex gap-2 items-center">
+                    <button
+                      onClick={openResearchModal}
+                      disabled={isPerformingResearch}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm rounded-lg hover:shadow-lg hover:opacity-90 transition-all font-medium disabled:opacity-50 h-8"
+                    >
+                      {isPerformingResearch ? (
+                        <>
+                          <i className="ri-loader-4-line animate-spin"></i>
+                          <span className="hidden sm:inline">Pesquisando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="ri-compass-3-line"></i>
+                          <span className="hidden sm:inline">Pesquisa AI</span>
+                        </>
                       )}
-                    </div>
-                  </div>
-                </button>
-              ))}
-
-              {/* Post-Trip */}
-              {/* Post-Trip */}
-              <button
-                onClick={() => {
-                  if (isSelectionMode) {
-                    toggleDaySelection(POST_TRIP_INDEX);
-                  } else {
-                    setActiveDayIndex(POST_TRIP_INDEX);
-                  }
-                }}
-                className={`flex-shrink-0 w-28 p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 relative ${isSelectionMode && selectedIndices.has(POST_TRIP_INDEX)
-                  ? 'border-pink-500 bg-pink-50 ring-2 ring-pink-300 ring-offset-2'
-                  : activeDayIndex === POST_TRIP_INDEX && !isSelectionMode
-                    ? 'border-pink-500 bg-pink-50'
-                    : 'border-gray-100 hover:border-pink-200'
-                  }`}
-              >
-                {isSelectionMode && (
-                  <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border flex items-center justify-center ${selectedIndices.has(POST_TRIP_INDEX) ? 'bg-pink-500 border-pink-500' : 'border-gray-300'
-                    }`}>
-                    {selectedIndices.has(POST_TRIP_INDEX) && <i className="ri-check-line text-white text-xs"></i>}
-                  </div>
-                )}
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${activeDayIndex === POST_TRIP_INDEX ? 'bg-pink-100 text-pink-600' : 'bg-gray-100 text-gray-500'}`}>
-                  <i className="ri-heart-line text-lg"></i>
-                </div>
-                <div className="text-center">
-                  <div className={`text-sm font-bold ${activeDayIndex === POST_TRIP_INDEX ? 'text-pink-600' : 'text-gray-700'}`}>Post-Trip</div>
-                  <div className="text-xs text-gray-500">Memórias</div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Suggestion Mode Banner / Owner Review Banner */}
-          {!isAdmin ? (
-            <div className="mx-6 mb-4 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-3 text-blue-700">
-              <i className="ri-information-line text-xl"></i>
-              <div className="text-sm">
-                <span className="font-bold">Modo de Sugestão Ativado:</span> Como colaborador, você pode sugerir alterações e usar a IA, mas as mudanças precisam ser aprovadas pelo proprietário.
-              </div>
-            </div>
-          ) : (
-            trip.pendingSuggestions && trip.pendingSuggestions.some((s: any) => s.status === 'pending') && (
-              <div className="mx-6 mb-4 px-4 py-3 bg-yellow-50 border border-yellow-100 rounded-xl flex items-center justify-between gap-3 text-yellow-700 shadow-sm animate-pulse">
-                <div className="flex items-center gap-3">
-                  <i className="ri-notification-3-line text-xl"></i>
-                  <div className="text-sm">
-                    <span className="font-bold">Sugestões Pendentes:</span> Vanessa e outros colaboradores sugeriram alterações para esta viagem.
+                    </button>
+                    <button
+                      onClick={() => setIsPreferencesOpen(true)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all font-medium h-8"
+                      title="Personalizar IA"
+                    >
+                      <i className="ri-equalizer-line text-purple-600"></i>
+                      <span className="hidden sm:inline">Personalizar IA</span>
+                    </button>
+                    <button onClick={() => scrollTimeline('left')} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
+                      <i className="ri-arrow-left-s-line"></i>
+                    </button>
+                    <button onClick={() => scrollTimeline('right')} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
+                      <i className="ri-arrow-right-s-line"></i>
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => setShowSuggestionsModal(true)}
-                  className="px-3 py-1 bg-yellow-600 text-white rounded-lg text-xs font-bold hover:bg-yellow-700 transition-colors"
-                >
-                  Ver Sugestões
-                </button>
-              </div>
-            )
-          )}
 
-          {/* Day Header & Actions */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg ${activeDayIndex === PRE_TRIP_INDEX ? 'bg-purple-600' :
-                activeDayIndex === POST_TRIP_INDEX ? 'bg-pink-600' : 'bg-gray-800'
-                }`}>
-                {activeDayIndex === PRE_TRIP_INDEX ? <i className="ri-luggage-cart-line"></i> :
-                  activeDayIndex === POST_TRIP_INDEX ? <i className="ri-heart-line"></i> :
-                    activeDayIndex + 1}
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">{getDayLabel(activeDayIndex)}</h3>
-                <p className="text-sm text-gray-500 capitalize">{getFullDatelabel(activeDayIndex)}</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {isAdmin && (
-                <button
-                  onClick={handleGenerateDayItinerary}
-                  disabled={isGeneratingItinerary}
-                  className={`w-auto px-4 h-10 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center justify-center gap-2 ${isGeneratingItinerary ? 'opacity-70 cursor-wait' : ''}`}
-                  title="Gerar com IA"
-                >
-                  {isGeneratingItinerary ? (
-                    <>
-                      <i className="ri-loader-4-line animate-spin text-xl"></i>
-                      <span>Gerando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-magic-line text-xl"></i>
-                      {isSelectionMode && selectedIndices.size > 0
-                        ? <span className="font-bold text-sm">Gerar para ({selectedIndices.size}) dias</span>
-                        : ""
-                      }
-                    </>
+                <div className="flex gap-2 justify-end mb-2 px-1">
+                  {isSelectionMode && (
+                    <button
+                      onClick={() => {
+                        const allIndices = new Set<number>();
+                        allIndices.add(PRE_TRIP_INDEX);
+                        tripDays.forEach((_, i) => allIndices.add(i));
+                        allIndices.add(POST_TRIP_INDEX);
+                        setSelectedIndices(allIndices);
+                      }}
+                      className="text-xs font-bold px-3 py-1 rounded-full text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors flex items-center gap-1"
+                    >
+                      <i className="ri-check-double-line"></i>
+                      Selecionar Tudo
+                    </button>
                   )}
-                </button>
-              )}
-              <div className="flex gap-2">
-                {isAdmin && (
                   <button
-                    onClick={handleClearDay}
-                    className="w-10 h-10 bg-gray-100 text-gray-500 rounded-xl shadow-lg hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center"
-                    title="Limpar Dia"
+                    onClick={() => {
+                      setIsSelectionMode(!isSelectionMode);
+                      setSelectedIndices(new Set());
+                    }}
+                    className={`text-xs font-bold px-3 py-1 rounded-full transition-colors flex items-center gap-1 ${isSelectionMode ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'text-gray-500 hover:bg-gray-100'
+                      }`}
                   >
-                    <i className="ri-delete-bin-line text-xl"></i>
+                    <i className={`ri-${isSelectionMode ? 'close-circle-line' : 'checkbox-multiple-line'}`}></i>
+                    {isSelectionMode ? 'Cancelar Seleção' : 'Selecionar Múltiplos Dias'}
                   </button>
-                )}
-                <button
-                  onClick={() => setIsAddingActivity(true)}
-                  className="w-10 h-10 bg-blue-600 text-white rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-                  title="Adicionar Item"
-                >
-                  <i className="ri-add-line text-xl"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Activity List */}
-          <div className="space-y-3 pb-20">
-            {dayActivities.length === 0 ? (
-              <div className="text-center py-12 text-gray-400 bg-white rounded-2xl border-2 border-dashed border-gray-200">
-                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <i className="ri-calendar-event-line text-3xl opacity-30"></i>
                 </div>
-                <p className="font-medium">Nenhuma atividade planejada</p>
-                <p className="text-sm text-gray-400 mb-4">Adicione itens ou gere um roteiro com IA</p>
-                {isAdmin && (
+
+                <div ref={timelineRef} className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+                  {/* Pre-Trip */}
+                  {/* Pre-Trip */}
                   <button
-                    onClick={() => setIsAddingActivity(true)}
-                    className="text-blue-600 font-semibold hover:underline text-sm"
+                    onClick={() => {
+                      if (isSelectionMode) {
+                        toggleDaySelection(PRE_TRIP_INDEX);
+                      } else {
+                        setActiveDayIndex(PRE_TRIP_INDEX);
+                      }
+                    }}
+                    className={`flex-shrink-0 w-28 p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 relative ${isSelectionMode && selectedIndices.has(PRE_TRIP_INDEX)
+                      ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-300 ring-offset-2'
+                      : activeDayIndex === PRE_TRIP_INDEX && !isSelectionMode
+                        ? 'border-purple-600 bg-purple-50'
+                        : 'border-gray-100 hover:border-purple-200'
+                      }`}
                   >
-                    + Adicionar primeira atividade
+                    {isSelectionMode && (
+                      <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border flex items-center justify-center ${selectedIndices.has(PRE_TRIP_INDEX) ? 'bg-purple-500 border-purple-500' : 'border-gray-300'
+                        }`}>
+                        {selectedIndices.has(PRE_TRIP_INDEX) && <i className="ri-check-line text-white text-xs"></i>}
+                      </div>
+                    )}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${activeDayIndex === PRE_TRIP_INDEX ? 'bg-purple-200 text-purple-700' : 'bg-gray-100 text-gray-500'}`}>
+                      <i className="ri-luggage-cart-line text-lg"></i>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-sm font-bold ${activeDayIndex === PRE_TRIP_INDEX ? 'text-purple-700' : 'text-gray-700'}`}>Pre-Trip</div>
+                      <div className="text-xs text-gray-500">Preparação</div>
+                    </div>
                   </button>
-                )}
-              </div>
-            ) : (
-              dayActivities.map((activity) => {
-                const styles = getStatusStyles(activity.status);
-                const isSuggestion = (activity as any).isSuggestion;
-                const suggestionType = (activity as any).suggestionType;
-                const suggestedBy = (activity as any).suggestedBy;
-                const suggestionId = (activity as any).suggestionId;
 
-                // SPECIAL RENDERING FOR POST-TRIP WIDGETS
-                if (activity.type === 'stats') {
-                  // Quick calculation for demo stats
-                  const totalAct = Object.values(itinerary || {}).flat().filter(Boolean).filter(a => a.type === 'activity').length;
-
-                  return (
-                    <div key={activity.id} className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-6 text-white shadow-lg animate-fadeIn mb-4">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                          <i className="ri-bar-chart-box-line text-xl"></i>
+                  {/* Days */}
+                  {tripDays.map((day, index) => (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        if (isSelectionMode) {
+                          toggleDaySelection(index);
+                        } else {
+                          setActiveDayIndex(index);
+                        }
+                      }}
+                      className={`flex-shrink-0 w-28 p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 relative ${isSelectionMode && selectedIndices.has(index)
+                        ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300 ring-offset-2'
+                        : activeDayIndex === index && !isSelectionMode
+                          ? 'border-gray-800 bg-gray-800 text-white shadow-lg'
+                          : 'border-gray-100 hover:border-gray-300 bg-white'
+                        }`}
+                    >
+                      {isSelectionMode && (
+                        <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border flex items-center justify-center ${selectedIndices.has(index) ? 'bg-indigo-500 border-indigo-500' : 'border-gray-300'
+                          }`}>
+                          {selectedIndices.has(index) && <i className="ri-check-line text-white text-xs"></i>}
                         </div>
-                        <h4 className="font-bold text-lg">{activity.title}</h4>
+                      )}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${activeDayIndex === index && !isSelectionMode ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                        {day.day}
                       </div>
-                      <div className="grid grid-cols-2 gap-4 text-center">
-                        <div className="bg-white/10 rounded-lg p-3">
-                          <div className="text-2xl font-bold">{totalAct}</div>
-                          <div className="text-xs opacity-80">Atividades</div>
-                        </div>
-                        <div className="bg-white/10 rounded-lg p-3">
-                          <div className="text-2xl font-bold">{Object.keys(itinerary).length}</div>
-                          <div className="text-xs opacity-80">Dias</div>
-                        </div>
-                      </div>
-                      <button className="w-full mt-4 py-2 bg-white text-purple-600 rounded-lg font-bold text-sm hover:bg-gray-50 transition-colors">
-                        Ver Relatório Completo
-                      </button>
-                    </div>
-                  );
-                }
-
-                if (activity.type === 'social') {
-                  return (
-                    <div key={activity.id} className="bg-gradient-to-br from-pink-500 to-orange-400 rounded-xl p-6 text-white shadow-lg animate-fadeIn mb-4">
-                      <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                          <i className="ri-instagram-line text-2xl"></i>
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-bold text-lg mb-1">{activity.title}</h4>
-                          <p className="text-sm opacity-90 italic mb-4">"{activity.description}"</p>
-                          <div className="flex gap-2">
-                            <button className="flex-1 py-2 bg-white text-pink-600 rounded-lg font-bold text-sm hover:bg-gray-50 flex items-center justify-center gap-2">
-                              <i className="ri-add-circle-line"></i> Criar Story
-                            </button>
-                            <button className="flex-1 py-2 bg-black/20 text-white rounded-lg font-bold text-sm hover:bg-black/30 flex items-center justify-center gap-2">
-                              <i className="ri-share-line"></i> Compartilhar
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (activity.type === 'map_summary') {
-                  const locationsCount = Object.values(itinerary || {}).flat().filter(Boolean).filter(a => a.coordinates).length;
-                  return (
-                    <div key={activity.id} className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all mb-4">
-                      <div className="h-32 bg-blue-50 relative group cursor-pointer overflow-hidden">
-                        <div className="absolute inset-0 opacity-20" style={{
-                          backgroundImage: 'radial-gradient(#3b82f6 2px, transparent 2px)',
-                          backgroundSize: '20px 20px'
-                        }}></div>
-
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="bg-white shadow-sm border border-gray-100 px-4 py-2 rounded-full text-sm font-bold text-blue-600 flex items-center gap-2 hover:scale-105 transition-transform">
-                            <i className="ri-map-2-line"></i>
-                            Ver Mapa Interativo
+                      <div className="text-center">
+                        <div className={`text-sm font-bold leading-tight ${activeDayIndex === index && !isSelectionMode ? 'text-white' : 'text-gray-900'
+                          }`}>{day.date}</div>
+                        <div className="flex items-center justify-center gap-1">
+                          <span className={`text-xs ${activeDayIndex === index && !isSelectionMode ? 'text-gray-200' : 'text-gray-500'}`}>
+                            {itinerary[index]?.length || 0} itens
                           </span>
+                          {itinerary[index]?.length > 0 && (
+                            <div className={`w-1.5 h-1.5 rounded-full ${activeDayIndex === index ? 'bg-white' : 'bg-green-500'}`}></div>
+                          )}
                         </div>
                       </div>
-                      <div className="p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                            <i className="ri-treasure-map-line text-lg"></i>
-                          </div>
-                          <h4 className="font-bold text-gray-900 text-lg">{activity.title}</h4>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-3">{activity.description}</p>
-                        <div className="flex items-center gap-4 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                          <div className="flex items-center gap-1.5">
-                            <i className="ri-map-pin-range-line text-blue-500"></i>
-                            <span className="font-medium">{locationsCount} locais visitados</span>
-                          </div>
-                        </div>
-                        <button className="w-full mt-3 py-2 border border-blue-200 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-50 transition-colors">
-                          Explorar Rota
-                        </button>
+                    </button>
+                  ))}
+
+                  {/* Post-Trip */}
+                  {/* Post-Trip */}
+                  <button
+                    onClick={() => {
+                      if (isSelectionMode) {
+                        toggleDaySelection(POST_TRIP_INDEX);
+                      } else {
+                        setActiveDayIndex(POST_TRIP_INDEX);
+                      }
+                    }}
+                    className={`flex-shrink-0 w-28 p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 relative ${isSelectionMode && selectedIndices.has(POST_TRIP_INDEX)
+                      ? 'border-pink-500 bg-pink-50 ring-2 ring-pink-300 ring-offset-2'
+                      : activeDayIndex === POST_TRIP_INDEX && !isSelectionMode
+                        ? 'border-pink-500 bg-pink-50'
+                        : 'border-gray-100 hover:border-pink-200'
+                      }`}
+                  >
+                    {isSelectionMode && (
+                      <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border flex items-center justify-center ${selectedIndices.has(POST_TRIP_INDEX) ? 'bg-pink-500 border-pink-500' : 'border-gray-300'
+                        }`}>
+                        {selectedIndices.has(POST_TRIP_INDEX) && <i className="ri-check-line text-white text-xs"></i>}
+                      </div>
+                    )}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${activeDayIndex === POST_TRIP_INDEX ? 'bg-pink-100 text-pink-600' : 'bg-gray-100 text-gray-500'}`}>
+                      <i className="ri-heart-line text-lg"></i>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-sm font-bold ${activeDayIndex === POST_TRIP_INDEX ? 'text-pink-600' : 'text-gray-700'}`}>Post-Trip</div>
+                      <div className="text-xs text-gray-500">Memórias</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Suggestion Mode Banner / Owner Review Banner */}
+              {!isAdmin ? (
+                <div className="mx-6 mb-4 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-3 text-blue-700">
+                  <i className="ri-information-line text-xl"></i>
+                  <div className="text-sm">
+                    <span className="font-bold">Modo de Sugestão Ativado:</span> Como colaborador, você pode sugerir alterações e usar a IA, mas as mudanças precisam ser aprovadas pelo proprietário.
+                  </div>
+                </div>
+              ) : (
+                trip.pendingSuggestions && trip.pendingSuggestions.some((s: any) => s.status === 'pending') && (
+                  <div className="mx-6 mb-4 px-4 py-3 bg-yellow-50 border border-yellow-100 rounded-xl flex items-center justify-between gap-3 text-yellow-700 shadow-sm animate-pulse">
+                    <div className="flex items-center gap-3">
+                      <i className="ri-notification-3-line text-xl"></i>
+                      <div className="text-sm">
+                        <span className="font-bold">Sugestões Pendentes:</span> Vanessa e outros colaboradores sugeriram alterações para esta viagem.
                       </div>
                     </div>
-                  );
-                }
+                    <button
+                      onClick={() => setShowSuggestionsModal(true)}
+                      className="px-3 py-1 bg-yellow-600 text-white rounded-lg text-xs font-bold hover:bg-yellow-700 transition-colors"
+                    >
+                      Ver Sugestões
+                    </button>
+                  </div>
+                )
+              )}
 
-                // SPECIAL RENDERING FOR CHECKLISTS (Pre/Post)
-                if (activity.type === 'checklist') {
-                  const isChecked = activity.status === 'confirmed';
-                  return (
-                    <div key={activity.id} className={`group bg-white border-2 rounded-xl p-4 transition-all flex items-center gap-4 mb-3 ${isChecked ? 'border-green-100 bg-green-50/30' : 'border-gray-100'}`}>
+              {/* Day Header & Actions */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg ${activeDayIndex === PRE_TRIP_INDEX ? 'bg-purple-600' :
+                    activeDayIndex === POST_TRIP_INDEX ? 'bg-pink-600' : 'bg-gray-800'
+                    }`}>
+                    {activeDayIndex === PRE_TRIP_INDEX ? <i className="ri-luggage-cart-line"></i> :
+                      activeDayIndex === POST_TRIP_INDEX ? <i className="ri-heart-line"></i> :
+                        activeDayIndex + 1}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">{getDayLabel(activeDayIndex)}</h3>
+                    <p className="text-sm text-gray-500 capitalize">{getFullDatelabel(activeDayIndex)}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {isAdmin && (
+                    <button
+                      onClick={handleGenerateDayItinerary}
+                      disabled={isGeneratingItinerary}
+                      className={`w-auto px-4 h-10 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center justify-center gap-2 ${isGeneratingItinerary ? 'opacity-70 cursor-wait' : ''}`}
+                      title="Gerar com IA"
+                    >
+                      {isGeneratingItinerary ? (
+                        <>
+                          <i className="ri-loader-4-line animate-spin text-xl"></i>
+                          <span>Gerando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="ri-magic-line text-xl"></i>
+                          {isSelectionMode && selectedIndices.size > 0
+                            ? <span className="font-bold text-sm">Gerar para ({selectedIndices.size}) dias</span>
+                            : ""
+                          }
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <div className="flex gap-2">
+                    {isAdmin && (
                       <button
-                        onClick={() => updateActivityStatus(activeDayIndex, activity.id, isChecked ? 'pending' : 'confirmed')}
-                        className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all flex-shrink-0 ${isChecked ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-400 text-transparent'}`}
+                        onClick={handleClearDay}
+                        className="w-10 h-10 bg-gray-100 text-gray-500 rounded-xl shadow-lg hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center"
+                        title="Limpar Dia"
                       >
-                        <i className="ri-check-line font-bold"></i>
+                        <i className="ri-delete-bin-line text-xl"></i>
                       </button>
-                      <div className="flex-1 content-center">
-                        <h4 className={`font-bold text-gray-900 ${isChecked ? 'line-through text-gray-400' : ''}`}>{activity.title}</h4>
-                        <p className="text-sm text-gray-500">{activity.description}</p>
-                      </div>
+                    )}
+                    <button
+                      onClick={() => setIsAddingActivity(true)}
+                      className="w-10 h-10 bg-blue-600 text-white rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                      title="Adicionar Item"
+                    >
+                      <i className="ri-add-line text-xl"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {isSuggestion ? (
-                          <>
-                            <button
-                              onClick={() => onApproveSuggestion?.(suggestionId)}
-                              className="px-3 py-1 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 transition-colors flex items-center gap-1"
-                              title="Aprovar"
-                            >
-                              <i className="ri-check-line"></i> Aprovar
+              {/* Activity List */}
+              <div className="space-y-3 pb-20">
+                {dayActivities.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 bg-white rounded-2xl border-2 border-dashed border-gray-200">
+                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <i className="ri-calendar-event-line text-3xl opacity-30"></i>
+                    </div>
+                    <p className="font-medium">Nenhuma atividade planejada</p>
+                    <p className="text-sm text-gray-400 mb-4">Adicione itens ou gere um roteiro com IA</p>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setIsAddingActivity(true)}
+                        className="text-blue-600 font-semibold hover:underline text-sm"
+                      >
+                        + Adicionar primeira atividade
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  dayActivities.map((activity) => {
+                    const styles = getStatusStyles(activity.status);
+                    const isSuggestion = (activity as any).isSuggestion;
+                    const suggestionType = (activity as any).suggestionType;
+                    const suggestedBy = (activity as any).suggestedBy;
+                    const suggestionId = (activity as any).suggestionId;
+
+                    // SPECIAL RENDERING FOR POST-TRIP WIDGETS
+                    if (activity.type === 'stats') {
+                      // Quick calculation for demo stats
+                      const totalAct = Object.values(itinerary || {}).flat().filter(Boolean).filter(a => a.type === 'activity').length;
+
+                      return (
+                        <div key={activity.id} className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-6 text-white shadow-lg animate-fadeIn mb-4">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                              <i className="ri-bar-chart-box-line text-xl"></i>
+                            </div>
+                            <h4 className="font-bold text-lg">{activity.title}</h4>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 text-center">
+                            <div className="bg-white/10 rounded-lg p-3">
+                              <div className="text-2xl font-bold">{totalAct}</div>
+                              <div className="text-xs opacity-80">Atividades</div>
+                            </div>
+                            <div className="bg-white/10 rounded-lg p-3">
+                              <div className="text-2xl font-bold">{Object.keys(itinerary).length}</div>
+                              <div className="text-xs opacity-80">Dias</div>
+                            </div>
+                          </div>
+                          <button className="w-full mt-4 py-2 bg-white text-purple-600 rounded-lg font-bold text-sm hover:bg-gray-50 transition-colors">
+                            Ver Relatório Completo
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    if (activity.type === 'social') {
+                      return (
+                        <div key={activity.id} className="bg-gradient-to-br from-pink-500 to-orange-400 rounded-xl p-6 text-white shadow-lg animate-fadeIn mb-4">
+                          <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                              <i className="ri-instagram-line text-2xl"></i>
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-bold text-lg mb-1">{activity.title}</h4>
+                              <p className="text-sm opacity-90 italic mb-4">"{activity.description}"</p>
+                              <div className="flex gap-2">
+                                <button className="flex-1 py-2 bg-white text-pink-600 rounded-lg font-bold text-sm hover:bg-gray-50 flex items-center justify-center gap-2">
+                                  <i className="ri-add-circle-line"></i> Criar Story
+                                </button>
+                                <button className="flex-1 py-2 bg-black/20 text-white rounded-lg font-bold text-sm hover:bg-black/30 flex items-center justify-center gap-2">
+                                  <i className="ri-share-line"></i> Compartilhar
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (activity.type === 'map_summary') {
+                      const locationsCount = Object.values(itinerary || {}).flat().filter(Boolean).filter(a => a.coordinates).length;
+                      return (
+                        <div key={activity.id} className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all mb-4">
+                          <div className="h-32 bg-blue-50 relative group cursor-pointer overflow-hidden">
+                            <div className="absolute inset-0 opacity-20" style={{
+                              backgroundImage: 'radial-gradient(#3b82f6 2px, transparent 2px)',
+                              backgroundSize: '20px 20px'
+                            }}></div>
+
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="bg-white shadow-sm border border-gray-100 px-4 py-2 rounded-full text-sm font-bold text-blue-600 flex items-center gap-2 hover:scale-105 transition-transform">
+                                <i className="ri-map-2-line"></i>
+                                Ver Mapa Interativo
+                              </span>
+                            </div>
+                          </div>
+                          <div className="p-4">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                                <i className="ri-treasure-map-line text-lg"></i>
+                              </div>
+                              <h4 className="font-bold text-gray-900 text-lg">{activity.title}</h4>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-3">{activity.description}</p>
+                            <div className="flex items-center gap-4 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                              <div className="flex items-center gap-1.5">
+                                <i className="ri-map-pin-range-line text-blue-500"></i>
+                                <span className="font-medium">{locationsCount} locais visitados</span>
+                              </div>
+                            </div>
+                            <button className="w-full mt-3 py-2 border border-blue-200 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-50 transition-colors">
+                              Explorar Rota
                             </button>
-                            <button
-                              onClick={() => onRejectSuggestion?.(suggestionId)}
-                              className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-bold hover:bg-red-600 transition-colors flex items-center gap-1"
-                              title="Rejeitar"
-                            >
-                              <i className="ri-close-line"></i> Rejeitar
-                            </button>
-                          </>
-                        ) : (
-                          <>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // SPECIAL RENDERING FOR CHECKLISTS (Pre/Post)
+                    if (activity.type === 'checklist') {
+                      const isChecked = activity.status === 'confirmed';
+                      return (
+                        <div key={activity.id} className={`group bg-white border-2 rounded-xl p-4 transition-all flex items-center gap-4 mb-3 ${isChecked ? 'border-green-100 bg-green-50/30' : 'border-gray-100'}`}>
+                          <button
+                            onClick={() => updateActivityStatus(activeDayIndex, activity.id, isChecked ? 'pending' : 'confirmed')}
+                            className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all flex-shrink-0 ${isChecked ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-400 text-transparent'}`}
+                          >
+                            <i className="ri-check-line font-bold"></i>
+                          </button>
+                          <div className="flex-1 content-center">
+                            <h4 className={`font-bold text-gray-900 ${isChecked ? 'line-through text-gray-400' : ''}`}>{activity.title}</h4>
+                            <p className="text-sm text-gray-500">{activity.description}</p>
+                          </div>
+
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {isSuggestion ? (
+                              <>
+                                <button
+                                  onClick={() => onApproveSuggestion?.(suggestionId)}
+                                  className="px-3 py-1 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 transition-colors flex items-center gap-1"
+                                  title="Aprovar"
+                                >
+                                  <i className="ri-check-line"></i> Aprovar
+                                </button>
+                                <button
+                                  onClick={() => onRejectSuggestion?.(suggestionId)}
+                                  className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-bold hover:bg-red-600 transition-colors flex items-center gap-1"
+                                  title="Rejeitar"
+                                >
+                                  <i className="ri-close-line"></i> Rejeitar
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => handleStartEditing(activity)}
+                                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 flex items-center justify-center transition-colors"
+                                    title="Editar"
+                                  >
+                                    <i className="ri-pencil-line"></i>
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
+                                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 flex items-center justify-center transition-colors"
+                                  title="Excluir"
+                                >
+                                  <i className="ri-delete-bin-line"></i>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={activity.id} className={`rounded-xl border ${isSuggestion ? (suggestionType === 'remove' ? 'border-red-200 bg-red-50/30' : 'border-yellow-200 bg-yellow-50/30') : `${styles.border} ${styles.bg}`} p-4 transition-all hover:shadow-md relative overflow-hidden group`}>
+                        {isSuggestion && (
+                          <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${suggestionType === 'remove' ? 'bg-red-500 text-white' : 'bg-yellow-500 text-white'} rounded-bl-lg shadow-sm z-10`}>
+                            {suggestionType === 'remove' ? 'Sugerido para Remoção' : 'Sugestão de Inclusão'}
+                          </div>
+                        )}
+
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex gap-4">
+                            <div className={`w-12 h-12 rounded-xl ${isSuggestion ? (suggestionType === 'remove' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600') : styles.iconBg} flex items-center justify-center ${!isSuggestion ? 'text-white' : ''} shadow-sm flex-shrink-0`}>
+                              <i className={`${activity.icon} text-xl`}></i>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className={`font-bold text-gray-900 text-lg leading-tight ${isSuggestion && suggestionType === 'remove' ? 'line-through opacity-70' : ''}`}>{activity.title || (activity as any).name || 'Sem Título'}</h4>
+                                {isSuggestion && (
+                                  <span className="text-[10px] bg-white/50 px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 whitespace-nowrap">
+                                    Por {suggestedBy}
+                                  </span>
+                                )}
+                              </div>
+                              {activity.description && <p className={`text-sm text-gray-600 mt-1 ${isSuggestion && suggestionType === 'remove' ? 'opacity-70' : ''}`}>{activity.description}</p>}
+
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                {(activity.time || activity.endTime) && (
+                                  <span className="px-2 py-1 rounded-md bg-white border border-gray-200 text-xs font-semibold text-gray-700 flex items-center gap-1">
+                                    <i className="ri-time-line text-gray-400"></i>
+                                    {activity.time} {activity.endTime ? `- ${activity.endTime}` : ''}
+                                  </span>
+                                )}
+                                {activity.location && (
+                                  <span className="px-2 py-1 rounded-md bg-white border border-gray-200 text-xs font-semibold text-gray-700 flex items-center gap-1">
+                                    <i className="ri-map-pin-line text-gray-400"></i>
+                                    {activity.location}
+                                  </span>
+                                )}
+                                {activity.price && (
+                                  <span className="px-2 py-1 rounded-md bg-white border border-gray-200 text-xs font-semibold text-gray-700 flex items-center gap-1">
+                                    <i className="ri-money-dollar-circle-line text-green-500"></i>
+                                    {activity.price}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2">
                             {isAdmin && (
                               <button
                                 onClick={() => handleStartEditing(activity)}
-                                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 flex items-center justify-center transition-colors"
+                                className="text-gray-400 hover:text-blue-500 transition-colors p-1"
                                 title="Editar"
                               >
-                                <i className="ri-pencil-line"></i>
+                                <i className="ri-pencil-line text-lg"></i>
                               </button>
                             )}
                             <button
                               onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
-                              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 flex items-center justify-center transition-colors"
+                              className="text-gray-400 hover:text-red-500 transition-colors p-1"
                               title="Excluir"
                             >
-                              <i className="ri-delete-bin-line"></i>
+                              <i className="ri-delete-bin-line text-lg"></i>
                             </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div key={activity.id} className={`rounded-xl border ${isSuggestion ? (suggestionType === 'remove' ? 'border-red-200 bg-red-50/30' : 'border-yellow-200 bg-yellow-50/30') : `${styles.border} ${styles.bg}`} p-4 transition-all hover:shadow-md relative overflow-hidden group`}>
-                    {isSuggestion && (
-                      <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${suggestionType === 'remove' ? 'bg-red-500 text-white' : 'bg-yellow-500 text-white'} rounded-bl-lg shadow-sm z-10`}>
-                        {suggestionType === 'remove' ? 'Sugerido para Remoção' : 'Sugestão de Inclusão'}
-                      </div>
-                    )}
-
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex gap-4">
-                        <div className={`w-12 h-12 rounded-xl ${isSuggestion ? (suggestionType === 'remove' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600') : styles.iconBg} flex items-center justify-center ${!isSuggestion ? 'text-white' : ''} shadow-sm flex-shrink-0`}>
-                          <i className={`${activity.icon} text-xl`}></i>
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className={`font-bold text-gray-900 text-lg leading-tight ${isSuggestion && suggestionType === 'remove' ? 'line-through opacity-70' : ''}`}>{activity.title || (activity as any).name || 'Sem Título'}</h4>
-                            {isSuggestion && (
-                              <span className="text-[10px] bg-white/50 px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 whitespace-nowrap">
-                                Por {suggestedBy}
-                              </span>
-                            )}
-                          </div>
-                          {activity.description && <p className={`text-sm text-gray-600 mt-1 ${isSuggestion && suggestionType === 'remove' ? 'opacity-70' : ''}`}>{activity.description}</p>}
-
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {(activity.time || activity.endTime) && (
-                              <span className="px-2 py-1 rounded-md bg-white border border-gray-200 text-xs font-semibold text-gray-700 flex items-center gap-1">
-                                <i className="ri-time-line text-gray-400"></i>
-                                {activity.time} {activity.endTime ? `- ${activity.endTime}` : ''}
-                              </span>
-                            )}
-                            {activity.location && (
-                              <span className="px-2 py-1 rounded-md bg-white border border-gray-200 text-xs font-semibold text-gray-700 flex items-center gap-1">
-                                <i className="ri-map-pin-line text-gray-400"></i>
-                                {activity.location}
-                              </span>
-                            )}
-                            {activity.price && (
-                              <span className="px-2 py-1 rounded-md bg-white border border-gray-200 text-xs font-semibold text-gray-700 flex items-center gap-1">
-                                <i className="ri-money-dollar-circle-line text-green-500"></i>
-                                {activity.price}
-                              </span>
-                            )}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        {isAdmin && (
+
+                        {/* Footer / Status Selector */}
+                        <div className={`flex gap-2 mt-4 pt-3 border-t border-gray-200/50 ${!isAdmin ? 'opacity-70 pointer-events-none' : ''}`}>
                           <button
-                            onClick={() => handleStartEditing(activity)}
-                            className="text-gray-400 hover:text-blue-500 transition-colors p-1"
-                            title="Editar"
+                            onClick={() => updateActivityStatus(activeDayIndex, activity.id, 'not_reserved')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activity.status === 'not_reserved'
+                              ? 'bg-gray-200 text-gray-800 shadow-inner'
+                              : 'text-gray-500 hover:bg-white hover:shadow-sm'
+                              }`}
                           >
-                            <i className="ri-pencil-line text-lg"></i>
+                            <i className={`ri-checkbox-blank-circle-line ${activity.status === 'not_reserved' ? '' : 'opacity-50'}`}></i>
+                            Não Reservado
                           </button>
-                        )}
-                        <button
-                          onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
-                          className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                          title="Excluir"
-                        >
-                          <i className="ri-delete-bin-line text-lg"></i>
-                        </button>
+                          <button
+                            onClick={() => updateActivityStatus(activeDayIndex, activity.id, 'pending')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activity.status === 'pending'
+                              ? 'bg-yellow-100 text-yellow-800 shadow-inner'
+                              : 'text-gray-500 hover:bg-white hover:shadow-sm'
+                              }`}
+                          >
+                            <i className={`ri-time-line ${activity.status === 'pending' ? '' : 'opacity-50'}`}></i>
+                            Pendente
+                          </button>
+                          <button
+                            onClick={() => updateActivityStatus(activeDayIndex, activity.id, 'confirmed')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activity.status === 'confirmed'
+                              ? 'bg-green-100 text-green-800 shadow-inner'
+                              : 'text-gray-500 hover:bg-white hover:shadow-sm'
+                              }`}
+                          >
+                            <i className={`ri-check-line ${activity.status === 'confirmed' ? '' : 'opacity-50'}`}></i>
+                            Confirmado
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          )}
 
-                    {/* Footer / Status Selector */}
-                    <div className={`flex gap-2 mt-4 pt-3 border-t border-gray-200/50 ${!isAdmin ? 'opacity-70 pointer-events-none' : ''}`}>
-                      <button
-                        onClick={() => updateActivityStatus(activeDayIndex, activity.id, 'not_reserved')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activity.status === 'not_reserved'
-                          ? 'bg-gray-200 text-gray-800 shadow-inner'
-                          : 'text-gray-500 hover:bg-white hover:shadow-sm'
-                          }`}
-                      >
-                        <i className={`ri-checkbox-blank-circle-line ${activity.status === 'not_reserved' ? '' : 'opacity-50'}`}></i>
-                        Não Reservado
-                      </button>
-                      <button
-                        onClick={() => updateActivityStatus(activeDayIndex, activity.id, 'pending')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activity.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-800 shadow-inner'
-                          : 'text-gray-500 hover:bg-white hover:shadow-sm'
-                          }`}
-                      >
-                        <i className={`ri-time-line ${activity.status === 'pending' ? '' : 'opacity-50'}`}></i>
-                        Pendente
-                      </button>
-                      <button
-                        onClick={() => updateActivityStatus(activeDayIndex, activity.id, 'confirmed')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activity.status === 'confirmed'
-                          ? 'bg-green-100 text-green-800 shadow-inner'
-                          : 'text-gray-500 hover:bg-white hover:shadow-sm'
-                          }`}
-                      >
-                        <i className={`ri-check-line ${activity.status === 'confirmed' ? '' : 'opacity-50'}`}></i>
-                        Confirmado
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+          {activeTab === 'finance' && (
+            <TripFinanceTab
+              trip={trip}
+              itinerary={itinerary}
+              onUpdate={(updatedTrip) => {
+                if (onTripUpdated) onTripUpdated(updatedTrip);
+              }}
+              isAdmin={isAdmin}
+            />
+          )}
+
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 
 import { useState, useRef } from 'react';
 import { createDirectConversation } from '@/services/messages/chatService';
-import { createGroup, createCommunity } from '@/services/messages/groupService';
+import { createGroup, createCommunity, createGroupInvite } from '@/services/messages/groupService';
 import { searchUsers } from '@/services/supabase';
 
 interface CreateFlowModalProps {
@@ -32,6 +32,8 @@ export default function CreateFlowModal({ onClose, onSuccess, initialMode }: Cre
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [selectedUsers, setSelectedUsers] = useState<any[]>([]);
+    const [externalInvites, setExternalInvites] = useState<string[]>([]);
+    const [emailInput, setEmailInput] = useState('');
 
     // UI Helpers
     const [loading, setLoading] = useState(false);
@@ -67,7 +69,6 @@ export default function CreateFlowModal({ onClose, onSuccess, initialMode }: Cre
 
     const toggleUserSelection = (user: any) => {
         if (type === 'direct') {
-            // Direct is single selection -> Create immediately
             createDirect(user.id);
             return;
         }
@@ -77,6 +78,19 @@ export default function CreateFlowModal({ onClose, onSuccess, initialMode }: Cre
         } else {
             setSelectedUsers(prev => [...prev, user]);
         }
+    };
+
+    const addExternalInvite = () => {
+        const email = emailInput.trim().toLowerCase();
+        if (!email || !email.includes('@')) return;
+        if (!externalInvites.includes(email)) {
+            setExternalInvites(prev => [...prev, email]);
+        }
+        setEmailInput('');
+    };
+
+    const removeExternalInvite = (email: string) => {
+        setExternalInvites(prev => prev.filter(e => e !== email));
     };
 
     const createDirect = async (userId: string) => {
@@ -108,9 +122,21 @@ export default function CreateFlowModal({ onClose, onSuccess, initialMode }: Cre
         try {
             if (type === 'group') {
                 const group = await createGroup(name, description, selectedUsers.map(u => u.id), imageFile || undefined, isPublic);
+
+                // Send external invites
+                if (externalInvites.length > 0) {
+                    await Promise.all(externalInvites.map(email => createGroupInvite(group.id, email)));
+                }
+
                 onSuccess(group.id, 'group');
             } else if (type === 'community') {
                 const comm = await createCommunity(name, description, imageFile || undefined, isPublic);
+
+                // Send external invites
+                if (externalInvites.length > 0) {
+                    await Promise.all(externalInvites.map(email => createGroupInvite(comm.id, email)));
+                }
+
                 onSuccess(comm.id, 'community');
             }
         } catch (e) {
@@ -281,6 +307,42 @@ export default function CreateFlowModal({ onClose, onSuccess, initialMode }: Cre
                                     autoFocus
                                 />
                             </div>
+
+                            {/* External Invites (Email) */}
+                            {type !== 'direct' && (
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Convidar por E-mail (Externo)</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={emailInput}
+                                            onChange={e => setEmailInput(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addExternalInvite())}
+                                            placeholder="amigo@email.com"
+                                            className="flex-1 p-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                        <button
+                                            onClick={addExternalInvite}
+                                            className="px-4 py-3 bg-indigo-50 text-indigo-600 rounded-xl font-bold hover:bg-indigo-100 transition-colors"
+                                        >
+                                            <i className="ri-add-line"></i>
+                                        </button>
+                                    </div>
+
+                                    {externalInvites.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 pt-1">
+                                            {externalInvites.map(email => (
+                                                <div key={email} className="flex items-center gap-1 pl-2 pr-1 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-medium border border-amber-100">
+                                                    <i className="ri-mail-line text-[10px]"></i>
+                                                    {email}
+                                                    <button onClick={() => removeExternalInvite(email)} className="w-4 h-4 rounded-full hover:bg-amber-100 flex items-center justify-center">
+                                                        <i className="ri-close-line"></i>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Selected Chips */}
                             {selectedUsers.length > 0 && (

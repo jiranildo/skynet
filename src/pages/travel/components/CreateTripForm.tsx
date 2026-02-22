@@ -48,7 +48,8 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
         tripType: initialData?.trip_type || 'leisure',
         budget: getBudgetLevel(initialData?.budget),
         description: initialData?.description || '',
-        coverImage: initialData?.cover_image || ''
+        coverImage: initialData?.cover_image || '',
+        priceTm: initialData?.price_tm || 0
     });
 
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
@@ -159,6 +160,7 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
             budget: budgetVal,
             description: tripForm.description,
             cover_image: tripForm.coverImage,
+            price_tm: tripForm.priceTm,
             status: 'planning' as const,
             metadata: {
                 startTime: tripForm.startTime,
@@ -385,6 +387,38 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
                             rows={3}
                             className="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-700 resize-none"
                         />
+                    </div>
+
+                    {/* Monetization (Marketplace) */}
+                    <div className="bg-yellow-50 rounded-xl p-5 border border-yellow-200">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600">
+                                <i className="ri-store-2-fill text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900">Marketplace de Roteiros</h3>
+                                <p className="text-sm text-gray-600">Monetize seu roteiro no Skynet.</p>
+                            </div>
+                        </div>
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Preço em Travel Money (TM)
+                            </label>
+                            <div className="relative">
+                                <i className="ri-coin-fill absolute left-3 top-1/2 transform -translate-y-1/2 text-yellow-500"></i>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={tripForm.priceTm}
+                                    onChange={(e) => setTripForm({ ...tripForm, priceTm: parseInt(e.target.value) || 0 })}
+                                    placeholder="Deixe 0 para roteiro gratuito"
+                                    className="w-full pl-10 pr-4 py-3 border border-yellow-200 bg-white rounded-xl outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-gray-700"
+                                />
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                                * Se for maior que zero, outros usuários terão que pagar essa quantia em TM para visualizar seu itinerário completo após publicá-lo.
+                            </p>
+                        </div>
                     </div>
 
                     {/* Cover Image */}

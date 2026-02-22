@@ -31,6 +31,8 @@ import UserListModal from './components/UserListModal';
 import { supabase } from '../../services/supabase';
 import StoryViewer from '../home/components/StoryViewer';
 import CheckInModal from '../../components/CheckInModal';
+import { useGamification } from '../../hooks/queries/useGamification';
+import { getLevelTitle } from '../../constants/gamification';
 
 type TabType = 'posts' | 'reels' | 'saved' | 'tagged';
 
@@ -60,6 +62,12 @@ export default function ProfilePage() {
   // const [showWallet, setShowWallet] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
+
+  // Gamification Data
+  const { data: gamificationData } = useGamification();
+  const userLevel = gamificationData?.level || 1;
+  const levelTitle = getLevelTitle(userLevel);
+  const tmBalance = gamificationData?.tm_balance || 0;
 
   // Determine which user ID we are viewing
   const targetUserId = routeUserId || authUser?.id;
@@ -450,6 +458,30 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
+                {isOwnProfile && gamificationData && (
+                  <div className="flex justify-center sm:justify-start gap-3 mb-6 w-full max-w-sm mx-auto sm:mx-0">
+                    <div className="flex-1 bg-gradient-to-br from-orange-50 to-orange-100/50 border border-orange-200 rounded-xl p-3 sm:p-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group">
+                      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 group-hover:bg-orange-200 transition-colors">
+                        <i className="ri-trophy-line text-orange-600 text-xl sm:text-2xl"></i>
+                      </div>
+                      <div className="flex flex-col text-left justify-center">
+                        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-orange-600 mb-0.5">Nível {userLevel}</span>
+                        <span className="text-xs sm:text-sm font-extrabold text-orange-700 leading-none">{levelTitle}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-xl p-3 sm:p-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group">
+                      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-200 transition-colors">
+                        <i className="ri-wallet-3-line text-blue-600 text-xl sm:text-2xl"></i>
+                      </div>
+                      <div className="flex flex-col text-left justify-center">
+                        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-blue-600 mb-0.5">Travel Money</span>
+                        <span className="text-xs sm:text-sm font-extrabold text-blue-700 leading-none">T$ {Number(tmBalance).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <h3 className="font-bold text-gray-900 mb-1 text-sm md:text-base">{currentProfile.full_name}</h3>
                   <p className="text-gray-600 text-xs md:text-sm mb-2 whitespace-pre-wrap">
@@ -598,7 +630,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-40">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-50">
         <div className="flex items-center justify-around px-2 py-2 sm:py-3">
           <button onClick={() => window.REACT_APP_NAVIGATE('/')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
             <i className="ri-home-line text-xl sm:text-2xl"></i>

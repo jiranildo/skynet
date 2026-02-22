@@ -22,6 +22,13 @@ export function useCatalogMissions() {
     });
 }
 
+export function useRanking() {
+    return useQuery({
+        queryKey: ['gamification_ranking'],
+        queryFn: () => gamificationService.getRanking(),
+    });
+}
+
 export function useBadges() {
     return useQuery({
         queryKey: ['badges'],

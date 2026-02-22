@@ -11,6 +11,14 @@ export const getTrips = async (userId: string) => {
 
     const memberTripIds = memberships?.map(m => m.trip_id) || [];
 
+    // 1.5 Get IDs of trips user has purchased
+    const { data: purchases } = await supabase
+        .from('user_purchased_trips')
+        .select('trip_id')
+        .eq('user_id', userId);
+
+    const purchasedTripIds = purchases?.map(p => p.trip_id) || [];
+
     // 2. Build the query
     let query = supabase
         .from('trips')
@@ -21,6 +29,10 @@ export const getTrips = async (userId: string) => {
         user_id,
         role,
         status
+      ),
+      user_purchased_trips (
+        id,
+        user_id
       )
     `);
 
@@ -29,8 +41,10 @@ export const getTrips = async (userId: string) => {
     // - user is the owner (user_id = userId)
     // - OR user is in legacy metadata->sharedWith
     // - OR user is in trip_members (id IN memberTripIds)
+    // - OR user has purchased the trip (id IN purchasedTripIds)
     const memberIdsStr = memberTripIds.length > 0 ? `,id.in.(${memberTripIds.join(',')})` : '';
-    query = query.or(`user_id.eq.${userId},metadata->sharedWith.cs.[{"id": "${userId}"}]${memberIdsStr}`);
+    const purchasedIdsStr = purchasedTripIds.length > 0 ? `,id.in.(${purchasedTripIds.join(',')})` : '';
+    query = query.or(`user_id.eq.${userId},metadata->sharedWith.cs.[{"id": "${userId}"}]${memberIdsStr}${purchasedIdsStr}`);
 
     const { data, error } = await query.order('start_date', { ascending: false });
 
@@ -42,9 +56,11 @@ export const getTrips = async (userId: string) => {
         sharedWith: t.metadata?.sharedWith,
         pendingSuggestions: t.metadata?.pendingSuggestions,
         marketplaceConfig: t.metadata?.marketplaceConfig,
+        expenses: t.metadata?.expenses,
         isShared: t.user_id !== userId, // Mark as shared if not owned by current user
         owner: t.users, // Map joined user data to 'owner' prop
-        permissions: t.trip_members?.find((m: any) => m.user_id === userId)?.role || (t.user_id === userId ? 'admin' : 'view')
+        permissions: t.trip_members?.find((m: any) => m.user_id === userId)?.role || (t.user_id === userId ? 'admin' : 'view'),
+        isPurchased: t.user_id === userId || (t.user_purchased_trips && t.user_purchased_trips.some((p: any) => p.user_id === userId))
     })) as Trip[];
 };
 
@@ -58,15 +74,6 @@ export const getMarketplaceTrips = async () => {
     let followedUserIds: string[] = [];
     let memberTripIds: string[] = [];
     let listedTripIds: string[] = [];
-
-    const { data: listings } = await supabase
-        .from('marketplace_listings')
-        .select('trip_id')
-        .eq('is_active', true);
-
-    if (listings) {
-        listedTripIds = listings.map(l => l.trip_id);
-    }
 
     if (currentUserId) {
         const { data: following } = await supabase
@@ -104,18 +111,14 @@ export const getMarketplaceTrips = async () => {
         followers_count,
         posts_count
       ),
-      marketplace_listings (
-        id,
-        price,
-        currency,
-        description,
-        is_active,
-        created_at
-      ),
       trip_members (
         user_id,
         role,
         status
+      ),
+      user_purchased_trips (
+        id,
+        user_id
       )
     `)
         .order('created_at', { ascending: false });
@@ -123,18 +126,12 @@ export const getMarketplaceTrips = async () => {
     if (currentUserId) {
         const followedStr = `(${[...followedUserIds, currentUserId].join(',')})`;
         const memberTripsStr = memberTripIds.length > 0 ? `,id.in.(${memberTripIds.join(',')})` : '';
-        const listedTripsStr = listedTripIds.length > 0 ? `,id.in.(${listedTripIds.join(',')})` : '';
 
-        // Fetch Public OR Followed OR Self OR Is Member OR Is Listed
-        query = query.or(`visibility.eq.public,user_id.in.${followedStr}${memberTripsStr}${listedTripsStr}`);
+        // Fetch Public OR Followed OR Self OR Is Member OR Has Price > 0
+        query = query.or(`visibility.eq.public,price_tm.gt.0,user_id.in.${followedStr}${memberTripsStr}`);
     } else {
-        // Guest: Public OR Listed
-        const listedTripsStr = listedTripIds.length > 0 ? `,id.in.(${listedTripIds.join(',')})` : '';
-        if (listedTripsStr) {
-            query = query.or(`visibility.eq.public${listedTripsStr}`);
-        } else {
-            query = query.eq('visibility', 'public');
-        }
+        // Guest: Public OR Has Price > 0
+        query = query.or(`visibility.eq.public,price_tm.gt.0`);
     }
 
     const { data: rawTrips, error } = await query;
@@ -151,68 +148,45 @@ export const getMarketplaceTrips = async () => {
             const isMine = trip.user_id === currentUserId;
             const isFollowed = followedSet.has(trip.user_id);
             const visibility = trip.visibility || 'private';
-
-            // Handle marketplace_listings safely (can be object or array)
-            let listings: any[] = [];
-            if (Array.isArray(trip.marketplace_listings)) {
-                listings = trip.marketplace_listings;
-            } else if (trip.marketplace_listings && typeof trip.marketplace_listings === 'object') {
-                listings = [trip.marketplace_listings];
-            }
-
-            const activeListing = listings.find((l: any) => l.is_active);
-
-            // Inject config so UI can use it
-            if (activeListing) {
-                trip.marketplaceConfig = activeListing;
-            }
+            const isListed = trip.price_tm > 0;
 
             // Check if I am a confirmed member of this trip
             const isMember = trip.trip_members && trip.trip_members.some((m: any) => m.user_id === currentUserId && m.status === 'accepted');
 
-            // 1. If actively listed in Marketplace, always show
-            if (activeListing) return true;
+            // 1. If actively listed in Marketplace (price_tm > 0), always show
+            if (isListed) return true;
 
             // 2. Public trips always show
             if (visibility === 'public') return true;
 
             // 3. Followers/Network trips show if followed OR is mine
-            // We explicitly check for 'followers', 'friends', or 'network' as these are commonly used interchangeably for "My Network"
             if (['followers', 'friends', 'network'].includes(visibility)) return isFollowed || isMine;
 
             // 4. Private trips: Hide unless explicitly shared (Member)
             if (visibility === 'private') {
-                return isMember;
+                return isMember || isMine;
             }
             return false;
         });
     } else {
-        validTrips = validTrips.filter((t: any) => t.visibility === 'public');
+        validTrips = validTrips.filter((t: any) => t.visibility === 'public' || t.price_tm > 0);
     }
 
     // 4. Map to return format
     return validTrips.map((trip: any) => {
-        let listingsArr: any[] = [];
-        if (Array.isArray(trip.marketplace_listings)) {
-            listingsArr = trip.marketplace_listings;
-        } else if (trip.marketplace_listings && typeof trip.marketplace_listings === 'object') {
-            listingsArr = [trip.marketplace_listings];
-        }
-
-        const activeListing = listingsArr.find((l: any) => l.is_active);
+        const isPurchased = currentUserId ? (trip.user_id === currentUserId || (trip.user_purchased_trips && trip.user_purchased_trips.some((p: any) => p.user_id === currentUserId))) : false;
 
         return {
             ...trip,
-            marketplaceConfig: activeListing ? {
+            marketplaceConfig: trip.price_tm > 0 ? {
                 isListed: true,
-                price: activeListing.price,
-                currency: activeListing.currency,
-                description: activeListing.description
+                price: trip.price_tm,
+                currency: 'TM'
             } : undefined,
-            seller: trip.users,
-            listing_id: activeListing?.id
+            isPurchased,
+            seller: trip.users
         };
-    }) as (Trip & { seller: User, listing_id?: string })[];
+    }) as (Trip & { seller: User, isPurchased: boolean })[];
 };
 
 export const createMarketplaceListing = async (listing: {
@@ -271,8 +245,8 @@ export const getNetworkUsers = async (userId: string) => {
 
 export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated_at'>) => {
     // Extract UI fields to metadata
-    const { sharedWith, pendingSuggestions, marketplaceConfig, ...rest } = trip;
-    const metadata = { ...(trip as any).metadata, sharedWith, pendingSuggestions, marketplaceConfig };
+    const { sharedWith, pendingSuggestions, marketplaceConfig, expenses, ...rest } = trip;
+    const metadata = { ...(trip as any).metadata, sharedWith, pendingSuggestions, marketplaceConfig, expenses };
 
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -292,13 +266,14 @@ export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated
         ...data,
         sharedWith: data.metadata?.sharedWith,
         pendingSuggestions: data.metadata?.pendingSuggestions,
-        marketplaceConfig: data.metadata?.marketplaceConfig
+        marketplaceConfig: data.metadata?.marketplaceConfig,
+        expenses: data.metadata?.expenses
     } as Trip;
 };
 
 export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
     // Extract UI fields to metadata
-    const { sharedWith, pendingSuggestions, marketplaceConfig, metadata: existingMeta, ...rest } = updates;
+    const { sharedWith, pendingSuggestions, marketplaceConfig, expenses, metadata: existingMeta, ...rest } = updates;
 
     let payload: any = { ...rest, updated_at: new Date().toISOString() };
 
@@ -307,6 +282,7 @@ export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
         sharedWith !== undefined ||
         pendingSuggestions !== undefined ||
         marketplaceConfig !== undefined ||
+        expenses !== undefined ||
         existingMeta !== undefined;
 
     if (hasMetadataUpdates) {
@@ -322,6 +298,7 @@ export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
         if (sharedWith !== undefined) payload.metadata.sharedWith = sharedWith;
         if (pendingSuggestions !== undefined) payload.metadata.pendingSuggestions = pendingSuggestions;
         if (marketplaceConfig !== undefined) payload.metadata.marketplaceConfig = marketplaceConfig;
+        if (expenses !== undefined) payload.metadata.expenses = expenses;
     }
 
     const { data, error } = await supabase
@@ -337,7 +314,8 @@ export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
         ...data,
         sharedWith: data.metadata?.sharedWith,
         pendingSuggestions: data.metadata?.pendingSuggestions,
-        marketplaceConfig: data.metadata?.marketplaceConfig
+        marketplaceConfig: data.metadata?.marketplaceConfig,
+        expenses: data.metadata?.expenses
     } as Trip;
 };
 
