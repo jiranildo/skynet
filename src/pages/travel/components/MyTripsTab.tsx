@@ -8,7 +8,7 @@ import { UserAvatar } from '../../../components/UserAvatar';
 
 
 
-import { getTrips, deleteTrip, updateTrip, Trip, getNetworkUsers, User, createMarketplaceListing, deleteMarketplaceListing, supabase } from '../../../services/supabase';
+import { getTrips, deleteTrip, updateTrip, Trip, getNetworkUsers, User, createMarketplaceListing, deleteMarketplaceListing, supabase, getGroups, Group, notifySharedGroups } from '../../../services/supabase';
 
 interface SharedUser {
   id: string;
@@ -91,6 +91,7 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [networkUsers, setNetworkUsers] = useState<User[]>([]);
+  const [userGroups, setUserGroups] = useState<Group[]>([]);
   const [loadingNetwork, setLoadingNetwork] = useState(false);
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [feedbackModal, setFeedbackModal] = useState<{
@@ -138,9 +139,20 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     }
   };
 
+  const loadUserGroups = async () => {
+    if (!user) return;
+    try {
+      const groups = await getGroups(user.id);
+      setUserGroups(groups);
+    } catch (error) {
+      console.error('Error loading user groups:', error);
+    }
+  };
+
   useEffect(() => {
     if (showShareModal) {
       loadNetworkUsers();
+      loadUserGroups();
     }
   }, [showShareModal]);
 
@@ -285,44 +297,122 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     setShowShareModal(true);
   };
 
-  const handleShare = (config: ShareConfig) => {
+  const handleShare = async (config: ShareConfig) => {
     if (!selectedTrip) return;
 
-    // Preserving existing shared users if possible, or creating new placeholders
-    // In a real app we'd fetch user details
-    const newSharedWith = config.sharedWith.map(userId => {
-      const existing = selectedTrip.sharedWith?.find(u => u.id === userId);
-      if (existing) return existing;
-      const netUser = networkUsers.find(u => u.id === userId);
-      return {
-        id: userId,
-        name: netUser?.full_name || 'Usuário',
-        avatar: netUser?.avatar_url || '',
-        permission: 'view',
-        joinedAt: new Date().toISOString()
-      } as SharedUser;
-    });
+    try {
+      // 1. Sync trip_members table for Users
+      // Delete old user members (except owner) and insert new ones
+      // In a more complex app, we'd only insert/delete the delta
+      const { data: existingMembers } = await supabase
+        .from('trip_members')
+        .select('user_id, group_id')
+        .eq('trip_id', selectedTrip.id);
 
-    const updatedTrips = trips.map(t => {
-      if (t.id === selectedTrip.id) {
-        const updated = {
-          ...t,
-          visibility: config.visibility,
-          sharedWith: newSharedWith,
-          isShared: newSharedWith.length > 0
-        };
-        // Update Supabase
-        const { id, user_id, created_at, ...updates } = updated;
-        updateTrip(id, updates);
-        return updated;
+      // Filter out creator from removal
+      const membersToDelete = (existingMembers || []).filter(m =>
+        (m.user_id && m.user_id !== selectedTrip.user_id) || m.group_id
+      );
+
+      if (membersToDelete.length > 0) {
+        await supabase
+          .from('trip_members')
+          .delete()
+          .eq('trip_id', selectedTrip.id)
+          .neq('user_id', selectedTrip.user_id);
       }
-      return t;
-    });
-    setTrips(updatedTrips);
-    const updated = updatedTrips.find(t => t.id === selectedTrip.id);
-    if (updated) setSelectedTrip(updated);
 
-    alert('Configurações de compartilhamento salvas!');
+      // Insert new user members
+      if (config.sharedWith.length > 0) {
+        const userInserts = config.sharedWith.map(userId => ({
+          trip_id: selectedTrip.id,
+          user_id: userId,
+          role: 'view',
+          status: 'accepted'
+        }));
+        await supabase.from('trip_members').insert(userInserts);
+      }
+
+      // Insert new group members
+      if (config.sharedGroups.length > 0) {
+        const groupInserts = config.sharedGroups.map(groupId => ({
+          trip_id: selectedTrip.id,
+          group_id: groupId,
+          user_id: null,
+          role: 'view',
+          status: 'accepted'
+        }));
+        await supabase.from('trip_members').insert(groupInserts);
+      }
+
+      // 2. Update UI State and Trip metadata
+      const newSharedWith = config.sharedWith.map(userId => {
+        const existing = selectedTrip.sharedWith?.find(u => u.id === userId);
+        if (existing) return existing;
+        const netUser = networkUsers.find(u => u.id === userId);
+        return {
+          id: userId,
+          name: netUser?.full_name || 'Usuário',
+          avatar: netUser?.avatar_url || '',
+          permission: 'view',
+          joinedAt: new Date().toISOString()
+        } as SharedUser;
+      });
+
+      const updatedTrips = trips.map(t => {
+        if (t.id === selectedTrip.id) {
+          const updated = {
+            ...t,
+            visibility: config.visibility,
+            sharedWith: newSharedWith,
+            isShared: newSharedWith.length > 0 || config.sharedGroups.length > 0,
+            metadata: {
+              ...t.metadata,
+              sharedGroups: config.sharedGroups
+            }
+          };
+          // Update Supabase trips table
+          const { id, user_id, created_at, ...updates } = updated;
+          updateTrip(id, updates);
+          return updated;
+        }
+        return t;
+      });
+
+      setTrips(updatedTrips);
+      const updated = updatedTrips.find(t => t.id === selectedTrip.id);
+      if (updated) setSelectedTrip(updated);
+
+      // 3. Automate Group Notifications
+      // We only notify groups that were newly shared or refreshed in this config
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser && config.sharedGroups.length > 0) {
+        // Find the user object for the sender (current user)
+        const senderUser: User = {
+          id: currentUser.id,
+          username: currentUser.user_metadata?.username || 'user',
+          full_name: currentUser.user_metadata?.full_name || 'Usuário',
+          avatar_url: currentUser.user_metadata?.avatar_url || ''
+        } as User;
+
+        notifySharedGroups(selectedTrip, config.sharedGroups, senderUser);
+      }
+
+      setFeedbackModal({
+        isOpen: true,
+        title: 'Sucesso!',
+        message: 'Configurações de compartilhamento salvas!',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error sharing trip:', error);
+      setFeedbackModal({
+        isOpen: true,
+        title: 'Erro',
+        message: 'Não foi possível salvar as configurações.',
+        type: 'danger'
+      });
+    }
   };
 
   const handlePublish = async (config: PublishConfig) => {
@@ -2311,6 +2401,7 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
           onClose={() => setShowShareModal(false)}
           trip={selectedTrip}
           networkUsers={networkUsers}
+          groups={userGroups}
           onShare={handleShare}
           onPublish={handlePublish}
         />

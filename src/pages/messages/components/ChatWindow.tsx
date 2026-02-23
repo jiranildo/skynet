@@ -86,10 +86,31 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                 setLoading(false);
             });
 
-        const handleNewMessage = (msg: any) => {
+        const handleNewMessage = async (msg: any) => {
+            if (msg.sender_id === currentUser?.id) return; // Already handled by local state in handleSend
+
+            let chatMsg = msg as ChatMessage;
+
+            // Real-time payload doesn't include joined sender details
+            if (!chatMsg.sender && chatMsg.sender_id) {
+                try {
+                    const { data: userData } = await supabase
+                        .from('users')
+                        .select('username, avatar_url, full_name')
+                        .eq('id', chatMsg.sender_id)
+                        .single();
+
+                    if (userData) {
+                        chatMsg.sender = userData;
+                    }
+                } catch (err) {
+                    console.error('Error fetching sender for realtime message:', err);
+                }
+            }
+
             setMessages(prev => {
-                if (prev.some(m => m.id === msg.id)) return prev;
-                return [...prev, msg as ChatMessage];
+                if (prev.some(m => m.id === chatMsg.id)) return prev;
+                return [...prev, chatMsg];
             });
             scrollToBottom();
         };

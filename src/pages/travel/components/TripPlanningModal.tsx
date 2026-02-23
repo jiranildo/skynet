@@ -899,7 +899,7 @@ export default function TripPlanningModal({
     }
   };
 
-  if (!isOpen) return null;
+
 
 
 
@@ -1267,6 +1267,8 @@ export default function TripPlanningModal({
     if (index === POST_TRIP_INDEX) return 'Memórias e Review';
     return tripDays[index]?.fullDate || 'Data Indisponível';
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fadeIn">

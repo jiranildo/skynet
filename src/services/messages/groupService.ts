@@ -66,6 +66,19 @@ export const createGroup = async (name: string, description: string, initialMemb
 
     if (membersError) throw membersError;
 
+    // 4. Notify added members
+    const otherMembers = membersToAdd.filter(m => m.user_id !== user.id);
+    if (otherMembers.length > 0) {
+        const notifications = otherMembers.map(m => ({
+            user_id: m.user_id,
+            type: 'system',
+            title: 'Novo Grupo',
+            message: `Você foi adicionado ao grupo "${group.name}"`,
+            is_read: false
+        }));
+        await supabase.from('notifications').insert(notifications);
+    }
+
     return group;
 };
 
@@ -120,6 +133,10 @@ export const createCommunity = async (name: string, description: string, imageFi
         });
 
     if (memberError) throw memberError;
+
+    // Communities are usually joined or members added later via addCommunityMember,
+    // which already has notification logic. If we added initial members here,
+    // we would add notification logic similar to createGroup.
 
     return community;
 };

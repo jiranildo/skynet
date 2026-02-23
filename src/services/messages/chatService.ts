@@ -66,8 +66,16 @@ export const updateLastSeen = async (chatId: string, type: 'direct' | 'group' | 
         }
     } else if (type === 'group') {
         await supabase.from('group_members').update({ last_seen_at: now }).match({ group_id: chatId, user_id: user.id });
+        // Mark group message notifications as read
+        await supabase.from('notifications')
+            .update({ is_read: true })
+            .match({ user_id: user.id, type: 'message', related_group_id: chatId });
     } else if (type === 'community') {
         await supabase.from('community_members').update({ last_seen_at: now }).match({ community_id: chatId, user_id: user.id });
+        // Mark community message notifications as read
+        await supabase.from('notifications')
+            .update({ is_read: true })
+            .match({ user_id: user.id, type: 'message', related_community_id: chatId });
     }
 };
 
@@ -219,10 +227,10 @@ export const sendMessage = async (
                 user_id: m.user_id,
                 type: 'message',
                 related_user_id: user.id,
+                related_group_id: params.groupId, // New column
                 title: 'Nova mensagem no grupo',
                 message: params.content,
                 is_read: false,
-                // optional: link to group
             }));
             await supabase.from('notifications').insert(notifications);
         }
@@ -241,6 +249,7 @@ export const sendMessage = async (
                 user_id: m.user_id,
                 type: 'message',
                 related_user_id: user.id,
+                related_community_id: params.communityId, // New column
                 title: 'Nova mensagem na comunidade',
                 message: params.content,
                 is_read: false

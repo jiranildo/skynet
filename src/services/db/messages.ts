@@ -74,14 +74,67 @@ export const markMessageAsRead = async (messageId: string) => {
 };
 
 export const getUnreadMessagesCount = async (userId: string) => {
-    const { count, error } = await supabase
-        .from('messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('receiver_id', userId)
-        .eq('is_read', false);
+    try {
+        // 1. Direct Messages
+        const { count: dmCount, error: dmError } = await supabase
+            .from('messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('receiver_id', userId)
+            .eq('is_read', false);
 
-    if (error) throw error;
-    return count || 0;
+        if (dmError) throw dmError;
+
+        // 2. Group Messages
+        const { data: groupMembers, error: gmError } = await supabase
+            .from('group_members')
+            .select('group_id, last_seen_at, joined_at')
+            .eq('user_id', userId)
+            .eq('status', 'accepted');
+
+        if (gmError) throw gmError;
+
+        let groupCount = 0;
+        if (groupMembers && groupMembers.length > 0) {
+            const counts = await Promise.all(groupMembers.map(async (gm) => {
+                const { count } = await supabase
+                    .from('messages')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('group_id', gm.group_id)
+                    .gt('created_at', gm.last_seen_at || gm.joined_at)
+                    .neq('sender_id', userId);
+                return count || 0;
+            }));
+            groupCount = counts.reduce((acc, c) => acc + c, 0);
+        }
+
+        // 3. Community Messages
+        const { data: communityMembers, error: cmError } = await supabase
+            .from('community_members')
+            .select('community_id, last_seen_at, joined_at')
+            .eq('user_id', userId)
+            .eq('status', 'accepted');
+
+        if (cmError) throw cmError;
+
+        let communityCount = 0;
+        if (communityMembers && communityMembers.length > 0) {
+            const counts = await Promise.all(communityMembers.map(async (cm) => {
+                const { count } = await supabase
+                    .from('messages')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('community_id', cm.community_id)
+                    .gt('created_at', cm.last_seen_at || cm.joined_at)
+                    .neq('sender_id', userId);
+                return count || 0;
+            }));
+            communityCount = counts.reduce((acc, c) => acc + c, 0);
+        }
+
+        return (dmCount || 0) + groupCount + communityCount;
+    } catch (error) {
+        console.error("Error in getUnreadMessagesCount:", error);
+        return 0;
+    }
 };
 
 export const getMessages = async (chatId: string, type: 'direct' | 'group' | 'community') => {

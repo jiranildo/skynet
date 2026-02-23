@@ -13,6 +13,7 @@ export * from './db/messages';
 export * from './db/notifications';
 export * from './db/gamification';
 export * from './db/wallet';
+export * from './db/sharing';
 
 export { supabase };
 export default supabase;

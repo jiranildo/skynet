@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Trip } from '../../../services/supabase';
+import { User, Trip, Group } from '../../../services/supabase';
 import { ConfirmationModal } from '../../../components/ConfirmationModal';
 import { UserAvatar } from '../../../components/UserAvatar';
 
@@ -8,6 +8,7 @@ interface ShareTripModalProps {
     onClose: () => void;
     trip: Trip;
     networkUsers: User[];
+    groups: Group[];
     onShare: (config: ShareConfig) => void;
     onPublish: (config: PublishConfig) => void;
 }
@@ -15,6 +16,7 @@ interface ShareTripModalProps {
 export interface ShareConfig {
     visibility: 'public' | 'followers' | 'private';
     sharedWith: string[]; // User IDs
+    sharedGroups: string[]; // Group IDs
 }
 
 export interface PublishConfig {
@@ -29,13 +31,16 @@ export default function ShareTripModal({
     onClose,
     trip,
     networkUsers,
+    groups,
     onShare,
     onPublish
 }: ShareTripModalProps) {
     // Shared State
     const [visibility, setVisibility] = useState<'public' | 'followers' | 'private'>('private');
     const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+    const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
     const [searchUser, setSearchUser] = useState('');
+    const [searchGroup, setSearchGroup] = useState('');
 
     // Marketplace State
     const [isListed, setIsListed] = useState(false);
@@ -49,6 +54,7 @@ export default function ShareTripModal({
         if (trip) {
             if (trip.visibility && (trip.visibility as string) !== 'groups') setVisibility(trip.visibility);
             if (trip.sharedWith) setSelectedUsers(trip.sharedWith.map(u => u.id || u));
+            if (trip.metadata?.sharedGroups) setSelectedGroups(trip.metadata.sharedGroups);
             if (trip.marketplaceConfig) {
                 setIsListed(trip.marketplaceConfig.isListed);
                 setPrice(trip.marketplaceConfig.price);
@@ -61,7 +67,8 @@ export default function ShareTripModal({
         // 1. Save Share Config
         onShare({
             visibility,
-            sharedWith: selectedUsers
+            sharedWith: selectedUsers,
+            sharedGroups: selectedGroups
         });
 
         // 2. Save Marketplace Config (only if public or followers, typically)
@@ -99,9 +106,21 @@ export default function ShareTripModal({
         }
     };
 
+    const toggleGroup = (groupId: string) => {
+        if (selectedGroups.includes(groupId)) {
+            setSelectedGroups(selectedGroups.filter(id => id !== groupId));
+        } else {
+            setSelectedGroups([...selectedGroups, groupId]);
+        }
+    };
+
     const filteredUsers = networkUsers.filter(user =>
         user.full_name.toLowerCase().includes(searchUser.toLowerCase()) ||
         user.username.toLowerCase().includes(searchUser.toLowerCase())
+    );
+
+    const filteredGroups = groups.filter(group =>
+        group.name.toLowerCase().includes(searchGroup.toLowerCase())
     );
 
     if (!isOpen) return null;
@@ -198,40 +217,79 @@ export default function ShareTripModal({
 
                         {/* Section 2: User Selector (Only if Private) */}
                         {visibility === 'private' && (
-                            <div className="mb-8 animate-fadeIn">
-                                <h3 className="text-gray-900 font-bold mb-4 flex items-center gap-2">
-                                    <i className="ri-user-add-line text-purple-500"></i>
-                                    Compartilhar com
-                                </h3>
-                                <div className="relative mb-3">
-                                    <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar pessoas..."
-                                        className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                                        value={searchUser}
-                                        onChange={(e) => setSearchUser(e.target.value)}
-                                    />
+                            <div className="space-y-6 animate-fadeIn pb-4">
+                                {/* Users Search */}
+                                <div>
+                                    <h3 className="text-gray-900 font-bold mb-4 flex items-center gap-2">
+                                        <i className="ri-user-add-line text-purple-500"></i>
+                                        Compartilhar com Pessoas
+                                    </h3>
+                                    <div className="relative mb-3">
+                                        <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar pessoas..."
+                                            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                                            value={searchUser}
+                                            onChange={(e) => setSearchUser(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="max-h-32 overflow-y-auto space-y-1 border border-gray-100 rounded-xl p-1 bg-gray-50">
+                                        {filteredUsers.length > 0 ? filteredUsers.map(user => (
+                                            <button
+                                                key={user.id}
+                                                onClick={() => toggleUser(user.id)}
+                                                className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${selectedUsers.includes(user.id) ? 'bg-purple-100' : 'hover:bg-white'
+                                                    }`}
+                                            >
+                                                <UserAvatar
+                                                    src={user.avatar_url}
+                                                    name={user.full_name}
+                                                    size="sm"
+                                                />
+                                                <span className="text-sm font-medium text-gray-700 flex-1 text-left">{user.full_name}</span>
+                                                {selectedUsers.includes(user.id) && <i className="ri-check-circle-fill text-purple-500"></i>}
+                                            </button>
+                                        )) : (
+                                            <div className="text-center text-gray-500 text-xs py-2">Nenhum usuário encontrado</div>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-2 bg-gray-50">
-                                    {filteredUsers.length > 0 ? filteredUsers.map(user => (
-                                        <button
-                                            key={user.id}
-                                            onClick={() => toggleUser(user.id)}
-                                            className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${selectedUsers.includes(user.id) ? 'bg-purple-100' : 'hover:bg-white'
-                                                }`}
-                                        >
-                                            <UserAvatar
-                                                src={user.avatar_url}
-                                                name={user.full_name}
-                                                size="sm"
-                                            />
-                                            <span className="text-sm font-medium text-gray-700 flex-1 text-left">{user.full_name}</span>
-                                            {selectedUsers.includes(user.id) && <i className="ri-check-circle-fill text-purple-500"></i>}
-                                        </button>
-                                    )) : (
-                                        <div className="text-center text-gray-500 text-sm py-4">Nenhum usuário encontrado</div>
-                                    )}
+
+                                {/* Groups Search */}
+                                <div>
+                                    <h3 className="text-gray-900 font-bold mb-4 flex items-center gap-2">
+                                        <i className="ri-group-line text-purple-500"></i>
+                                        Compartilhar com Grupos
+                                    </h3>
+                                    <div className="relative mb-3">
+                                        <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar grupos..."
+                                            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                                            value={searchGroup}
+                                            onChange={(e) => setSearchGroup(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="max-h-32 overflow-y-auto space-y-1 border border-gray-100 rounded-xl p-1 bg-gray-50">
+                                        {filteredGroups.length > 0 ? filteredGroups.map(group => (
+                                            <button
+                                                key={group.id}
+                                                onClick={() => toggleGroup(group.id)}
+                                                className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${selectedGroups.includes(group.id) ? 'bg-purple-100' : 'hover:bg-white'
+                                                    }`}
+                                            >
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedGroups.includes(group.id) ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                                                    <i className="ri-group-fill text-sm"></i>
+                                                </div>
+                                                <span className="text-sm font-medium text-gray-700 flex-1 text-left">{group.name}</span>
+                                                {selectedGroups.includes(group.id) && <i className="ri-check-circle-fill text-purple-500"></i>}
+                                            </button>
+                                        )) : (
+                                            <div className="text-center text-gray-500 text-xs py-2">Nenhum grupo encontrado</div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         )}
