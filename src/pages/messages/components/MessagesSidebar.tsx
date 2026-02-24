@@ -7,6 +7,7 @@ import {
     deleteGroup, deleteCommunity,
     leaveGroup, leaveCommunity
 } from '@/services/messages/groupService';
+import { useLongPress } from '../hooks/useLongPress';
 
 // ... (keep exports and imports same)
 
@@ -22,6 +23,77 @@ interface MessagesSidebarProps {
     currentUser: any;
     selectedChatId: string | null;
     onSelectChat: (id: string, type: 'direct' | 'group' | 'community') => void;
+}
+
+interface ConversationItemProps {
+    item: any;
+    isSelected: boolean;
+    onSelect: (id: string, type: any) => void;
+    onContextMenu: (e: any, item: any) => void;
+    formatTime: (date?: string) => string;
+}
+
+function ConversationItem({ item, isSelected, onSelect, onContextMenu, formatTime }: ConversationItemProps) {
+    const longPressProps = useLongPress({
+        onLongPress: (e) => {
+            // Calculate position for context menu based on the event
+            const x = e.clientX || (e.touches && e.touches[0]?.clientX);
+            const y = e.clientY || (e.touches && e.touches[0]?.clientY);
+
+            // Create a pseudo-mouse event for handleContextMenu
+            const pseudoEvent = {
+                preventDefault: () => { },
+                clientX: x,
+                clientY: y
+            } as any;
+
+            onContextMenu(pseudoEvent, item);
+        },
+        onClick: () => onSelect(item.id, item.type),
+        delay: 500
+    });
+
+    return (
+        <div
+            {...longPressProps}
+            onContextMenu={(e) => onContextMenu(e, item)}
+            className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#f5f6f6] group relative
+                ${isSelected ? 'bg-[#f0f2f5]' : ''}
+            `}
+        >
+            <div className="relative">
+                <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                    {item.avatar ? (
+                        <img src={item.avatar} className="w-full h-full object-cover" alt={item.name} />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-500">
+                            <i className={`ri-${item.type === 'direct' ? 'user' : item.type === 'group' ? 'group' : 'community'}-fill text-xl`}></i>
+                        </div>
+                    )}
+                </div>
+                {item.type === 'direct' && Math.random() > 0.7 && (
+                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                )}
+            </div>
+
+            <div className="flex-1 min-w-0 border-b border-gray-100 pb-3 group-hover:border-transparent">
+                <div className="flex justify-between items-baseline mb-0.5">
+                    <h3 className="font-medium text-[#111b21] truncate text-[17px]">{item.name}</h3>
+                    <span className="text-[12px] text-[#667781] whitespace-nowrap">{formatTime(item.time)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <p className="text-[14px] text-[#667781] truncate pr-2 flex items-center gap-1">
+                        {item.lastMessage || 'Inicie uma conversa'}
+                    </p>
+                    {item.unread > 0 && (
+                        <span className="min-w-[20px] h-5 px-1.5 bg-[#25d366] text-white text-xs font-bold rounded-full flex items-center justify-center">
+                            {item.unread}
+                        </span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }
 
 type TabType = 'all' | 'direct' | 'groups' | 'communities' | 'archived';
@@ -119,8 +191,8 @@ export default function MessagesSidebar({ currentUser, selectedChatId, onSelectC
                 setContextMenu(null);
             }
         };
-        document.addEventListener('click', handleClick);
-        return () => document.removeEventListener('click', handleClick);
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
     }, []);
 
 
@@ -293,59 +365,14 @@ export default function MessagesSidebar({ currentUser, selectedChatId, onSelectC
                         </div>
                     ) : (
                         items.map(item => (
-                            <div
+                            <ConversationItem
                                 key={`${item.type}-${item.id}`}
-                                onClick={() => onSelectChat(item.id, item.type)}
-                                className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#f5f6f6] group relative
-                                    ${selectedChatId === item.id ? 'bg-[#f0f2f5]' : ''}
-                                `}
-                            >
-                                <div className="relative">
-                                    <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
-                                        {item.avatar ? (
-                                            <img src={item.avatar} className="w-full h-full object-cover" alt={item.name} />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-gray-500">
-                                                <i className={`ri-${item.type === 'direct' ? 'user' : item.type === 'group' ? 'group' : 'community'}-fill text-xl`}></i>
-                                            </div>
-                                        )}
-                                    </div>
-                                    {/** Online Indicator (Mock) */}
-                                    {item.type === 'direct' && Math.random() > 0.7 && (
-                                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-                                    )}
-                                </div>
-
-                                <div className="flex-1 min-w-0 border-b border-gray-100 pb-3 group-hover:border-transparent">
-                                    <div className="flex justify-between items-start mb-0.5">
-                                        <h3 className="font-medium text-[#111b21] truncate text-[17px] pr-2 flex-1">{item.name}</h3>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-[12px] text-[#667781] whitespace-nowrap">{formatTime(item.time)}</span>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleContextMenu(e as any, item);
-                                                }}
-                                                className="p-1 hover:bg-gray-200 rounded-full transition-all mt-0.5 opacity-40 group-hover:opacity-100"
-                                            >
-                                                <i className="ri-more-fill text-[#667781] text-lg"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <p className="text-[14px] text-[#667781] truncate pr-2 flex items-center gap-1">
-                                            {/* Checks if sent by me */}
-                                            {/* <i className="ri-check-double-line text-blue-400 text-sm"></i> */}
-                                            {item.lastMessage || 'Inicie uma conversa'}
-                                        </p>
-                                        {item.unread > 0 && (
-                                            <span className="min-w-[20px] h-5 px-1.5 bg-[#25d366] text-white text-xs font-bold rounded-full flex items-center justify-center">
-                                                {item.unread}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
+                                item={item}
+                                isSelected={selectedChatId === item.id}
+                                onSelect={onSelectChat}
+                                onContextMenu={handleContextMenu}
+                                formatTime={formatTime}
+                            />
                         ))
                     )
                 )}
