@@ -296,7 +296,6 @@ export default function MessagesSidebar({ currentUser, selectedChatId, onSelectC
                             <div
                                 key={`${item.type}-${item.id}`}
                                 onClick={() => onSelectChat(item.id, item.type)}
-                                onContextMenu={(e) => handleContextMenu(e, item)}
                                 className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#f5f6f6] group relative
                                     ${selectedChatId === item.id ? 'bg-[#f0f2f5]' : ''}
                                 `}
@@ -318,9 +317,20 @@ export default function MessagesSidebar({ currentUser, selectedChatId, onSelectC
                                 </div>
 
                                 <div className="flex-1 min-w-0 border-b border-gray-100 pb-3 group-hover:border-transparent">
-                                    <div className="flex justify-between items-baseline mb-0.5">
-                                        <h3 className="font-medium text-[#111b21] truncate text-[17px]">{item.name}</h3>
-                                        <span className="text-[12px] text-[#667781] whitespace-nowrap">{formatTime(item.time)}</span>
+                                    <div className="flex justify-between items-start mb-0.5">
+                                        <h3 className="font-medium text-[#111b21] truncate text-[17px] pr-2 flex-1">{item.name}</h3>
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[12px] text-[#667781] whitespace-nowrap">{formatTime(item.time)}</span>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleContextMenu(e as any, item);
+                                                }}
+                                                className="p-1 hover:bg-gray-200 rounded-full transition-all mt-0.5 opacity-40 group-hover:opacity-100"
+                                            >
+                                                <i className="ri-more-fill text-[#667781] text-lg"></i>
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="flex justify-between items-center">
                                         <p className="text-[14px] text-[#667781] truncate pr-2 flex items-center gap-1">
