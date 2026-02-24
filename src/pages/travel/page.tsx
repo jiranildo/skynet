@@ -15,6 +15,7 @@ import FavoritesTab from './components/FavoritesTab';
 import OffersTab from './components/OffersTab';
 import MarketplaceTab from './components/MarketplaceTab';
 import BlogsTab from './components/BlogsTab';
+import MobileNav from '../home/components/MobileNav';
 import CreateMenu from '../../components/CreateMenu';
 import CreatePostModal from '../home/components/CreatePostModal';
 import NotificationsPanel from '../home/components/NotificationsPanel';
@@ -245,7 +246,7 @@ export default function TravelPage() {
       </div>
 
       {/* Content */}
-      <div className="pt-[112px] md:pt-[73px] pb-20 md:pb-6">
+      <div className="pt-[112px] md:pt-[73px] pb-32 md:pb-6">
         <div className="px-3 sm:px-4 md:px-6 py-4 sm:py-6">
           {renderTabContent()}
         </div>
@@ -256,112 +257,63 @@ export default function TravelPage() {
         onClose={() => setShowCreateTripModal(false)}
       />
 
-
       {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-50">
-        <div className="flex items-center justify-around px-2 py-2 sm:py-3">
-          <button
-            onClick={() => window.REACT_APP_NAVIGATE('/')}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
-          >
-            <i className="ri-home-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Início</span>
-          </button>
-
-          <button
-            onClick={handleExploreClick}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
-          >
-            <i className="ri-compass-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Explorar</span>
-          </button>
-
-          <button
-            onClick={handleCreateClick}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
-          >
-            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg flex items-center justify-center">
-              <i className="ri-add-line text-xl sm:text-2xl text-white"></i>
-            </div>
-            <span className="text-[9px] sm:text-[10px] font-medium">Criar</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setActiveTab('mytrips');
-              setMytripsSubTab('newtrip');
-            }}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
-          >
-            <i className="ri-add-box-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Nova Viagem</span>
-          </button>
-
-          <div className="relative">
-            <button
-              onClick={() => setShowMenuDropdown(!showMenuDropdown)}
-              className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
-            >
-              <i className="ri-menu-line text-xl sm:text-2xl"></i>
-              <span className="text-[9px] sm:text-[10px] font-medium">Menu</span>
-            </button>
-
-            {/* Dropdown Menu */}
-            {showMenuDropdown && (
-              <>
-                <div
-                  className="fixed inset-0 z-[70]"
-                  onClick={() => setShowMenuDropdown(false)}
-                ></div>
-                <div className="absolute bottom-full right-0 mb-2 w-auto bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[80] animate-slideUp">
-                  <div className="flex flex-col gap-2 p-3">
-                    <button
-                      onClick={() => {
-                        setActiveTab('marketplace');
-                        setShowMenuDropdown(false);
-                      }}
-                      className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-                      title="Marketplace"
-                    >
-                      <i className="ri-store-2-fill text-white text-base"></i>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setActiveTab('blogs');
-                        setShowMenuDropdown(false);
-                      }}
-                      className="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-                      title="Blogs"
-                    >
-                      <i className="ri-article-fill text-white text-base"></i>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowWallet(true);
-                        setShowMenuDropdown(false);
-                      }}
-                      className="w-10 h-10 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-                      title="Carteira"
-                    >
-                      <i className="ri-wallet-3-fill text-white text-base"></i>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowGamification(true);
-                        setShowMenuDropdown(false);
-                      }}
-                      className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-                      title="Conquistas"
-                    >
-                      <i className="ri-trophy-fill text-white text-base"></i>
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+      <MobileNav
+        activeTab={activeTab === 'mytrips' ? 'feed' : activeTab}
+        onTabChange={(tab) => {
+          if (tab === 'feed') {
+            window.REACT_APP_NAVIGATE('/');
+          } else if (tab === 'explore') {
+            setActiveTab('mytrips');
+          } else {
+            setActiveTab(tab);
+          }
+        }}
+        onCreateClick={handleCreateClick}
+        onMenuClick={() => setShowMenuDropdown(!showMenuDropdown)}
+        extraItems={[
+          ...(showMenuDropdown ? [
+            {
+              id: 'wallet',
+              icon: 'ri-wallet-3-fill',
+              label: 'Carteira',
+              onClick: () => {
+                setShowWallet(true);
+                setShowMenuDropdown(false);
+              }
+            },
+            {
+              id: 'awards',
+              icon: 'ri-trophy-fill',
+              label: 'Conquistas',
+              onClick: () => {
+                setShowGamification(true);
+                setShowMenuDropdown(false);
+              }
+            },
+            {
+              id: 'blogs',
+              icon: 'ri-article-fill',
+              label: 'Blogs',
+              onClick: () => {
+                setActiveTab('blogs');
+                setShowMenuDropdown(false);
+              }
+            }
+          ] : [
+            {
+              id: 'newtrip',
+              icon: 'ri-add-box-line',
+              label: 'Nova Viagem',
+              onClick: () => {
+                setActiveTab('mytrips');
+                setMytripsSubTab('newtrip');
+              },
+              isActive: mytripsSubTab === 'newtrip'
+            }
+          ])
+        ]}
+      />
 
       {/* Notifications Panel */}
       {showNotifications && (
