@@ -164,6 +164,14 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
             setReplyTo(null);
             scrollToBottom();
             setShowEmoji(false);
+
+            // Force viewport reset on mobile after sending
+            if (window.innerWidth < 768) {
+                setTimeout(() => {
+                    window.scrollTo(0, 0);
+                    document.body.scrollTop = 0;
+                }, 100);
+            }
         } catch (e: any) {
             console.error('Send Error:', e);
             setAlertState({
@@ -332,23 +340,36 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
         }
     };
 
+    const [viewportHeight, setViewportHeight] = useState<number | string>('100dvh');
+
     // Handle Viewport and Keyboard for mobile
     useEffect(() => {
         if (!window.visualViewport) return;
 
         const handleVisualViewportResize = () => {
             const viewport = window.visualViewport;
-            if (viewport && messagesEndRef.current) {
-                // When keyboard opens, visualViewport height shrinks
-                // We might need to adjust some spacing or scroll
-                if (viewport.height < window.innerHeight * 0.8) {
+            if (viewport) {
+                // Update height dynamically for mobile to handle virtual keyboard
+                if (window.innerWidth < 768) {
+                    setViewportHeight(viewport.height);
+                } else {
+                    setViewportHeight('100dvh');
+                }
+
+                if (messagesEndRef.current && viewport.height < window.innerHeight * 0.8) {
                     scrollToBottom();
                 }
             }
         };
 
         window.visualViewport.addEventListener('resize', handleVisualViewportResize);
-        return () => window.visualViewport?.removeEventListener('resize', handleVisualViewportResize);
+        window.visualViewport.addEventListener('scroll', handleVisualViewportResize);
+        handleVisualViewportResize();
+
+        return () => {
+            window.visualViewport?.removeEventListener('resize', handleVisualViewportResize);
+            window.visualViewport?.removeEventListener('scroll', handleVisualViewportResize);
+        };
     }, []);
 
     const handleInputBlur = () => {
@@ -360,7 +381,13 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
     };
 
     return (
-        <div className="fixed inset-0 md:relative flex flex-col h-[100dvh] md:h-screen bg-[#EFE7DD] z-[100] md:z-0 overflow-hidden">
+        <div
+            className="fixed inset-0 md:relative flex flex-col bg-[#EFE7DD] z-[100] md:z-0 overflow-hidden"
+            style={{
+                height: typeof viewportHeight === 'number' ? `${viewportHeight}px` : viewportHeight,
+                top: 0
+            }}
+        >
             {/* WhatsApp Header */}
             <div className="h-[60px] px-4 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between flex-shrink-0 z-20">
                 <div className="flex items-center gap-2 overflow-hidden">
