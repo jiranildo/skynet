@@ -35,6 +35,7 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
     const [loading, setLoading] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [sending, setSending] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     // Rich Features State
     const [showEmoji, setShowEmoji] = useState(false);
@@ -340,7 +341,19 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
         }
     };
 
-    const [viewportHeight, setViewportHeight] = useState<number | string>('100dvh');
+    // Body scroll lock for mobile
+    useEffect(() => {
+        if (window.innerWidth >= 768) return;
+
+        const originalStyle = window.getComputedStyle(document.body).overflow;
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+
+        return () => {
+            document.body.style.overflow = originalStyle;
+            document.documentElement.style.overflow = '';
+        };
+    }, []);
 
     // Handle Viewport and Keyboard for mobile
     useEffect(() => {
@@ -348,12 +361,14 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
 
         const handleVisualViewportResize = () => {
             const viewport = window.visualViewport;
-            if (viewport) {
-                // Update height dynamically for mobile to handle virtual keyboard
+            if (viewport && containerRef.current) {
+                // For mobile, we use absolute positioning and sync with offsetTop
                 if (window.innerWidth < 768) {
-                    setViewportHeight(viewport.height);
+                    containerRef.current.style.height = `${viewport.height}px`;
+                    containerRef.current.style.top = `${viewport.offsetTop}px`;
                 } else {
-                    setViewportHeight('100dvh');
+                    containerRef.current.style.height = '';
+                    containerRef.current.style.top = '';
                 }
 
                 if (messagesEndRef.current && viewport.height < window.innerHeight * 0.8) {
@@ -373,19 +388,20 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
     }, []);
 
     const handleInputBlur = () => {
-        // Reset scroll position on iOS to avoid "white gap" at bottom
+        // No longer strictly needed with offsetTop sync, but good for safety
         setTimeout(() => {
             window.scrollTo(0, 0);
-            document.body.scrollTop = 0;
         }, 100);
     };
 
     return (
         <div
-            className="fixed inset-0 md:relative flex flex-col bg-[#EFE7DD] z-[100] md:z-0 overflow-hidden"
+            ref={containerRef}
+            className="fixed md:relative flex flex-col bg-[#EFE7DD] z-[100] md:z-0 overflow-hidden"
             style={{
-                height: typeof viewportHeight === 'number' ? `${viewportHeight}px` : viewportHeight,
-                top: 0
+                position: window.innerWidth < 768 ? 'absolute' : (type === 'direct' ? 'fixed' : 'relative'),
+                inset: window.innerWidth < 768 ? '0' : (type === 'direct' ? '0' : 'unset'),
+                height: window.innerWidth < 768 ? '100%' : '100%'
             }}
         >
             {/* WhatsApp Header */}
