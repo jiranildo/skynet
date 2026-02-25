@@ -360,7 +360,7 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
     };
 
     return (
-        <div className="fixed inset-0 md:relative flex flex-col h-[100dvh] md:h-screen bg-[#EFE7DD] z-[60] md:z-0 overflow-hidden">
+        <div className="fixed inset-0 md:relative flex flex-col h-[100dvh] md:h-screen bg-[#EFE7DD] z-[100] md:z-0 overflow-hidden">
             {/* WhatsApp Header */}
             <div className="h-[60px] px-4 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between flex-shrink-0 z-20">
                 <div className="flex items-center gap-2 overflow-hidden">

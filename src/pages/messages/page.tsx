@@ -97,7 +97,7 @@ export default function MessagesPage() {
 
         {/* Sidebar: Visible on Desktop, or when no chat selected on mobile */}
         <div className={`
-            w-full md:w-80 lg:w-96 bg-white border-r border-gray-200 flex flex-col z-0
+            w-full md:w-80 lg:w-96 bg-white border-r border-gray-200 flex flex-col
             ${selectedChat ? 'hidden md:flex' : 'flex'}
         `}>
           <MessagesSidebar
@@ -109,7 +109,7 @@ export default function MessagesPage() {
 
         {/* Chat Window: Visible on Desktop, or when chat IS selected on mobile */}
         <div className={`
-            flex-1 bg-white flex flex-col z-0
+            flex-1 bg-white flex flex-col
             ${!selectedChat ? 'hidden md:flex' : 'flex'}
         `}>
           {selectedChat ? (
