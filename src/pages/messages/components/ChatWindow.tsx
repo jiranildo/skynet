@@ -332,8 +332,35 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
         }
     };
 
+    // Handle Viewport and Keyboard for mobile
+    useEffect(() => {
+        if (!window.visualViewport) return;
+
+        const handleVisualViewportResize = () => {
+            const viewport = window.visualViewport;
+            if (viewport && messagesEndRef.current) {
+                // When keyboard opens, visualViewport height shrinks
+                // We might need to adjust some spacing or scroll
+                if (viewport.height < window.innerHeight * 0.8) {
+                    scrollToBottom();
+                }
+            }
+        };
+
+        window.visualViewport.addEventListener('resize', handleVisualViewportResize);
+        return () => window.visualViewport?.removeEventListener('resize', handleVisualViewportResize);
+    }, []);
+
+    const handleInputBlur = () => {
+        // Reset scroll position on iOS to avoid "white gap" at bottom
+        setTimeout(() => {
+            window.scrollTo(0, 0);
+            document.body.scrollTop = 0;
+        }, 100);
+    };
+
     return (
-        <div className="fixed inset-0 md:relative flex flex-col h-[100dvh] md:h-screen bg-[#EFE7DD] z-[60] md:z-0">
+        <div className="fixed inset-0 md:relative flex flex-col h-[100dvh] md:h-screen bg-[#EFE7DD] z-[60] md:z-0 overflow-hidden">
             {/* WhatsApp Header */}
             <div className="h-[60px] px-4 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between flex-shrink-0 z-20">
                 <div className="flex items-center gap-2 overflow-hidden">
@@ -393,7 +420,7 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
             )}
 
             {/* Messages Area with Doodle Background */}
-            <div className="flex-1 overflow-y-auto relative scroll-smooth"
+            <div className="flex-1 overflow-y-auto relative scroll-smooth no-scrollbar"
                 style={{
                     backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")',
                     backgroundRepeat: 'repeat',
@@ -432,7 +459,7 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
             </div>
 
             {/* Input Area */}
-            <div className="pb-safe bg-[#f0f2f5] z-20">
+            <div className="pb-safe bg-[#f0f2f5] z-20 flex-shrink-0">
                 {uploading && (
                     <div className="px-4 py-2 bg-white/80 backdrop-blur-sm border-t border-gray-100 flex items-center gap-2 text-[11px] text-[#00a884]">
                         <i className="ri-loader-4-line animate-spin"></i>
@@ -498,6 +525,7 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                         <textarea
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
+                            onBlur={handleInputBlur}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey && !window.matchMedia('(max-width: 768px)').matches) {
                                     e.preventDefault();
