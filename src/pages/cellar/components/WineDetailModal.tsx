@@ -10,6 +10,7 @@ interface WineDetailModalProps {
   onDelete?: () => void;
   onConsumeBottle?: () => void;
   onAddBottle?: () => void;
+  initialIsEditing?: boolean;
 }
 
 export default function WineDetailModal({
@@ -18,9 +19,10 @@ export default function WineDetailModal({
   onUpdate,
   onDelete,
   onConsumeBottle,
-  onAddBottle
+  onAddBottle,
+  initialIsEditing = false
 }: WineDetailModalProps) {
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(initialIsEditing);
   const [editForm, setEditForm] = useState<CellarWine>(wine);
   const [isSearching, setIsSearching] = useState(false);
 

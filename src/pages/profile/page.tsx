@@ -33,6 +33,10 @@ import StoryViewer from '../home/components/StoryViewer';
 import CheckInModal from '../../components/CheckInModal';
 import { useGamification } from '../../hooks/queries/useGamification';
 import { getLevelTitle } from '../../constants/gamification';
+import { useUnreadCounts } from '@/hooks/useUnreadCounts';
+import GamificationWidget from '../../components/GamificationWidget';
+import WalletWidget from '../../components/WalletWidget';
+import CreateStoryModal from '../home/components/CreateStoryModal';
 
 type TabType = 'posts' | 'reels' | 'saved' | 'tagged';
 
@@ -40,6 +44,7 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const { userId: routeUserId } = useParams<{ userId: string }>();
   const { user: authUser, loading: authLoading, signOut } = useAuth();
+  const { unreadMessages, unreadNotifications, refreshCounts } = useUnreadCounts();
 
   const [activeTab, setActiveTab] = useState<TabType>('posts');
   const [userProfile, setUserProfile] = useState<UserType | null>(null);
@@ -82,6 +87,11 @@ export default function ProfilePage() {
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showReels, setShowReels] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showMenuDropdown, setShowMenuDropdown] = useState(false);
+  const [showGamification, setShowGamification] = useState(false);
+  const [showWallet, setShowWallet] = useState(false);
+  const [createModalTab, setCreateModalTab] = useState<'POST' | 'STORY' | 'REEL' | 'TEMPLATES' | null>(null);
+  const [editingPost, setEditingPost] = useState<any | null>(null);
   // const [showMenu, setShowMenu] = useState(false); // Removed as main menu is now settings page
   // const [showGamification, setShowGamification] = useState(false); // Removed
   // const [showWallet, setShowWallet] = useState(false); // Removed
@@ -263,10 +273,12 @@ export default function ProfilePage() {
     setShowCreateMenu(true);
   };
 
-  const handleCreateOption = (option: 'post' | 'travel' | 'cellar' | 'food') => {
-    if (option === 'post') {
-      setShowCreatePost(true);
-    } else if (option === 'travel') {
+  const handleCreateOption = (option: string) => {
+    if (option === 'post') setCreateModalTab('POST');
+    if (option === 'reel') setCreateModalTab('REEL');
+    if (option === 'story') setCreateModalTab('STORY');
+
+    if (option === 'travel') {
       window.REACT_APP_NAVIGATE('/travel');
     } else if (option === 'cellar') {
       window.REACT_APP_NAVIGATE('/cellar');
@@ -342,22 +354,20 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-40">
+      <header className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-40">
         <div className="px-3 sm:px-4 md:px-6 py-3">
           <div className="flex items-center justify-between">
             <button
               onClick={() => window.REACT_APP_NAVIGATE('/')}
               className="hover:scale-110 transition-transform"
             >
-              <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-gray-700 via-gray-600 to-gray-800 bg-clip-text text-transparent">
-                {isOwnProfile ? 'Meu Perfil' : `Perfil de @${currentProfile.username}`}
+              <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 bg-clip-text text-transparent">
+                SARA Travel
               </h1>
+              <p className="text-[10px] text-gray-600 -mt-1">where travels come true</p>
             </button>
             <HeaderActions
-              onShowNotifications={() => setShowNotifications(true)}
-              showMenu={isOwnProfile} // Still show the button
-              onShowMenu={() => navigate('/settings')} // Go to unified menu
-              menuIcon="ri-settings-3-line"
+              onShowNotifications={() => setShowNotifications(!showNotifications)}
             />
           </div>
         </div>
@@ -374,133 +384,95 @@ export default function ProfilePage() {
       {/* Content */}
       <div className="pt-[57px] md:pt-[73px] pb-20 md:pb-6">
         <div className="px-3 sm:px-4 md:px-6 max-w-5xl mx-auto">
-          {/* Profile Header */}
-          <div className="bg-white rounded-xl shadow-sm p-4 md:p-6 mb-4">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 md:gap-6">
-              <div className="relative group cursor-pointer" onClick={() => userStories.length > 0 && setShowStoryViewer(true)}>
-                <div className={`p-[3px] rounded-full ${userStories.length > 0 ? 'bg-gradient-to-tr from-yellow-400 via-orange-500 to-purple-600' : 'bg-transparent'}`}>
-                  <div className="bg-white p-[2px] rounded-full">
-                    <img
-                      src={currentProfile.avatar_url || 'https://via.placeholder.com/150'}
-                      alt="Profile"
-                      className="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover shadow-sm"
-                    />
+          {/* Page Title for Context */}
+          <div className="flex items-center justify-between mb-4 md:mb-6">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+              {isOwnProfile ? 'Meu Perfil' : `Perfil de @${currentProfile.username}`}
+            </h1>
+          </div>
+          {/* Profile Header - Social Layout */}
+          <div className="bg-white px-4 py-8 mb-6 relative">
+            <div className="flex flex-col sm:flex-row items-start gap-8 max-w-2xl mx-auto sm:mx-0">
+              {/* Left Column: Avatar & Note */}
+              <div className="flex flex-col items-center relative">
+                {/* Note Bubble */}
+                <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 animate-fade-in group-hover:opacity-100 transition-opacity">
+                  <div className="bg-white border border-gray-100 shadow-xl rounded-2xl px-4 py-2 text-xs text-gray-400 font-medium relative whitespace-nowrap before:content-[''] before:absolute before:-bottom-1.5 before:left-1/2 before:-translate-x-1/2 before:w-3 before:h-3 before:bg-white before:rotate-45 before:border-b before:border-r before:border-gray-100">
+                    Note...
                   </div>
                 </div>
-                {userStories.length > 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                    <i className="ri-play-circle-fill text-white text-4xl drop-shadow-md"></i>
+
+                <div className="relative group cursor-pointer" onClick={() => userStories.length > 0 && setShowStoryViewer(true)}>
+                  <div className={`p-[4px] rounded-full ${userStories.length > 0 ? 'bg-gradient-to-tr from-yellow-400 via-orange-500 to-purple-600' : 'bg-transparent'}`}>
+                    <div className="bg-white p-[3px] rounded-full">
+                      <img
+                        src={currentProfile.avatar_url || 'https://via.placeholder.com/150'}
+                        alt="Profile"
+                        className="w-20 h-20 sm:w-28 sm:h-28 rounded-full object-cover shadow-sm border border-black/5"
+                      />
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
-              <div className="flex-1 text-center sm:text-left">
-                <div className="flex flex-col sm:flex-row items-center gap-3 mb-3">
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">{currentProfile.full_name || currentProfile.username}</h2>
-                  <p className="text-gray-500 text-sm">@{currentProfile.username}</p>
 
-                  <div className="flex gap-2">
-                    {isOwnProfile ? (
-                      <>
-                        <button
-                          onClick={() => navigate('/settings?tab=edit')}
-                          className="bg-gray-100 text-gray-900 px-6 py-2 rounded-xl flex items-center gap-2 font-bold hover:bg-gray-200 transition-all text-sm w-full sm:w-auto justify-center"
-                        >
-                          <i className="ri-edit-line text-lg"></i>
-                          <span>Editar Perfil</span>
-                        </button>
-                        <button
-                          onClick={() => navigate('/settings')}
-                          className="bg-gray-100 text-gray-700 w-10 h-10 flex items-center justify-center rounded-xl hover:bg-gray-200 transition-all"
-                          title="Mais Opções"
-                        >
-                          <i className="ri-menu-add-line text-lg"></i>
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={handleFollowToggle}
-                        disabled={isFollowLoading}
-                        className={`px-6 py-2 rounded-xl font-semibold transition-all shadow-sm flex items-center gap-2 ${isFollowing
-                          ? 'bg-gray-100 text-gray-800 border border-gray-300 hover:bg-gray-200 hover:border-gray-400'
-                          : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white hover:from-orange-600 hover:to-pink-600 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      >
-                        {isFollowLoading ? (
-                          <i className="ri-loader-4-line animate-spin text-lg"></i>
-                        ) : isFollowing ? (
-                          <>
-                            <i className="ri-user-check-fill text-lg"></i>
-                            Seguindo
-                          </>
-                        ) : (
-                          <>
-                            <i className="ri-user-add-line text-lg"></i>
-                            Seguir
-                          </>
-                        )}
-                      </button>
-                    )}
+              {/* Right Column: User Info & Stats */}
+              <div className="flex-1 w-full sm:w-auto">
+                <div className="flex items-center gap-4 mb-4">
+                  <h1 className="text-xl font-bold tracking-tight text-gray-900">{currentProfile.username}</h1>
+                  {isOwnProfile && (
+                    <button
+                      onClick={() => navigate('/settings')}
+                      className="text-gray-900 hover:text-gray-600 transition-colors"
+                      title="Meu Espaço"
+                    >
+                      <i className="ri-settings-4-line text-2xl"></i>
+                    </button>
+                  )}
+                </div>
+
+                <div className="mb-4">
+                  <p className="font-semibold text-gray-900 text-sm">{currentProfile.full_name || currentProfile.username}</p>
+                </div>
+
+                <div className="flex items-center gap-6 mb-4 text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-gray-900">{currentProfile.posts_count || posts.length}</span>
+                    <span className="text-gray-600">posts</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 cursor-pointer hover:opacity-70 transition-opacity" onClick={handleOpenFollowers}>
+                    <span className="font-bold text-gray-900">{currentProfile.followers_count || 0}</span>
+                    <span className="text-gray-600">followers</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 cursor-pointer hover:opacity-70 transition-opacity" onClick={handleOpenFollowing}>
+                    <span className="font-bold text-gray-900">{currentProfile.following_count || 0}</span>
+                    <span className="text-gray-600">following</span>
                   </div>
                 </div>
 
-                <div className="flex justify-center sm:justify-start gap-6 mb-3">
-                  <div className="text-center">
-                    <div className="text-lg md:text-xl font-bold text-gray-900">{currentProfile.posts_count || posts.length}</div>
-                    <div className="text-xs md:text-sm text-gray-600">Posts</div>
-                  </div>
-                  <div className="text-center cursor-pointer hover:opacity-80 transition-opacity" onClick={handleOpenFollowers}>
-                    <div className="text-lg md:text-xl font-bold text-gray-900">{currentProfile.followers_count || 0}</div>
-                    <div className="text-xs md:text-sm text-gray-600">Seguidores</div>
-                  </div>
-                  <div className="text-center cursor-pointer hover:opacity-80 transition-opacity" onClick={handleOpenFollowing}>
-                    <div className="text-lg md:text-xl font-bold text-gray-900">{currentProfile.following_count || 0}</div>
-                    <div className="text-xs md:text-sm text-gray-600">Seguindo</div>
-                  </div>
-                </div>
-
-                {isOwnProfile && gamificationData && (
-                  <div className="flex justify-center sm:justify-start gap-3 mb-6 w-full max-w-sm mx-auto sm:mx-0">
-                    <div className="flex-1 bg-gradient-to-br from-orange-50 to-orange-100/50 border border-orange-200 rounded-xl p-3 sm:p-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group">
-                      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 group-hover:bg-orange-200 transition-colors">
-                        <i className="ri-trophy-line text-orange-600 text-xl sm:text-2xl"></i>
-                      </div>
-                      <div className="flex flex-col text-left justify-center">
-                        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-orange-600 mb-0.5">Nível {userLevel}</span>
-                        <span className="text-xs sm:text-sm font-extrabold text-orange-700 leading-none">{levelTitle}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-xl p-3 sm:p-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group">
-                      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-200 transition-colors">
-                        <i className="ri-wallet-3-line text-blue-600 text-xl sm:text-2xl"></i>
-                      </div>
-                      <div className="flex flex-col text-left justify-center">
-                        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-blue-600 mb-0.5">Travel Money</span>
-                        <span className="text-xs sm:text-sm font-extrabold text-blue-700 leading-none">T$ {Number(tmBalance).toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <h3 className="font-bold text-gray-900 mb-1 text-sm md:text-base">{currentProfile.full_name}</h3>
-                  <p className="text-gray-600 text-xs md:text-sm mb-2 whitespace-pre-wrap">
-                    {currentProfile.bio || 'Sem biografia ainda.'}
+                <div className="text-sm">
+                  <p className="text-gray-800 whitespace-pre-wrap flex items-center gap-2">
+                    <i className="ri-threads-line text-black"></i>
+                    <span className="text-gray-500 text-xs">@{currentProfile.username}</span>
                   </p>
+
+                  {currentProfile.bio && (
+                    <p className="text-gray-600 mt-2 mb-2 line-clamp-3">{currentProfile.bio}</p>
+                  )}
+
                   {currentProfile.website && (
                     <a
                       href={currentProfile.website.startsWith('http') ? currentProfile.website : `https://${currentProfile.website}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-500 hover:text-blue-600 font-medium text-xs md:text-sm flex items-center gap-1 justify-center sm:justify-start"
+                      className="text-blue-600 hover:underline font-medium flex items-center gap-1"
                     >
                       <i className="ri-link"></i>
                       {currentProfile.website.replace(/^https?:\/\//, '')}
                     </a>
                   )}
-                  {/* Location display based on settings */}
+
                   {currentProfile.location && currentProfile.show_location !== false && (
-                    <div className="flex items-center gap-1 text-gray-500 text-xs md:text-sm mt-1">
+                    <div className="flex items-center gap-1 text-gray-500 mt-1">
                       <i className="ri-map-pin-line"></i>
                       <span>{currentProfile.location}</span>
                     </div>
@@ -508,6 +480,64 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
+
+            {/* Action Buttons Row */}
+            <div className="grid grid-cols-2 gap-3 mt-8">
+              {isOwnProfile ? (
+                <>
+                  <button
+                    onClick={() => navigate('/settings?tab=edit')}
+                    className="bg-[#efefef] text-gray-900 px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-gray-200 transition-colors active:scale-95"
+                  >
+                    Edit Profile
+                  </button>
+                  <button
+                    onClick={() => navigate('/settings')}
+                    className="bg-[#efefef] text-gray-900 px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-gray-200 transition-colors active:scale-95"
+                  >
+                    View archive
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleFollowToggle}
+                  disabled={isFollowLoading}
+                  className={`col-span-2 py-2.5 rounded-lg font-bold text-sm transition-all ${isFollowing
+                    ? 'bg-[#efefef] text-gray-900'
+                    : 'bg-black text-white'
+                    } disabled:opacity-50 active:scale-95`}
+                >
+                  {isFollowLoading ? (
+                    <i className="ri-loader-4-line animate-spin"></i>
+                  ) : isFollowing ? 'Following' : 'Follow'}
+                </button>
+              )}
+            </div>
+
+            {/* Gamification/Wallet - Linked to specific functionality */}
+            {isOwnProfile && gamificationData && (
+              <div className="flex justify-center sm:justify-start gap-3 mt-8 w-full mx-auto sm:mx-0">
+                <div className="flex-1 bg-gradient-to-br from-orange-50 to-orange-100/50 border border-orange-200 rounded-xl p-3 sm:p-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group" onClick={() => navigate('/settings?tab=gamification')}>
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 group-hover:bg-orange-200 transition-colors">
+                    <i className="ri-trophy-line text-orange-600 text-xl sm:text-2xl"></i>
+                  </div>
+                  <div className="flex flex-col text-left justify-center">
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-orange-600 mb-0.5">Nível {userLevel}</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-orange-700 leading-none">{levelTitle}</span>
+                  </div>
+                </div>
+
+                <div className="flex-1 bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-xl p-3 sm:p-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group" onClick={() => navigate('/settings?tab=wallet')}>
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-200 transition-colors">
+                    <i className="ri-wallet-3-line text-blue-600 text-xl sm:text-2xl"></i>
+                  </div>
+                  <div className="flex flex-col text-left justify-center">
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-blue-600 mb-0.5">Travel Money</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-blue-700 leading-none">T$ {Number(tmBalance).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Privacy Check */}
@@ -632,40 +662,95 @@ export default function ProfilePage() {
       {/* Mobile Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-50">
         <div className="flex items-center justify-around px-2 py-2 sm:py-3">
-          <button onClick={() => window.REACT_APP_NAVIGATE('/')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
+          <button
+            onClick={() => window.REACT_APP_NAVIGATE('/')}
+            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+          >
             <i className="ri-home-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Início</span>
+            <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Início</span>
           </button>
-          <button className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
+
+          <button
+            onClick={() => window.REACT_APP_NAVIGATE('/explore')}
+            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+          >
             <i className="ri-compass-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Explorar</span>
+            <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Explorar</span>
           </button>
-          <button onClick={handleCreateClick} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
+
+          <button
+            onClick={handleCreateClick}
+            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+          >
             <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg flex items-center justify-center">
               <i className="ri-add-line text-xl sm:text-2xl text-white"></i>
             </div>
-            <span className="text-[9px] sm:text-[10px] font-medium">Criar</span>
+            <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Criar</span>
           </button>
-          <button onClick={() => setShowReels(true)} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
+
+          <button
+            onClick={() => window.REACT_APP_NAVIGATE('/reels')}
+            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+          >
             <i className="ri-movie-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Reels</span>
+            <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Reels</span>
           </button>
-          {isOwnProfile ? (
-            <button onClick={() => navigate('/settings')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
-              <i className="ri-user-settings-line text-xl sm:text-2xl"></i>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+              className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 ${isOwnProfile ? 'text-purple-600' : 'text-gray-600'}`}
+            >
+              <i className={`ri-menu-${isOwnProfile ? 'fill' : 'line'} text-xl sm:text-2xl`}></i>
               <span className="text-[9px] sm:text-[10px] font-medium">Menu</span>
             </button>
-          ) : (
-            // If viewing another user, maybe show 'Profile' link to go back to own profile? For now, stick to standard
-            <button onClick={() => navigate('/profile')} className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600">
-              <div className="w-6 h-6 rounded-full overflow-hidden border border-gray-300">
-                <img src={authUser?.user_metadata?.avatar_url || 'https://via.placeholder.com/30'} alt="Me" className="w-full h-full object-cover" />
-              </div>
-              <span className="text-[9px] sm:text-[10px] font-medium">Eu</span>
-            </button>
-          )}
+
+            {/* Dropdown Menu */}
+            {showMenuDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-[70]"
+                  onClick={() => setShowMenuDropdown(false)}
+                ></div>
+                <div className="absolute bottom-full right-0 mb-2 w-auto bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[80] animate-slideUp">
+                  <div className="flex flex-col gap-2 p-3">
+                    <button
+                      onClick={() => {
+                        window.REACT_APP_NAVIGATE('/travel?tab=marketplace');
+                        setShowMenuDropdown(false);
+                      }}
+                      className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                      title="Marketplace"
+                    >
+                      <i className="ri-store-2-fill text-white text-base"></i>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowWallet(true);
+                        setShowMenuDropdown(false);
+                      }}
+                      className="w-10 h-10 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                      title="Carteira"
+                    >
+                      <i className="ri-wallet-3-fill text-white text-base"></i>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowGamification(true);
+                        setShowMenuDropdown(false);
+                      }}
+                      className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                      title="Conquistas"
+                    >
+                      <i className="ri-trophy-fill text-white text-base"></i>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </nav >
+      </nav>
 
       {/* Modals */}
       {/* ProfileHubModal REMOVED - using SettingsPage */}
@@ -678,10 +763,45 @@ export default function ProfilePage() {
           />
         )
       }
-      {showNotifications && <NotificationsPanel onClose={() => setShowNotifications(false)} />}
+      {showNotifications && (
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
+          onRefresh={refreshCounts}
+        />
+      )}
       {showCreateMenu && <CreateMenu onClose={() => setShowCreateMenu(false)} onSelectOption={handleCreateOption} />}
-      {showCreatePost && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
       {showCheckIn && <CheckInModal onClose={() => setShowCheckIn(false)} />}
+      {(createModalTab || editingPost) && (
+        <CreateStoryModal
+          onClose={() => {
+            setCreateModalTab(null);
+            setEditingPost(null);
+          }}
+          onSuccess={() => {
+            setCreateModalTab(null);
+            setEditingPost(null);
+            window.location.reload();
+          }}
+          initialTab={createModalTab || 'POST'}
+          editingPost={editingPost}
+        />
+      )}
+
+      {showGamification && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowGamification(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <GamificationWidget onClose={() => setShowGamification(false)} />
+          </div>
+        </div>
+      )}
+
+      {showWallet && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowWallet(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <WalletWidget onClose={() => setShowWallet(false)} />
+          </div>
+        </div>
+      )}
 
       {showFollowersModal && (
         <UserListModal

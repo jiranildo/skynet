@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Feed from './components/Feed';
 import Stories from './components/Stories';
 import Suggestions from './components/Suggestions';
-import MobileNav from './components/MobileNav';
+
 import NotificationsPanel from './components/NotificationsPanel';
 import CreateReelModal from './components/CreateReelModal';
 import CreateStoryModal from './components/CreateStoryModal';
@@ -200,41 +200,98 @@ export default function HomePage() {
       )}
 
       {/* Mobile Navigation */}
-      <MobileNav
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onCreateClick={handleCreateClick}
-        onMenuClick={() => setShowMenuDropdown(!showMenuDropdown)}
-        extraItems={showMenuDropdown ? [
-          {
-            id: 'marketplace',
-            icon: 'ri-store-2-fill',
-            label: 'Market',
-            onClick: () => {
-              window.REACT_APP_NAVIGATE('/travel?tab=marketplace');
-              setShowMenuDropdown(false);
-            }
-          },
-          {
-            id: 'wallet',
-            icon: 'ri-wallet-3-fill',
-            label: 'Carteira',
-            onClick: () => {
-              setShowWallet(true);
-              setShowMenuDropdown(false);
-            }
-          },
-          {
-            id: 'awards',
-            icon: 'ri-trophy-fill',
-            label: 'Conquistas',
-            onClick: () => {
-              setShowGamification(true);
-              setShowMenuDropdown(false);
-            }
-          }
-        ] : []}
-      />
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 z-50">
+        <div className="flex items-center justify-around px-2 py-2 sm:py-3">
+          <button
+            onClick={() => setActiveTab('feed')}
+            className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 ${activeTab === 'feed' ? 'text-purple-600' : 'text-gray-600'}`}
+          >
+            <i className={`ri-home-${activeTab === 'feed' ? 'fill' : 'line'} text-xl sm:text-2xl`}></i>
+            <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Início</span>
+          </button>
+
+          <button
+            onClick={handleExploreClick}
+            className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 ${activeTab === 'explore' ? 'text-purple-600' : 'text-gray-600'}`}
+          >
+            <i className={`ri-compass-${activeTab === 'explore' ? 'fill' : 'line'} text-xl sm:text-2xl`}></i>
+            <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Explorar</span>
+          </button>
+
+          <button
+            onClick={handleCreateClick}
+            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+          >
+            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg flex items-center justify-center">
+              <i className="ri-add-line text-xl sm:text-2xl text-white"></i>
+            </div>
+            <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Criar</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('reels')}
+            className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 ${activeTab === 'reels' ? 'text-purple-600' : 'text-gray-600'}`}
+          >
+            <i className={`ri-movie-${activeTab === 'reels' ? 'fill' : 'line'} text-xl sm:text-2xl`}></i>
+            <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Reels</span>
+          </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+              className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+            >
+              <i className="ri-menu-line text-xl sm:text-2xl"></i>
+              <span className="text-[9px] sm:text-[10px] font-medium">Menu</span>
+            </button>
+
+            {/* Dropdown Menu */}
+            {showMenuDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-[70]"
+                  onClick={() => setShowMenuDropdown(false)}
+                ></div>
+                <div className="absolute bottom-full right-0 mb-2 w-auto bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[80] animate-slideUp">
+                  <div className="flex flex-col gap-2 p-3">
+                    <button
+                      onClick={() => {
+                        window.REACT_APP_NAVIGATE('/travel?tab=marketplace');
+                        setShowMenuDropdown(false);
+                      }}
+                      className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                      title="Marketplace"
+                    >
+                      <i className="ri-store-2-fill text-white text-base"></i>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowWallet(true);
+                        setShowMenuDropdown(false);
+                      }}
+                      className="w-10 h-10 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                      title="Carteira"
+                    >
+                      <i className="ri-wallet-3-fill text-white text-base"></i>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowGamification(true);
+                        setShowMenuDropdown(false);
+                      }}
+                      className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                      title="Conquistas"
+                    >
+                      <i className="ri-trophy-fill text-white text-base"></i>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </nav>
+
     </div>
   );
 }

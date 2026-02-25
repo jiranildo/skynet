@@ -8,7 +8,7 @@ export default function ScanBottleTab() {
 
   const handleScan = () => {
     setIsScanning(true);
-    
+
     // Simular escaneamento
     setTimeout(() => {
       setIsScanning(false);
@@ -51,15 +51,14 @@ export default function ScanBottleTab() {
       {/* Scan Mode Selection */}
       <div className="bg-white rounded-2xl p-6 border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Como deseja identificar o vinho?</h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <button
             onClick={() => setScanMode('camera')}
-            className={`p-6 rounded-xl border-2 transition-all ${
-              scanMode === 'camera'
+            className={`p-6 rounded-xl border-2 transition-all ${scanMode === 'camera'
                 ? 'border-purple-600 bg-purple-50'
                 : 'border-gray-200 hover:border-gray-300'
-            }`}
+              }`}
           >
             <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl flex items-center justify-center">
               <i className="ri-camera-line text-3xl text-white"></i>
@@ -73,11 +72,10 @@ export default function ScanBottleTab() {
               setScanMode('upload');
               fileInputRef.current?.click();
             }}
-            className={`p-6 rounded-xl border-2 transition-all ${
-              scanMode === 'upload'
+            className={`p-6 rounded-xl border-2 transition-all ${scanMode === 'upload'
                 ? 'border-purple-600 bg-purple-50'
                 : 'border-gray-200 hover:border-gray-300'
-            }`}
+              }`}
           >
             <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-red-600 to-pink-600 rounded-2xl flex items-center justify-center">
               <i className="ri-image-add-line text-3xl text-white"></i>
@@ -88,11 +86,10 @@ export default function ScanBottleTab() {
 
           <button
             onClick={() => setScanMode('manual')}
-            className={`p-6 rounded-xl border-2 transition-all ${
-              scanMode === 'manual'
+            className={`p-6 rounded-xl border-2 transition-all ${scanMode === 'manual'
                 ? 'border-purple-600 bg-purple-50'
                 : 'border-gray-200 hover:border-gray-300'
-            }`}
+              }`}
           >
             <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-orange-600 to-red-600 rounded-2xl flex items-center justify-center">
               <i className="ri-edit-line text-3xl text-white"></i>
@@ -152,7 +149,7 @@ export default function ScanBottleTab() {
       {scanMode === 'manual' && !scannedWine && (
         <div className="bg-white rounded-2xl p-6 border border-gray-200">
           <h3 className="text-xl font-bold text-gray-900 mb-4">Buscar Vinho</h3>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Vinho</label>
@@ -226,7 +223,7 @@ export default function ScanBottleTab() {
                 <div>
                   <h2 className="text-3xl font-bold text-gray-900 mb-2">{scannedWine.name}</h2>
                   <p className="text-lg text-gray-600 mb-3">{scannedWine.winery}</p>
-                  
+
                   <div className="flex items-center gap-3 mb-4">
                     <span className="px-3 py-1 bg-purple-100 text-purple-700 text-sm font-bold rounded-full">
                       {scannedWine.type}

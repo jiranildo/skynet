@@ -7,7 +7,8 @@ interface WineCardProps {
     onConsume: (e: React.MouseEvent) => void; // Keep for compatibility if needed elsewhere
     onAdd: (e: React.MouseEvent) => void;
     onEvaluate?: (e: React.MouseEvent) => void;
-    onMoreOptions?: (e: React.MouseEvent) => void;
+    onEdit?: (e: React.MouseEvent) => void;
+    onDelete?: (e: React.MouseEvent) => void;
     onToggleStatus?: (e: React.MouseEvent) => void;
     onToggleFavorite?: (e: React.MouseEvent) => void;
     isReadyToDrink?: boolean;
@@ -19,7 +20,8 @@ export default function WineCard({
     onConsume,
     onAdd,
     onEvaluate,
-    onMoreOptions,
+    onEdit,
+    onDelete,
     onToggleStatus,
     onToggleFavorite,
     isReadyToDrink = false
@@ -124,12 +126,22 @@ export default function WineCard({
                         <i className={`text-lg ri-bookmark-${wine.status === 'wishlist' ? 'fill text-purple-600' : 'line'}`}></i>
                     </button>
 
-                    {/* More Options */}
+                    {/* Edit */}
                     <button
-                        onClick={(e) => { e.stopPropagation(); onMoreOptions && onMoreOptions(e); }}
-                        className="w-[42px] h-[42px] border border-gray-400/40 rounded-full flex items-center justify-center text-gray-900 active:bg-gray-200/50 transition-colors text-xl"
+                        onClick={(e) => { e.stopPropagation(); onEdit && onEdit(e); }}
+                        className="w-[42px] h-[42px] border border-gray-400/40 rounded-full flex items-center justify-center text-gray-700 active:bg-gray-200/50 transition-colors"
+                        title="Editar"
                     >
-                        •••
+                        <i className="ri-pencil-line"></i>
+                    </button>
+
+                    {/* Delete */}
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onDelete && onDelete(e); }}
+                        className="w-[42px] h-[42px] border border-gray-400/40 rounded-full flex items-center justify-center text-red-500 active:bg-red-50 transition-colors"
+                        title="Excluir"
+                    >
+                        <i className="ri-delete-bin-line"></i>
                     </button>
                 </div>
             </div>

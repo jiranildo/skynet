@@ -18,6 +18,7 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
   const [sortBy, setSortBy] = useState('recent');
   const [wishlistFilter, setWishlistFilter] = useState('all');
   const [wishlistSortBy, setWishlistSortBy] = useState('recent');
+  const [isEditMode, setIsEditMode] = useState(false);
 
   useEffect(() => {
     loadWines();
@@ -43,6 +44,11 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
       console.error('Erro ao atualizar vinho:', error);
       alert('Erro ao atualizar vinho. Por favor, tente novamente.');
     }
+  };
+
+  const handleEditWine = (wine: CellarWine) => {
+    setSelectedWine(wine);
+    setIsEditMode(true);
   };
 
   const handleDeleteWine = async (id: string) => {
@@ -341,7 +347,8 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
                   onEvaluate={(e) => { e.stopPropagation(); setEvaluatingWine(wine); }}
                   onToggleStatus={(e) => handleToggleStatus(e, wine)}
                   onToggleFavorite={(e) => handleToggleFavorite(e, wine)}
-                  onMoreOptions={(e) => { e.stopPropagation(); setSelectedWine(wine); }}
+                  onEdit={(e) => { e.stopPropagation(); handleEditWine(wine); }}
+                  onDelete={(e) => { e.stopPropagation(); handleDeleteWine(wine.id!); }}
                 />
               );
             })}
@@ -386,7 +393,8 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
                   onAdd={(e) => handleAddBottle(e, wine)}
                   onEvaluate={(e) => { e.stopPropagation(); setEvaluatingWine(wine); }}
                   onToggleStatus={(e) => handleToggleStatus(e, wine)}
-                  onMoreOptions={(e) => { e.stopPropagation(); setSelectedWine(wine); }}
+                  onEdit={(e) => { e.stopPropagation(); handleEditWine(wine); }}
+                  onDelete={(e) => { e.stopPropagation(); handleDeleteWine(wine.id!); }}
                 />
               ))}
             </div>
@@ -399,7 +407,8 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
         selectedWine && (
           <WineDetailModal
             wine={selectedWine}
-            onClose={() => setSelectedWine(null)}
+            onClose={() => { setSelectedWine(null); setIsEditMode(false); }}
+            initialIsEditing={isEditMode}
             onUpdate={(updates) => selectedWine.id && handleUpdateWine(selectedWine.id, updates)}
             onDelete={() => selectedWine.id && handleDeleteWine(selectedWine.id)}
             onConsumeBottle={() => selectedWine && handleConsumeBottle({ stopPropagation: () => { } } as any, selectedWine)}
