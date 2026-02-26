@@ -1,7 +1,8 @@
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/services/supabase';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import { AlertModal } from '@/components/AlertModal';
 import { getMessages, sendMessage, uploadAttachment, deleteMessage, updateLastSeen, getChatHeaderInfo, ChatMessage } from '@/services/messages/chatService';
@@ -17,6 +18,19 @@ interface ChatWindowProps {
     type: 'direct' | 'group' | 'community';
     onBack: () => void;
 }
+
+const isSameDay = (d1: Date, d2: Date) => {
+    return d1.getFullYear() === d2.getFullYear() &&
+        d1.getMonth() === d2.getMonth() &&
+        d1.getDate() === d2.getDate();
+};
+
+const formatDateSeparator = (date: string) => {
+    const d = new Date(date);
+    if (isToday(d)) return 'Hoje';
+    if (isYesterday(d)) return 'Ontem';
+    return format(d, 'd MMMM yyyy', { locale: ptBR });
+};
 
 const realtimeManager = new RealtimeManager();
 
@@ -405,12 +419,13 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
             }}
         >
             {/* WhatsApp Header */}
-            <div className="h-[60px] px-4 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between flex-shrink-0 z-20">
-                <div className="flex items-center gap-2 overflow-hidden">
-                    <button onClick={onBack} className="md:hidden p-2 -ml-2 text-[#00a884] flex-shrink-0">
-                        <i className="ri-arrow-left-line text-2xl"></i>
+            <div className="h-[60px] px-2 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between flex-shrink-0 z-20">
+                <div className="flex items-center gap-1 overflow-hidden">
+                    <button onClick={onBack} className="flex items-center text-[#00a884] flex-shrink-0">
+                        <i className="ri-arrow-left-s-line text-3xl"></i>
+                        <span className="text-[16px] -ml-1">221</span>
                     </button>
-                    <div className="flex items-center gap-3 cursor-pointer overflow-hidden" onClick={handleHeaderClick}>
+                    <div className="flex items-center gap-2 cursor-pointer overflow-hidden" onClick={handleHeaderClick}>
                         {/* Avatar & Info */}
                         <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex-shrink-0">
                             {headerInfo?.avatar ? (
@@ -425,18 +440,18 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                             <h3 className="font-semibold text-[#111b21] text-[16px] leading-tight truncate">
                                 {headerInfo?.name || 'Carregando...'}
                             </h3>
-                            <p className="text-[12px] text-[#667781] leading-none mt-0.5 truncate max-w-[200px]">
-                                {headerInfo?.subtitle || ''}
+                            <p className="text-[11px] text-[#667781] leading-none mt-0.5 truncate">
+                                {type === 'direct' ? 'toque para dados do contato' : (headerInfo?.subtitle || '')}
                             </p>
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-4 text-[#54656f] flex-shrink-0">
-                    <button onClick={handleHeaderClick}>
-                        <i className="ri-information-line text-xl"></i>
+                <div className="flex items-center gap-4 text-[#00a884] flex-shrink-0 pr-2">
+                    <button onClick={handleVideoCall}>
+                        <i className="ri-video-chat-line text-[22px]"></i>
                     </button>
                     <button onClick={handleVoiceCall}>
-                        <i className="ri-phone-line text-xl"></i>
+                        <i className="ri-phone-line text-[22px]"></i>
                     </button>
                 </div>
             </div>
@@ -467,35 +482,48 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                 style={{
                     backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")',
                     backgroundRepeat: 'repeat',
-                    backgroundSize: '400px'
+                    backgroundSize: '400px',
+                    backgroundColor: '#efe7dd'
                 }}>
-                <div className="absolute inset-0 bg-[#EFE7DD] opacity-90 pointer-events-none sticky top-0"></div>
+                <div className="absolute inset-0 bg-[#EFE7DD] opacity-40 pointer-events-none sticky top-0"></div>
 
-                <div className="relative z-10 flex flex-col gap-1 p-4 pb-4">
+                <div className="relative z-10 flex flex-col gap-[2px] p-2 pb-4">
                     {loading ? (
                         <div className="flex justify-center py-10"><span className="loading loading-spinner text-[#00a884]"></span></div>
                     ) : (
-                        messages.map((msg) => (
-                            <MessageBubble
-                                key={msg.id}
-                                message={msg}
-                                type={type}
-                                currentUserId={currentUser?.id}
-                                onDelete={(id) => setMessages(prev => prev.filter(m => m.id !== id))}
-                                onReply={(msg) => setReplyTo(msg)}
-                                onConfirmDelete={() => {
-                                    setConfirmModal({
-                                        isOpen: true,
-                                        title: 'Excluir mensagem?',
-                                        message: 'Deseja apagar esta mensagem?',
-                                        onConfirm: async () => {
-                                            await deleteMessage(msg.id);
-                                            setMessages(prev => prev.filter(m => m.id !== msg.id));
-                                        }
-                                    });
-                                }}
-                            />
-                        ))
+                        messages.map((msg, index) => {
+                            const showDateSeparator = index === 0 || !isSameDay(new Date(messages[index - 1].created_at), new Date(msg.created_at));
+
+                            return (
+                                <div key={msg.id} className="contents">
+                                    {showDateSeparator && (
+                                        <div className="flex justify-center my-4 sticky top-2 z-20">
+                                            <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg text-[12px] text-[#54656f] shadow-sm uppercase font-medium">
+                                                {formatDateSeparator(msg.created_at)}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <MessageBubble
+                                        message={msg}
+                                        type={type}
+                                        currentUserId={currentUser?.id}
+                                        onDelete={(id) => setMessages(prev => prev.filter(m => m.id !== id))}
+                                        onReply={(msg) => setReplyTo(msg)}
+                                        onConfirmDelete={() => {
+                                            setConfirmModal({
+                                                isOpen: true,
+                                                title: 'Excluir mensagem?',
+                                                message: 'Deseja apagar esta mensagem?',
+                                                onConfirm: async () => {
+                                                    await deleteMessage(msg.id);
+                                                    setMessages(prev => prev.filter(m => m.id !== msg.id));
+                                                }
+                                            });
+                                        }}
+                                    />
+                                </div>
+                            );
+                        })
                     )}
                     <div ref={messagesEndRef} className="h-4" />
                 </div>
@@ -524,47 +552,38 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                     </div>
                 )}
 
-                <div className="min-h-[62px] px-3 py-2 flex items-end gap-2">
-                    <div className="flex items-center gap-1 mb-1.5 text-[#54656f]">
-                        <button onClick={() => setShowEmoji(!showEmoji)} className="p-1 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0">
-                            <i className={`ri-emotion-line text-2xl ${showEmoji ? 'text-[#00a884]' : ''}`}></i>
+                <div className="min-h-[62px] px-2 py-2 flex items-center gap-2">
+                    <div className="flex items-center gap-1 text-[#54656f]">
+                        <button onClick={() => setShowAttachMenu(!showAttachMenu)} className="p-2 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0">
+                            <i className="ri-add-line text-3xl"></i>
                         </button>
 
-                        <div className="relative flex-shrink-0">
-                            <button
-                                onClick={() => setShowAttachMenu(!showAttachMenu)}
-                                className={`p-1 hover:bg-gray-200 rounded-full transition-colors ${showAttachMenu ? 'bg-gray-200' : ''}`}
-                            >
-                                <i className={`ri-add-line text-2xl transition-transform ${showAttachMenu ? 'rotate-45' : ''}`}></i>
-                            </button>
-
-                            {showAttachMenu && (
-                                <>
-                                    <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)}></div>
-                                    <div className="absolute bottom-14 left-0 z-20 flex flex-col gap-3 mb-2 animate-scaleIn origin-bottom-left">
-                                        {[
-                                            { icon: 'ri-map-pin-line', color: 'bg-green-500', label: 'Localização', action: handleSendLocation },
-                                            { icon: 'ri-camera-fill', color: 'bg-pink-500', label: 'Câmera', action: () => setShowCamera(true) },
-                                            { icon: 'ri-movie-line', color: 'bg-red-500', label: 'Vídeo', action: () => setShowVideoCapture(true) },
-                                            { icon: 'ri-image-fill', color: 'bg-purple-500', label: 'Fotos', action: () => fileInputRef.current?.click() }
-                                        ].map((item, idx) => (
-                                            <button key={idx} onClick={item.action} className="flex items-center gap-3 group">
-                                                <div className={`w-12 h-12 rounded-full ${item.color} flex items-center justify-center text-white shadow-lg hover:brightness-90 transition-all`}>
-                                                    <i className={`${item.icon} text-xl`}></i>
-                                                </div>
-                                                <span className="bg-[#111b21] text-white text-[12px] px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 md:opacity-0 transition-opacity whitespace-nowrap">
-                                                    {item.label}
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
-                        </div>
+                        {showAttachMenu && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)}></div>
+                                <div className="absolute bottom-14 left-0 z-20 flex flex-col gap-3 mb-2 animate-scaleIn origin-bottom-left">
+                                    {[
+                                        { icon: 'ri-map-pin-line', color: 'bg-green-500', label: 'Localização', action: handleSendLocation },
+                                        { icon: 'ri-camera-fill', color: 'bg-pink-500', label: 'Câmera', action: () => setShowCamera(true) },
+                                        { icon: 'ri-movie-line', color: 'bg-red-500', label: 'Vídeo', action: () => setShowVideoCapture(true) },
+                                        { icon: 'ri-image-fill', color: 'bg-purple-500', label: 'Fotos', action: () => fileInputRef.current?.click() }
+                                    ].map((item, idx) => (
+                                        <button key={idx} onClick={item.action} className="flex items-center gap-3 group">
+                                            <div className={`w-12 h-12 rounded-full ${item.color} flex items-center justify-center text-white shadow-lg hover:brightness-90 transition-all`}>
+                                                <i className={`${item.icon} text-xl`}></i>
+                                            </div>
+                                            <span className="bg-[#111b21] text-white text-[12px] px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 md:opacity-0 transition-opacity whitespace-nowrap">
+                                                {item.label}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                         <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
                     </div>
 
-                    <div className="flex-1 bg-white rounded-[20px] px-3 py-1.5 mb-1.5 shadow-sm border border-transparent focus-within:border-gray-100 flex flex-col justify-center min-h-[40px]">
+                    <div className="flex-1 bg-white rounded-[24px] px-3 py-1.5 shadow-sm border border-gray-200 flex items-center gap-2">
                         <textarea
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
@@ -576,24 +595,32 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                                 }
                             }}
                             placeholder="Mensagem"
-                            className="w-full bg-transparent border-none p-0 focus:ring-0 text-[15px] max-h-[120px] resize-none text-[#111b21] placeholder:text-[#54656f] leading-[20px]"
+                            className="flex-1 bg-transparent border-none p-0 focus:ring-0 text-[16px] max-h-[120px] resize-none text-[#111b21] placeholder:text-[#8696a0] leading-[22px]"
                             rows={1}
-                            style={{ height: 'auto', minHeight: '20px' }}
+                            style={{ height: 'auto', minHeight: '22px' }}
                             onInput={(e: any) => {
                                 e.target.style.height = 'auto';
                                 e.target.style.height = e.target.scrollHeight + 'px';
                             }}
                         />
+                        <button onClick={() => setShowEmoji(!showEmoji)} className="text-[#8696a0] hover:text-[#54656f]">
+                            <i className="ri-sticky-note-line text-2xl"></i>
+                        </button>
                     </div>
 
-                    <div className="mb-1.5 flex-shrink-0">
-                        {inputText.trim() ? (
+                    <div className="flex items-center gap-1 text-[#54656f]">
+                        {!inputText.trim() ? (
+                            <>
+                                <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                                    <i className="ri-camera-line text-2xl"></i>
+                                </button>
+                                <button className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                                    <i className="ri-mic-line text-2xl"></i>
+                                </button>
+                            </>
+                        ) : (
                             <button onClick={() => handleSend()} className="w-11 h-11 rounded-full bg-[#00a884] flex items-center justify-center text-white shadow-md hover:bg-[#008f6f] transition-all active:scale-95">
                                 {sending ? <i className="ri-loader-4-line animate-spin text-xl"></i> : <i className="ri-send-plane-fill text-xl"></i>}
-                            </button>
-                        ) : (
-                            <button className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#54656f] shadow-sm hover:bg-gray-50 transition-all active:scale-95">
-                                <i className="ri-mic-fill text-xl"></i>
                             </button>
                         )}
                     </div>
@@ -696,38 +723,42 @@ function MessageBubble({
                 {/* Bubble */}
                 <div
                     className={`
-                        px-2 pt-1 pb-1.5 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-[14.2px] leading-[19px] text-[#111b21] relative rounded-[7.5px]
+                        px-2 pt-1 pb-1 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-[15px] leading-[20px] text-[#111b21] relative rounded-[8px]
                         ${isMine
-                            ? 'bg-[#d9fdd3] rounded-tr-none ml-10'
-                            : 'bg-white rounded-tl-none mr-10'
+                            ? 'bg-[#d9fdd3] rounded-tr-none ml-6'
+                            : 'bg-white rounded-tl-none mr-6'
                         }
                     `}
                     onContextMenu={handleContextMenu}
                 >
                     {/* Tiny Triangle SVG for bubble tail */}
                     {isMine ? (
-                        <svg viewBox="0 0 8 13" height="13" width="8" className="absolute -right-[7px] top-0 text-[#d9fdd3] fill-current"><path d="M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z"></path></svg>
+                        <svg viewBox="0 0 8 13" height="13" width="8" className="absolute -right-[7px] top-0 text-[#d9fdd3] fill-current">
+                            <path d="M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z"></path>
+                        </svg>
                     ) : (
-                        <svg viewBox="0 0 8 13" height="13" width="8" className="absolute -left-[7px] top-0 text-white fill-current"><path d="M1.533 3.568L8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z"></path></svg>
+                        <svg viewBox="0 0 8 13" height="13" width="8" className="absolute -left-[7px] top-0 text-white fill-current">
+                            <path d="M1.533 3.568L8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z"></path>
+                        </svg>
                     )}
 
                     {/* Sender Name in groups */}
                     {!isMine && (type === 'group' || type === 'community') && (
-                        <p className={`text-[12.5px] font-bold mb-0.5 px-0.5 ${['text-orange-600', 'text-pink-600', 'text-purple-600', 'text-blue-600', 'text-emerald-600'][message.sender_id.charCodeAt(0) % 5]}`}>
+                        <p className={`text-[13px] font-bold mb-0.5 px-0.5 ${['text-orange-600', 'text-pink-600', 'text-purple-600', 'text-blue-600', 'text-emerald-600'][message.sender_id.charCodeAt(0) % 5]}`}>
                             {message.sender?.full_name || message.sender?.username}
                         </p>
                     )}
 
                     {/* Reply Context */}
                     {message.reply_to && (
-                        <div className="bg-black/5 rounded-[6px] border-l-[4px] border-[#00a884] p-2 mb-1 text-[12px] opacity-80">
-                            <p className="font-bold text-[#00a884] mb-0.5">{message.reply_to.sender?.username}</p>
-                            <p className="text-[#54656f] line-clamp-2">{message.reply_to.content}</p>
+                        <div className="bg-black/5 rounded-[6px] border-l-[4px] border-[#00a884] p-2 mb-1 text-[12.5px] opacity-80 overflow-hidden">
+                            <p className="font-bold text-[#00a884] mb-0.5 truncate">{message.reply_to.sender?.username}</p>
+                            <p className="text-[#54656f] line-clamp-1">{message.reply_to.content}</p>
                         </div>
                     )}
 
                     {/* Content */}
-                    <div className="px-0.5 break-words whitespace-pre-wrap">
+                    <div className="px-0.5 relative">
                         {message.type === 'image' || (message.content && (message.content.endsWith('.webm') || message.content.endsWith('.mp4'))) ? (
                             <div className="mt-0.5 mb-1">
                                 {(message.content.endsWith('.webm') || message.content.endsWith('.mp4')) ? (
@@ -737,20 +768,25 @@ function MessageBubble({
                                 )}
                             </div>
                         ) : (
-                            <div className="inline-block align-middle pb-1">{message.content}</div>
+                            <div className="inline-block align-middle pb-[18px] break-words whitespace-pre-wrap max-w-full">
+                                {message.content}
+                                <span className="opacity-0 ml-16">00:00</span> {/* Spacer for timestamp */}
+                            </div>
                         )}
-                    </div>
 
-                    {/* Metadata (Time & Check) */}
-                    <div className="flex items-center justify-end gap-1 -mt-2 float-right ml-2 h-4">
-                        <span className="text-[10px] text-[#667781] leading-none">
-                            {format(new Date(message.created_at), 'HH:mm')}
-                        </span>
-                        {isMine && (
-                            <span className={message.read_at ? 'text-[#53bdeb]' : 'text-[#8696a0]'}>
-                                <svg viewBox="0 0 16 15" width="16" height="15" className="fill-current"><path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.283a.32.32 0 0 0 .397.04l.056-.041 6.186-7.79a.319.319 0 0 0-.067-.502l.613-.343zM4.61 7.227l-.482-.372a.365.365 0 0 0-.51.063L.266 11.238a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.283a.32.32 0 0 0 .397.04l.056-.041 3.518-3.085a.319.319 0 0 0 .022.257l.64-.176z"></path></svg>
+                        {/* Metadata (Time & Check) - Absolute Position Bottom Right */}
+                        <div className="absolute right-0 bottom-[-2px] flex items-center gap-1 h-5 px-0.5">
+                            <span className="text-[11px] text-[#667781] leading-none mb-0.5">
+                                {format(new Date(message.created_at), 'HH:mm')}
                             </span>
-                        )}
+                            {isMine && (
+                                <span className={message.read_at ? 'text-[#53bdeb]' : 'text-[#8696a0]'}>
+                                    <svg viewBox="0 0 16 15" width="16" height="15" className="fill-current">
+                                        <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.283a.32.32 0 0 0 .397.04l.056-.041 6.186-7.79a.319.319 0 0 0-.067-.502l.613-.343zM4.61 7.227l-.482-.372a.365.365 0 0 0-.51.063L.266 11.238a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.283a.32.32 0 0 0 .397.04l.056-.041 3.518-3.085a.319.319 0 0 0 .022.257l.64-.176z"></path>
+                                    </svg>
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
 
