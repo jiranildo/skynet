@@ -493,9 +493,10 @@ export default function ProfilePage() {
                   </button>
                   <button
                     onClick={() => navigate('/settings')}
-                    className="bg-[#efefef] text-gray-900 px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-gray-200 transition-colors active:scale-95"
+                    className="bg-[#efefef] text-gray-900 px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-gray-200 transition-colors active:scale-95 flex items-center justify-center gap-2"
                   >
-                    View archive
+                    <i className="ri-settings-4-line text-lg"></i>
+                    Meu Espaço
                   </button>
                 </>
               ) : (

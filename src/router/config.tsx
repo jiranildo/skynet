@@ -8,6 +8,7 @@ const TravelPage = lazy(() => import('../pages/travel/page'));
 const DrinksFoodPage = lazy(() => import('../pages/drinks-food/page'));
 const CellarPage = lazy(() => import('../pages/cellar/page'));
 const AdminPage = lazy(() => import('../pages/admin/page'));
+const AgentPage = lazy(() => import('../pages/agent/page'));
 // ... imports
 const AdminLoginPage = lazy(() => import('../pages/admin-login/page'));
 const LoginPage = lazy(() => import('../pages/auth/login'));
@@ -56,6 +57,10 @@ const routes: RouteObject[] = [
   {
     path: '/admin',
     element: <AdminPage />,
+  },
+  {
+    path: '/agent',
+    element: <AgentPage />,
   },
   {
     path: '/admin/login',

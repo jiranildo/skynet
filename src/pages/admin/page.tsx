@@ -10,7 +10,7 @@ interface User {
   name: string;
   email: string;
   avatar: string;
-  role: 'user' | 'business' | 'admin';
+  role: 'user' | 'business' | 'admin' | 'agent';
   verified: boolean;
   joinedAt: string;
   stats: {

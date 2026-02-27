@@ -60,3 +60,27 @@ export async function isUserAdmin(user: User | null): Promise<boolean> {
     return false;
   }
 }
+
+export async function isUserAgent(user: User | null): Promise<boolean> {
+  if (!user) return false;
+
+  const appRole = String(user.app_metadata?.role ?? '').toLowerCase();
+  const userRole = String(user.user_metadata?.role ?? '').toLowerCase();
+
+  if (appRole === 'agent' || userRole === 'agent') return true;
+
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (error || !data) return false;
+
+    const role = String((data as any).role ?? '').toLowerCase();
+    return role === 'agent';
+  } catch {
+    return false;
+  }
+}

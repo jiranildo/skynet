@@ -230,14 +230,21 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
             setUploading(false);
             setShowAttachMenu(false); // Close menu if open
 
-            // Send Image Message
+            // Determine type
+            let fileType: 'image' | 'video' | 'file' = 'file';
+            if (file.type.startsWith('image/')) fileType = 'image';
+            else if (file.type.startsWith('video/')) fileType = 'video';
+
+            // Send Message with Caption
             await sendMessage({
                 content: publicUrl,
-                type: 'image',
+                type: fileType,
+                caption: inputText.trim() || undefined,
                 replyToId: replyTo?.id,
                 ...(type === 'group' ? { groupId: chatId } : type === 'community' ? { communityId: chatId } : { conversationId: chatId })
             });
 
+            setInputText(''); // Clear input after sending with attachment
             setReplyTo(null);
             scrollToBottom();
         } catch (error) {
@@ -263,9 +270,12 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
             await sendMessage({
                 content: publicUrl,
                 type: 'image',
+                caption: inputText.trim() || undefined,
                 replyToId: replyTo?.id,
                 ...(type === 'group' ? { groupId: chatId } : type === 'community' ? { communityId: chatId } : { conversationId: chatId })
             });
+
+            setInputText(''); // Clear input
             scrollToBottom();
         } catch (error) {
             console.error(error);
@@ -343,10 +353,13 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
 
             await sendMessage({
                 content: publicUrl,
-                type: 'image',
+                type: 'video',
+                caption: inputText.trim() || undefined,
                 replyToId: replyTo?.id,
                 ...(type === 'group' ? { groupId: chatId } : type === 'community' ? { communityId: chatId } : { conversationId: chatId })
             });
+
+            setInputText(''); // Clear input
             scrollToBottom();
         } catch (error) {
             console.error(error);
@@ -759,20 +772,41 @@ function MessageBubble({
 
                     {/* Content */}
                     <div className="px-0.5 relative">
-                        {message.type === 'image' || (message.content && (message.content.endsWith('.webm') || message.content.endsWith('.mp4'))) ? (
+                        {/* Media rendering (Image/Video) */}
+                        {(message.type === 'image' || message.type === 'video' || (message.content && (message.content.endsWith('.webm') || message.content.endsWith('.mp4')))) && (
                             <div className="mt-0.5 mb-1">
-                                {(message.content.endsWith('.webm') || message.content.endsWith('.mp4')) ? (
+                                {(message.type === 'video' || message.content.endsWith('.webm') || message.content.endsWith('.mp4')) ? (
                                     <video src={message.content} controls className="rounded-lg max-h-[300px] w-full bg-black/5" />
                                 ) : (
                                     <img src={message.content} className="rounded-lg max-h-[350px] w-full object-cover" loading="lazy" />
                                 )}
                             </div>
-                        ) : (
-                            <div className="inline-block align-middle pb-[18px] break-words whitespace-pre-wrap max-w-full">
-                                {message.content}
-                                <span className="opacity-0 ml-16">00:00</span> {/* Spacer for timestamp */}
+                        )}
+
+                        {/* File rendering */}
+                        {message.type === 'file' && (
+                            <div className="flex items-center gap-3 bg-black/5 rounded-lg p-3 mb-1 min-w-[200px]">
+                                <div className="w-10 h-10 rounded bg-[#00a884] flex items-center justify-center text-white">
+                                    <i className="ri-file-text-line text-xl"></i>
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="text-[14px] font-medium truncate">Documento</p>
+                                    <a href={message.content} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[#00a884] hover:underline">
+                                        Abrir arquivo
+                                    </a>
+                                </div>
                             </div>
                         )}
+
+                        {/* Text / Caption Rendering */}
+                        <div className="inline-block align-middle pb-[18px] break-words whitespace-pre-wrap max-w-full">
+                            {message.type === 'text' ? (
+                                message.content
+                            ) : (
+                                message.caption
+                            )}
+                            <span className="opacity-0 ml-16">00:00</span> {/* Spacer for timestamp */}
+                        </div>
 
                         {/* Metadata (Time & Check) - Absolute Position Bottom Right */}
                         <div className="absolute right-0 bottom-[-2px] flex items-center gap-1 h-5 px-0.5">

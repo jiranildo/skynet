@@ -13,6 +13,7 @@ export interface User {
   following_count?: number;
   posts_count?: number;
   privacy_setting?: 'public' | 'private' | 'friends';
+  role?: 'user' | 'business' | 'admin' | 'agent';
   // Settings
   location?: string;
   language?: string;

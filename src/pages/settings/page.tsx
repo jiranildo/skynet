@@ -100,24 +100,96 @@ export default function SettingsPage() {
         {
             title: 'Inteligência',
             items: [
-                { id: 'sara', label: 'SARA AI', icon: 'ri-magic-line', color: 'text-fuchsia-500', bg: 'bg-fuchsia-50', desc: 'Sua assistente pessoal' },
+                {
+                    id: 'sara',
+                    label: 'SARA AI',
+                    icon: 'ri-magic-line',
+                    color: 'text-fuchsia-600',
+                    bg: 'bg-fuchsia-100',
+                    border: 'border-fuchsia-200',
+                    gradient: 'from-fuchsia-50 to-fuchsia-100/50',
+                    desc: 'Sua assistente pessoal'
+                },
             ]
         },
         {
             title: 'Conta',
             items: [
-                { id: 'edit', label: 'Editar Perfil', icon: 'ri-user-edit-line', color: 'text-blue-500', bg: 'bg-blue-50', desc: 'Dados pessoais e bio' },
-                { id: 'settings', label: 'Configurações', icon: 'ri-settings-3-line', color: 'text-gray-500', bg: 'bg-gray-50', desc: 'Preferências do app' },
-                { id: 'wallet', label: 'Carteira', icon: 'ri-wallet-3-line', color: 'text-yellow-500', bg: 'bg-yellow-50', desc: 'Pagamentos e cartões' },
+                {
+                    id: 'edit',
+                    label: 'Editar Perfil',
+                    icon: 'ri-user-edit-line',
+                    color: 'text-blue-600',
+                    bg: 'bg-blue-100',
+                    border: 'border-blue-200',
+                    gradient: 'from-blue-50 to-blue-100/50',
+                    desc: 'Dados pessoais e bio'
+                },
+                {
+                    id: 'settings',
+                    label: 'Configurações',
+                    icon: 'ri-settings-3-line',
+                    color: 'text-gray-600',
+                    bg: 'bg-gray-100',
+                    border: 'border-gray-200',
+                    gradient: 'from-gray-50 to-gray-100/50',
+                    desc: 'Preferências do app'
+                },
+                {
+                    id: 'wallet',
+                    label: 'Carteira',
+                    icon: 'ri-wallet-3-line',
+                    color: 'text-yellow-600',
+                    bg: 'bg-yellow-100',
+                    border: 'border-yellow-200',
+                    gradient: 'from-yellow-50 to-yellow-100/50',
+                    desc: 'Pagamentos e cartões'
+                },
             ]
         },
         {
             title: 'Vida & Bem-Estar',
             items: [
-                { id: 'travel', label: 'Viagens', icon: 'ri-plane-line', color: 'text-orange-500', bg: 'bg-orange-50', desc: 'Passaportes e roteiros' },
-                { id: 'health', label: 'Saúde', icon: 'ri-heart-pulse-line', color: 'text-red-500', bg: 'bg-red-50', desc: 'Dados médicos e seguro' },
-                { id: 'documents', label: 'Documentos', icon: 'ri-file-user-line', color: 'text-green-500', bg: 'bg-green-50', desc: 'Docs digitalizados' },
-                { id: 'gamification', label: 'Conquistas', icon: 'ri-trophy-line', color: 'text-purple-500', bg: 'bg-purple-50', desc: 'Nível e medalhas' },
+                {
+                    id: 'travel',
+                    label: 'Viagens',
+                    icon: 'ri-plane-line',
+                    color: 'text-orange-600',
+                    bg: 'bg-orange-100',
+                    border: 'border-orange-200',
+                    gradient: 'from-orange-50 to-orange-100/50',
+                    desc: 'Passaportes e roteiros'
+                },
+                {
+                    id: 'health',
+                    label: 'Saúde',
+                    icon: 'ri-heart-pulse-line',
+                    color: 'text-red-600',
+                    bg: 'bg-red-100',
+                    border: 'border-red-200',
+                    gradient: 'from-red-50 to-red-100/50',
+                    desc: 'Dados médicos e seguro'
+                },
+                {
+                    id: 'documents',
+                    label: 'Documentos',
+                    icon: 'ri-file-user-line',
+                    color: 'text-green-600',
+                    bg: 'bg-green-100',
+                    border: 'border-green-200',
+                    gradient: 'from-green-50 to-green-100/50',
+                    desc: 'Docs digitalizados'
+                },
+                {
+                    id: 'gamification',
+                    label: 'Conquistas',
+                    icon: 'ri-trophy-line',
+                    color: 'text-purple-600',
+                    bg: 'bg-purple-100',
+                    border: 'border-purple-200',
+                    gradient: 'from-purple-50 to-purple-100/50',
+                    desc: 'Nível e medalhas'
+                },
             ]
         }
     ];
@@ -188,31 +260,33 @@ export default function SettingsPage() {
                                             <button
                                                 key={item.id}
                                                 onClick={() => handleTabChange(item.id)}
-                                                className={`w-full flex items-center gap-4 p-3 md:p-3 rounded-2xl transition-all duration-200 group text-left ${activeTab === item.id
-                                                    ? 'bg-white shadow-sm shadow-gray-200 translate-x-1 ring-1 ring-gray-100'
-                                                    : 'hover:bg-white hover:shadow-sm'
+                                                className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all duration-300 group text-left border mb-2 ${activeTab === item.id
+                                                    ? `bg-gradient-to-br ${item.gradient} ${item.border} shadow-md scale-[1.02] -translate-y-0.5`
+                                                    : `bg-white border-transparent hover:border-gray-100 hover:bg-gray-50/50`
                                                     }`}
                                             >
-                                                <div className={`w-12 h-12 md:w-10 md:h-10 rounded-2xl md:rounded-xl flex items-center justify-center transition-all duration-300 shrink-0 ${activeTab === item.id
-                                                    ? `${item.bg} scale-110 shadow-lg shadow-${item.color.split('-')[1]}-200`
-                                                    : `bg-white shadow-sm group-hover:${item.bg} group-hover:scale-110`
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 shrink-0 ${activeTab === item.id
+                                                    ? `${item.bg} shadow-sm`
+                                                    : `bg-gray-50 group-hover:${item.bg}`
                                                     }`}>
-                                                    <i className={`${item.icon} text-2xl md:text-lg transition-colors duration-300 ${activeTab === item.id || 'group-hover:' + item.color ? item.color : 'text-gray-400'
+                                                    <i className={`${item.icon} text-lg transition-colors duration-300 ${activeTab === item.id || 'group-hover:' + item.color ? item.color : 'text-gray-400'
                                                         }`}></i>
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <span className={`block font-bold text-base md:text-sm ${activeTab === item.id ? 'text-gray-900' : 'text-gray-700'
+                                                    <span className={`block font-extrabold text-sm tracking-tight ${activeTab === item.id ? 'text-gray-900' : 'text-gray-700'
                                                         }`}>
                                                         {item.label}
                                                     </span>
-                                                    <span className="block text-xs text-gray-400 truncate md:hidden lg:block">
+                                                    <span className={`block text-[10px] uppercase font-bold tracking-wider ${activeTab === item.id ? item.color : 'text-gray-400'
+                                                        }`}>
                                                         {item.desc}
                                                     </span>
                                                 </div>
-                                                {activeTab === item.id && (
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 hidden md:block"></div>
+                                                {activeTab === item.id ? (
+                                                    <div className={`w-1.5 h-6 rounded-full ${item.bg.replace('bg-', 'bg-').split('-')[1] === 'gray' ? 'bg-gray-400' : item.color.replace('text-', 'bg-')} opacity-50`}></div>
+                                                ) : (
+                                                    <i className="ri-arrow-right-s-line text-gray-300 group-hover:text-gray-400 transition-colors"></i>
                                                 )}
-                                                <i className="ri-arrow-right-s-line text-gray-300 md:hidden"></i>
                                             </button>
                                         ))}
                                     </div>

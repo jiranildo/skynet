@@ -8,6 +8,7 @@ export interface ChatMessage extends Message {
     read_at?: string;
     location_lat?: number;
     location_lng?: number;
+    caption?: string;
 }
 
 // --- CONVERSATIONS ---
@@ -147,7 +148,8 @@ export const getMessages = async (
 export const sendMessage = async (
     params: {
         content: string;
-        type?: 'text' | 'image' | 'location';
+        type?: 'text' | 'image' | 'video' | 'file' | 'location';
+        caption?: string;
         replyToId?: string;
         location?: { lat: number; lng: number };
         conversationId?: string;
@@ -178,6 +180,7 @@ export const sendMessage = async (
         sender_id: user.id,
         content: params.content,
         type: params.type || 'text',
+        caption: params.caption || null,
         reply_to_id: params.replyToId || null,
         location_lat: params.location?.lat,
         location_lng: params.location?.lng,

@@ -9,6 +9,7 @@ import AiResearchStartModal from './AiResearchStartModal';
 import AiResearchResultsModal from './AiResearchResultsModal';
 import TripFinanceTab from './TripFinanceTab';
 import { Recommendation } from './RecommendationCard';
+import ActivityAttachmentsModal from './ActivityAttachmentsModal';
 
 interface Activity {
   id: string;
@@ -24,6 +25,13 @@ interface Activity {
   coordinates?: { lat: number; lng: number };
   price?: string;
   metadata?: any; // To store rich data from AI Research
+  attachments?: {
+    id: string;
+    name: string;
+    url: string;
+    type: string;
+    created_at: string;
+  }[];
 }
 
 interface DayPlan {
@@ -99,6 +107,34 @@ export default function TripPlanningModal({
 
   // Main Tabs State
   const [activeTab, setActiveTab] = useState<'itinerary' | 'finance'>('itinerary');
+  const [isAttachmentsModalOpen, setIsAttachmentsModalOpen] = useState(false);
+  const [selectedActivityForAttachments, setSelectedActivityForAttachments] = useState<{ dayIndex: number, activityId: string } | null>(null);
+
+  const handleUpdateAttachments = (newAttachments: any[]) => {
+    if (!selectedActivityForAttachments) return;
+    const { dayIndex, activityId } = selectedActivityForAttachments;
+
+    const newItinerary = { ...itinerary };
+    const dayActivities = newItinerary[dayIndex];
+    if (!dayActivities) return;
+
+    newItinerary[dayIndex] = dayActivities.map(a =>
+      a.id === activityId ? { ...a, attachments: newAttachments } : a
+    );
+
+    setItinerary(newItinerary);
+
+    // Persist to trip metadata if needed, though this might need a more robust sync
+    if (onTripUpdated) {
+      onTripUpdated({
+        ...trip,
+        metadata: {
+          ...trip.metadata,
+          itinerary: newItinerary
+        }
+      });
+    }
+  };
 
   // Activity Form State
   const [isAddingActivity, setIsAddingActivity] = useState(false);
@@ -1843,6 +1879,16 @@ export default function TripPlanningModal({
                               </>
                             ) : (
                               <>
+                                <button
+                                  onClick={() => {
+                                    setSelectedActivityForAttachments({ dayIndex: activeDayIndex, activityId: activity.id });
+                                    setIsAttachmentsModalOpen(true);
+                                  }}
+                                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 flex items-center justify-center transition-colors"
+                                  title="Anexos"
+                                >
+                                  <i className="ri-attachment-line"></i>
+                                </button>
                                 {isAdmin && (
                                   <button
                                     onClick={() => handleStartEditing(activity)}
@@ -1914,13 +1960,25 @@ export default function TripPlanningModal({
                           </div>
                           <div className="flex flex-col gap-2">
                             {isAdmin && (
-                              <button
-                                onClick={() => handleStartEditing(activity)}
-                                className="text-gray-400 hover:text-blue-500 transition-colors p-1"
-                                title="Editar"
-                              >
-                                <i className="ri-pencil-line text-lg"></i>
-                              </button>
+                              <div className="flex flex-col gap-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedActivityForAttachments({ dayIndex: activeDayIndex, activityId: activity.id });
+                                    setIsAttachmentsModalOpen(true);
+                                  }}
+                                  className="text-gray-400 hover:text-blue-500 transition-colors p-1"
+                                  title="Anexos"
+                                >
+                                  <i className="ri-attachment-line text-lg"></i>
+                                </button>
+                                <button
+                                  onClick={() => handleStartEditing(activity)}
+                                  className="text-gray-400 hover:text-blue-500 transition-colors p-1"
+                                  title="Editar"
+                                >
+                                  <i className="ri-pencil-line text-lg"></i>
+                                </button>
+                              </div>
                             )}
                             <button
                               onClick={(e) => deleteActivity(activeDayIndex, activity.id, e)}
@@ -2161,6 +2219,18 @@ export default function TripPlanningModal({
         }}
         isLoading={isPerformingResearch || isLoadingMore}
       />
+
+      {selectedActivityForAttachments && (
+        <ActivityAttachmentsModal
+          isOpen={isAttachmentsModalOpen}
+          onClose={() => setIsAttachmentsModalOpen(false)}
+          activityId={selectedActivityForAttachments.activityId}
+          attachments={
+            itinerary[selectedActivityForAttachments.dayIndex]?.find(a => a.id === selectedActivityForAttachments.activityId)?.attachments || []
+          }
+          onUpdateAttachments={handleUpdateAttachments}
+        />
+      )}
     </div >
   );
 }
