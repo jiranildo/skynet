@@ -10,6 +10,8 @@ import AiResearchResultsModal from './AiResearchResultsModal';
 import TripFinanceTab from './TripFinanceTab';
 import { Recommendation } from './RecommendationCard';
 import ActivityAttachmentsModal from './ActivityAttachmentsModal';
+import { getUserAcquiredExperiences, useUserExperience } from '@/services/db/experiences';
+import { UserExperience } from '@/services/db/types';
 
 interface Activity {
   id: string;
@@ -79,11 +81,21 @@ export default function TripPlanningModal({
   onRejectSuggestion
 }: TripPlanningModalProps) {
   const { user } = useAuth();
-  const isAdmin = trip.permissions === 'admin' || trip.user_id === user?.id;
+
+  // Trip owner and explicitly invited admins always have admin rights
+  const isOwnerOrInvitedAdmin = trip.permissions === 'admin' || trip.user_id === user?.id;
+
+  // The assigned agent/agency has admin rights IF the trip wasn't acquired from the marketplace
+  const isAssignedAgent = !trip.isPurchased && (
+    trip.responsible_agent_id === user?.id ||
+    (trip.responsible_agency_id && trip.responsible_agency_id === (user as any)?.entity_id)
+  );
+
+  const isAdmin = isOwnerOrInvitedAdmin || isAssignedAgent;
 
   // Calcular número de dias da viagem (Moved to top for scope access)
-  const startDate = parseLocalDate(trip.start_date);
-  const endDate = parseLocalDate(trip.end_date);
+  const startDate = parseLocalDate(trip.start_date || new Date().toISOString());
+  const endDate = parseLocalDate(trip.end_date || new Date().toISOString());
   const diffTime = endDate.getTime() - startDate.getTime();
   const totalDays = isNaN(diffTime) ? 1 : Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
 
@@ -206,6 +218,20 @@ export default function TripPlanningModal({
   const [researchResults, setResearchResults] = useState<any[]>([]); // Using any for Recommendation + wrapper
   const [lastSearchQuery, setLastSearchQuery] = useState<string | undefined>(undefined);
   const [lastSearchCategories, setLastSearchCategories] = useState<string[] | undefined>(undefined);
+
+  // Acquired Services State
+  const [userExperiences, setUserExperiences] = useState<UserExperience[]>([]);
+  const [isSelectingService, setIsSelectingService] = useState(false);
+
+  useEffect(() => {
+    const fetchExperiences = async () => {
+      if (user?.id) {
+        const experiences = await getUserAcquiredExperiences(user.id);
+        setUserExperiences(experiences);
+      }
+    };
+    fetchExperiences();
+  }, [user?.id]);
 
 
   /* 
@@ -1714,6 +1740,13 @@ export default function TripPlanningModal({
                       </button>
                     )}
                     <button
+                      onClick={() => setIsSelectingService(true)}
+                      className="w-10 h-10 bg-purple-100 text-purple-600 rounded-xl shadow-lg hover:bg-purple-200 transition-colors flex items-center justify-center"
+                      title="Incluir Serviço Adquirido"
+                    >
+                      <i className="ri-shopping-bag-3-line text-xl"></i>
+                    </button>
+                    <button
                       onClick={() => setIsAddingActivity(true)}
                       className="w-10 h-10 bg-blue-600 text-white rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
                       title="Adicionar Item"
@@ -2230,6 +2263,108 @@ export default function TripPlanningModal({
           }
           onUpdateAttachments={handleUpdateAttachments}
         />
+      )}
+
+      {/* Select Acquired Service Modal */}
+      {isSelectingService && (
+        <div className="absolute inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-[32px] w-full max-w-2xl shadow-2xl animate-slideUp overflow-hidden">
+            <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-purple-50 to-pink-50">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900">Meus Serviços Adquiridos</h3>
+                <p className="text-sm text-gray-500 mt-1">Selecione um item para incluir em {getDayLabel(activeDayIndex)}</p>
+              </div>
+              <button
+                onClick={() => setIsSelectingService(false)}
+                className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+
+            <div className="p-8 max-h-[60vh] overflow-y-auto space-y-4">
+              {userExperiences.filter(ue => ue.status === 'available').length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+                    <i className="ri-shopping-bag-3-line text-4xl"></i>
+                  </div>
+                  <h4 className="text-lg font-bold text-gray-900">Nenhum serviço disponível</h4>
+                  <p className="text-gray-500 max-w-xs mx-auto mt-2">
+                    Você já utilizou todos os seus serviços ou ainda não adquiriu nenhum no Marketplace.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {userExperiences
+                    .filter(ue => ue.status === 'available')
+                    .map((ue) => (
+                      <button
+                        key={ue.id}
+                        onClick={async () => {
+                          const activity: Activity = {
+                            id: Date.now().toString(),
+                            title: ue.experience?.title || 'Serviço Adquirido',
+                            description: ue.experience?.description || '',
+                            time: '10:00', // Default time
+                            type: 'service',
+                            status: 'confirmed',
+                            icon: 'ri-shopping-bag-3-line',
+                            price: ue.experience?.price?.toString(),
+                            notes: 'Serviço adquirido no marketplace'
+                          };
+
+                          const newItineraryForDay = [...(itinerary[activeDayIndex] || []), activity];
+                          const nextState = {
+                            ...itinerary,
+                            [activeDayIndex]: newItineraryForDay
+                          };
+
+                          setItinerary(nextState);
+                          await updateTrip(trip.id, { itinerary: nextState });
+                          await useUserExperience(ue.id);
+                          setUserExperiences(prev => prev.map(p => p.id === ue.id ? { ...p, status: 'used' } : p));
+                          setIsSelectingService(false);
+
+                          if (onTripUpdated) {
+                            onTripUpdated({
+                              ...trip,
+                              itinerary: nextState
+                            });
+                          }
+                        }}
+                        className="flex items-center gap-4 p-4 rounded-2xl border-2 border-gray-100 hover:border-purple-300 hover:bg-purple-50 transition-all text-left group"
+                      >
+                        <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0">
+                          <img
+                            src={ue.experience?.cover_image}
+                            alt={ue.experience?.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[10px] font-bold text-purple-600 uppercase tracking-widest">{ue.experience?.category}</span>
+                          <h4 className="font-bold text-gray-900 truncate">{ue.experience?.title}</h4>
+                          <div className="flex items-center gap-1.5 text-gray-500 text-xs mt-1">
+                            <i className="ri-map-pin-line text-purple-500"></i>
+                            {ue.experience?.location}
+                          </div>
+                        </div>
+                        <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <i className="ri-add-line text-xl font-bold"></i>
+                        </div>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-8 bg-gray-50 border-t border-gray-100 text-center">
+              <p className="text-xs text-gray-400">
+                Ao selecionar, o serviço será marcado como utilizado e adicionado ao seu roteiro.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div >
   );

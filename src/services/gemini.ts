@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Trip } from './db/types';
 
 const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
@@ -148,5 +149,67 @@ export const generateCheckInCaption = async (location: string, feeling?: string,
     } catch (error) {
         console.error('Error generating check-in caption:', error);
         return '';
+    }
+};
+
+export const generateTravelItinerary = async (destination: string, budget: string, type: string, duration: number): Promise<Partial<Trip> | null> => {
+    try {
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+        const prompt = `
+      Crie um roteiro de viagem detalhado e profissional para:
+      Destino: ${destination}
+      Orçamento: ${budget}
+      Tipo de Viagem: ${type}
+      Duração: ${duration} dias
+
+      Instruções:
+      1. Retorne um objeto JSON que siga a estrutura da interface Trip do sistema.
+      2. Inclua: 'title', 'description', 'itinerary' (array de objetos com {day: number, activities: string[], location: string}), e 'notes'.
+      3. Seja criativo mas realista com o orçamento fornecido.
+      4. O idioma deve ser Português (Brasil).
+      5. Retorne APENAS o JSON válido.
+    `;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+
+        if (start === -1 || end === -1) throw new Error('No JSON found in response');
+
+        const jsonString = text.substring(start, end + 1);
+        return JSON.parse(jsonString) as Partial<Trip>;
+    } catch (error) {
+        console.error('Error generating itinerary:', error);
+        return null;
+    }
+};
+
+export const generateAgentResponse = async (userQuery: string, context?: string): Promise<string> => {
+    try {
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+        const prompt = `
+      Você é um Agente de Viagem especialista e atencioso. 
+      Um cliente perguntou: "${userQuery}"
+      ${context ? `Contexto da viagem/cliente: ${context}` : ''}
+
+      Instruções:
+      1. Responda de forma profissional, carismática e útil.
+      2. Tente vender a expertise do agente e a exclusividade do serviço.
+      3. Resposta curta (máximo 3 parágrafos).
+      4. Idioma: Português (Brasil).
+      5. Retorne APENAS o texto da resposta.
+    `;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text().trim();
+    } catch (error) {
+        console.error('Error generating agent response:', error);
+        return 'Peço desculpas, mas estou com dificuldade em processar sua solicitação agora. Como posso ajudar com seu roteiro?';
     }
 };

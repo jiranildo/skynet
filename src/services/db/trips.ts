@@ -1,7 +1,7 @@
 import { supabase } from './client';
 import type { Trip, User, TripFavorite } from './types';
 
-export const getTrips = async (userId: string) => {
+export const getTrips = async (userId: string, role?: string) => {
     // 1. Get IDs of trips where user is a member
     const { data: memberships } = await supabase
         .from('trip_members')
@@ -25,6 +25,8 @@ export const getTrips = async (userId: string) => {
         .select(`
       *,
       users:user_id(id, full_name, avatar_url, username),
+      responsible_agent:responsible_agent_id(id, full_name, avatar_url, username),
+      responsible_agency:responsible_agency_id(id, name, type),
       trip_members (
         user_id,
         role,
@@ -37,14 +39,12 @@ export const getTrips = async (userId: string) => {
     `);
 
     // 3. Apply OR filter
-    // We want trips where:
-    // - user is the owner (user_id = userId)
-    // - OR user is in legacy metadata->sharedWith
-    // - OR user is in trip_members (id IN memberTripIds)
-    // - OR user has purchased the trip (id IN purchasedTripIds)
-    const memberIdsStr = memberTripIds.length > 0 ? `,id.in.(${memberTripIds.join(',')})` : '';
-    const purchasedIdsStr = purchasedTripIds.length > 0 ? `,id.in.(${purchasedTripIds.join(',')})` : '';
-    query = query.or(`user_id.eq.${userId},metadata->sharedWith.cs.[{"id": "${userId}"}]${memberIdsStr}${purchasedIdsStr}`);
+    // If super_admin, skip the filter to show all platform activity
+    if (role?.toLowerCase() !== 'super_admin') {
+        const memberIdsStr = memberTripIds.length > 0 ? `,id.in.(${memberTripIds.join(',')})` : '';
+        const purchasedIdsStr = purchasedTripIds.length > 0 ? `,id.in.(${purchasedTripIds.join(',')})` : '';
+        query = query.or(`user_id.eq.${userId},metadata->sharedWith.cs.[{"id": "${userId}"}]${memberIdsStr}${purchasedIdsStr}`);
+    }
 
     const { data, error } = await query.order('start_date', { ascending: false });
 
@@ -102,7 +102,7 @@ export const getMarketplaceTrips = async () => {
         .from('trips')
         .select(`
       *,
-      users!inner (
+      users!user_id!inner (
         id,
         username,
         full_name,
@@ -111,6 +111,8 @@ export const getMarketplaceTrips = async () => {
         followers_count,
         posts_count
       ),
+      responsible_agent:responsible_agent_id(id, full_name, avatar_url, username),
+      responsible_agency:responsible_agency_id(id, name, type),
       trip_members (
         user_id,
         role,
@@ -256,7 +258,13 @@ export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated
 
     const { data, error } = await supabase
         .from('trips')
-        .insert({ ...rest, metadata, user_id: user.id })
+        .insert({
+            ...rest,
+            metadata,
+            user_id: user.id,
+            responsible_agent_id: (trip as any).responsible_agent_id,
+            responsible_agency_id: (trip as any).responsible_agency_id
+        })
         .select()
         .single();
 
@@ -273,9 +281,21 @@ export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated
 
 export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
     // Extract UI fields to metadata
-    const { sharedWith, pendingSuggestions, marketplaceConfig, expenses, metadata: existingMeta, ...rest } = updates;
+    const {
+        sharedWith,
+        pendingSuggestions,
+        marketplaceConfig,
+        expenses,
+        metadata: existingMeta,
+        responsible_agent_id,
+        responsible_agency_id,
+        ...rest
+    } = updates;
 
     let payload: any = { ...rest, updated_at: new Date().toISOString() };
+
+    if (responsible_agent_id !== undefined) payload.responsible_agent_id = responsible_agent_id;
+    if (responsible_agency_id !== undefined) payload.responsible_agency_id = responsible_agency_id;
 
     // Only touch metadata if we have updates for it
     const hasMetadataUpdates =
@@ -359,4 +379,30 @@ export const removeTripFavorite = async (favoriteId: string) => {
         .eq('id', favoriteId);
 
     if (error) throw error;
+};
+
+/**
+ * Assigns multiple agents to a trip.
+ */
+export const assignAgentsToTrip = async (tripId: string, agentIds: string[], currentMetadata: any = {}) => {
+    const updatedMetadata = {
+        ...currentMetadata,
+        assignedAgents: agentIds.map(id => ({ id }))
+    };
+
+    const responsible_agent_id = agentIds.length > 0 ? agentIds[0] : null;
+
+    const { data, error } = await supabase
+        .from('trips')
+        .update({
+            responsible_agent_id,
+            metadata: updatedMetadata,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', tripId)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
 };

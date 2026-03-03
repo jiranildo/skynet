@@ -23,7 +23,8 @@ const saveLocalWines = (wines: CellarWine[]): void => {
 
 export const cellarService = {
     async getAll(): Promise<CellarWine[]> {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
         // Se não houver usuário autenticado, usa armazenamento local
         if (!user) {
@@ -48,7 +49,8 @@ export const cellarService = {
     },
 
     async getById(id: string): Promise<CellarWine> {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
         if (!user) {
             const wines = getLocalWines();
@@ -68,7 +70,8 @@ export const cellarService = {
     },
 
     async create(wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at' | 'user_id'>): Promise<CellarWine> {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
         // Se não houver usuário, salva localmente
         if (!user) {
@@ -98,7 +101,8 @@ export const cellarService = {
     },
 
     async update(id: string, updates: Partial<CellarWine>): Promise<CellarWine> {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
         if (!user) {
             const wines = getLocalWines();
@@ -126,7 +130,8 @@ export const cellarService = {
     },
 
     async delete(id: string): Promise<void> {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
         if (!user) {
             const wines = getLocalWines();
@@ -144,7 +149,8 @@ export const cellarService = {
     },
 
     async updateQuantity(id: string, quantity: number): Promise<CellarWine> {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
         if (!user) {
             const wines = getLocalWines();
@@ -172,7 +178,8 @@ export const cellarService = {
     },
 
     async getByType(type: string): Promise<CellarWine[]> {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
         if (!user) {
             const wines = getLocalWines();

@@ -9,6 +9,8 @@ import { UserAvatar } from '../../../components/UserAvatar';
 
 
 import { getTrips, deleteTrip, updateTrip, Trip, getNetworkUsers, User, createMarketplaceListing, deleteMarketplaceListing, supabase, getGroups, Group, notifySharedGroups } from '../../../services/supabase';
+import { getUserAcquiredExperiences, submitExperienceReview } from '../../../services/db/experiences';
+import { UserExperience } from '../../../services/db/types';
 
 interface SharedUser {
   id: string;
@@ -76,7 +78,13 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
   const [shareLink, setShareLink] = useState('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
   const [commentText, setCommentText] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'shared' | 'newtrip' | 'stats' | 'maps' | 'goals' | 'suggestions' | 'retrospectives'>(initialSubTab as any || 'trips');
+  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'shared' | 'newtrip' | 'stats' | 'maps' | 'goals' | 'suggestions' | 'retrospectives' | 'services'>(initialSubTab as any || 'trips');
+  const [userExperiences, setUserExperiences] = useState<UserExperience[]>([]);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [selectedReviewExperience, setSelectedReviewExperience] = useState<UserExperience | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [retrospectives, setRetrospectives] = useState<YearlyRetrospective[]>([]);
   useEffect(() => {
     if (initialSubTab) {
@@ -113,7 +121,19 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     refreshTrips();
     loadRetrospectives();
     loadNetworkUsers();
+    refreshExperiences();
   }, [user]);
+
+  const refreshExperiences = async () => {
+    if (user) {
+      try {
+        const data = await getUserAcquiredExperiences(user.id);
+        setUserExperiences(data as any);
+      } catch (err) {
+        console.error('Error fetching experiences:', err);
+      }
+    }
+  };
 
   const refreshTrips = async () => {
     if (user) {
@@ -418,39 +438,46 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
   const handlePublish = async (config: PublishConfig) => {
     if (!selectedTrip) return;
 
+    // 1. Prepare updates for optimistic state and DB
+    const isListing = config.isListed;
+    const newPrice = isListing ? config.price : 0;
+    const newVisibility = (isListing ? 'public' : 'private') as 'public' | 'followers' | 'private';
+
+    const updatedMarketplaceConfig = {
+      ...config,
+      isListed: isListing,
+      price: newPrice,
+      currency: 'TM' as 'TM' | 'BRL'
+    };
+
     // Optimistic update locally
     const updatedTrips = trips.map(t => {
       if (t.id === selectedTrip.id) {
         return {
           ...t,
-          marketplaceConfig: config
+          visibility: newVisibility,
+          price_tm: newPrice,
+          marketplaceConfig: updatedMarketplaceConfig
         };
       }
       return t;
     });
 
     setTrips(updatedTrips);
-    const updated = updatedTrips.find(t => t.id === selectedTrip.id);
-    if (updated) setSelectedTrip(updated);
+    const updatedLocalTrip = updatedTrips.find(t => t.id === selectedTrip.id);
+    if (updatedLocalTrip) setSelectedTrip(updatedLocalTrip);
 
     try {
-      if (config.isListed) {
-        // Create new listing in marketplace_listings table
+      if (isListing) {
+        // Create/Update listing in marketplace_listings table
         await createMarketplaceListing({
           trip_id: selectedTrip.id,
-          seller_id: (selectedTrip as any).user_id, // Assuming user_id is present
+          seller_id: (selectedTrip as any).user_id,
           title: selectedTrip.title,
           description: config.description || selectedTrip.description,
-          price: config.price,
+          price: newPrice,
           currency: 'TM',
           category: selectedTrip.trip_type
-        });
-
-        // CRITICAL: Update Trip Visibility to Public so others can see it (RLS)
-        // Also sync marketplaceConfig to metadata for consistency
-        await updateTrip(selectedTrip.id, {
-          visibility: 'public',
-          marketplaceConfig: config
         });
 
         setFeedbackModal({
@@ -459,23 +486,16 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
           message: 'Roteiro publicado no Marketplace com sucesso!',
           type: 'success'
         });
-        // Notify MarketplaceTab to refresh
-        window.dispatchEvent(new Event('marketplace-updated'));
 
-        // ============================================================
-        // NOTIFICATION LOGIC: Broadcast to followers
-        // ============================================================
-        // 1. Get current user (Owner)
+        // Broadcast notifications
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          // 2. Fetch followers
           const { data: followers } = await supabase
             .from('followers')
             .select('follower_id')
             .eq('following_id', user.id);
 
           if (followers && followers.length > 0) {
-            // 3. Create notifications for each follower
             const notifications = followers.map(f => ({
               user_id: f.follower_id,
               type: 'trip_published',
@@ -484,12 +504,9 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
               is_read: false,
               related_user_id: user.id
             }));
-
-            // Batch insert notifications
             await supabase.from('notifications').insert(notifications);
           }
 
-          // 4. Notify the Publisher (Self)
           await supabase.from('notifications').insert({
             user_id: user.id,
             type: 'system',
@@ -499,17 +516,9 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
             related_user_id: user.id
           });
         }
-        // ============================================================
-
       } else {
-        // Handle unlisting: Remove from marketplace_listings table
+        // Handle unlisting
         await deleteMarketplaceListing(selectedTrip.id);
-
-        // Revert visibility to private when unsharing
-        await updateTrip(selectedTrip.id, {
-          visibility: 'private',
-          marketplaceConfig: config
-        });
 
         setFeedbackModal({
           isOpen: true,
@@ -517,17 +526,12 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
           message: 'Roteiro removido do Marketplace.',
           type: 'info'
         });
-
-        // Notify refresh in case it was open there
-        window.dispatchEvent(new Event('marketplace-updated'));
       }
 
-      // Still update trip metadata for local state persistence
-      const { id, user_id, created_at, ...updates } = updated!;
-
-      // Aggressively sanitize: Remove ALL known virtual fields that are not DB columns
-      // These are fields added by getTrips or UI state that shouldn't be sent back to DB
+      // 2. Perform ONE atomic update to the trips table
+      // Sanitize fields - remove UI-only virtual fields
       const {
+        id, user_id, created_at, // identification
         marketplaceConfig: _mc,
         sharedWith: _sw,
         pendingSuggestions: _ps,
@@ -536,23 +540,31 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
         permissions: _perm,
         places: _pl,
         seller: _sel,
-        itinerary: _it, // itinerary is usually a column, but if it's large/complex maybe better to treat carefully? keeping it if it's a column. It IS a column.
+        itinerary: _it, // itinerary is a column, but we often treat it separately or it's complex
         ...safeUpdates
-      } = updates as any;
+      } = updatedLocalTrip as any;
 
-      await updateTrip(id, {
+      await updateTrip(selectedTrip.id, {
         ...safeUpdates,
+        visibility: newVisibility,
+        price_tm: newPrice,
         metadata: {
-          ...selectedTrip.metadata, // Preserve existing metadata
-          marketplaceConfig: config   // Add/Update marketplace config
+          ...selectedTrip.metadata,
+          marketplaceConfig: updatedMarketplaceConfig
         }
       });
+
+      // Notify MarketplaceTab to refresh
+      window.dispatchEvent(new Event('marketplace-updated'));
 
     } catch (error) {
       console.error('Error publishing trip:', error);
       alert(`Erro ao salvar publicação: ${(error as any).message || 'Erro desconhecido'}`);
+      // Revert trips if error (optional, for now just alert)
+      refreshTrips();
     }
   };
+
 
   const handleLeaveTrip = async (trip: Trip) => {
     if (!confirm('Tem certeza que deseja sair desta viagem compartilhada? Você perderá o acesso a ela e não poderá mais ver ou editar.')) return;
@@ -832,6 +844,40 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
       updateTrip(id, updates);
     }
     setCommentText('');
+  };
+
+  const handleOpenReviewModal = (item: UserExperience) => {
+    setSelectedReviewExperience(item);
+    setReviewRating(5);
+    setReviewComment('');
+    setShowReviewModal(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!user || !selectedReviewExperience) return;
+
+    setIsSubmittingReview(true);
+    try {
+      const result = await submitExperienceReview({
+        experience_id: selectedReviewExperience.experience_id,
+        user_id: user.id,
+        rating: reviewRating,
+        comment: reviewComment
+      });
+
+      if (result) {
+        alert('Avaliação enviada com sucesso! Obrigado pelo seu feedback.');
+        setShowReviewModal(false);
+        // We could refresh reviews here but they are mostly shown in Marketplace
+      } else {
+        alert('Erro ao enviar avaliação. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      alert('Ocorreu um erro inesperado.');
+    } finally {
+      setIsSubmittingReview(false);
+    }
   };
 
   const handleSimulateSuggestion = (trip: Trip) => {
@@ -2297,6 +2343,95 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     </div>
   );
 
+  const renderServicesContent = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xl font-bold text-gray-900 border-l-4 border-purple-500 pl-3">
+          Meus Serviços Adquiridos
+        </h3>
+        <p className="text-sm text-gray-500">
+          {userExperiences.length} {userExperiences.length === 1 ? 'serviço encontrado' : 'serviços encontrados'}
+        </p>
+      </div>
+
+      {userExperiences.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+          <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-4 text-purple-400">
+            <i className="ri-shopping-bag-3-line text-4xl"></i>
+          </div>
+          <h4 className="text-xl font-bold text-gray-900 mb-2">Sua mochila está vazia</h4>
+          <p className="text-gray-600 mb-8 max-w-sm mx-auto">
+            Você ainda não adquiriu nenhum serviço ou pacote no Marketplace. Explore as experiências disponíveis e comece seu planejamento!
+          </p>
+          <button
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'marketplace' }));
+            }}
+            className="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all"
+          >
+            Explorar Marketplace
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {userExperiences.map((item) => (
+            <div key={item.id} className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 group">
+              <div className="relative h-48">
+                <img
+                  src={item.experience?.cover_image}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  alt={item.experience?.title}
+                />
+                <div className="absolute top-4 left-4">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md shadow-lg border border-white/20 ${item.status === 'available' ? 'bg-green-500/80 text-white' : 'bg-gray-500/80 text-white'
+                    }`}>
+                    {item.status === 'available' ? 'Disponível' : 'Utilizado'}
+                  </span>
+                </div>
+              </div>
+              <div className="p-5">
+                <span className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-1 block">
+                  {item.experience?.category}
+                </span>
+                <h4 className="font-bold text-gray-900 text-lg mb-1 truncate">{item.experience?.title}</h4>
+                <div className="flex items-center gap-1.5 text-gray-500 text-xs mb-4">
+                  <i className="ri-map-pin-line text-purple-500"></i>
+                  {item.experience?.location || 'Local a combinar'}
+                </div>
+
+                <div className="pt-4 border-t border-gray-50 flex items-center justify-between">
+                  <div className="text-[10px] text-gray-400 uppercase font-medium">
+                    Adquirido em {new Date(item.created_at).toLocaleDateString()}
+                  </div>
+                  {item.status === 'used' ? (
+                    <button
+                      onClick={() => handleOpenReviewModal(item)}
+                      className="px-4 py-1.5 bg-amber-50 text-amber-600 rounded-lg text-xs font-bold hover:bg-amber-100 transition-colors flex items-center gap-1 border border-amber-100"
+                    >
+                      <i className="ri-star-line"></i>
+                      Avaliar Serviço
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setActiveSubTab('trips');
+                        alert('Selecione uma viagem para incluir este serviço no seu roteiro!');
+                      }}
+                      className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                    >
+                      <i className="ri-add-circle-line"></i>
+                      Usar em Viagem
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -2311,6 +2446,22 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
 
       {/* Unified Navigation Row */}
       <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide py-1">
+        {/* New Trip Button (Main Trigger) */}
+        <button
+          onClick={() => setActiveSubTab(activeSubTab === 'newtrip' ? 'trips' : 'newtrip')}
+          className={`flex items-center gap-2 px-6 h-12 rounded-2xl transition-all shadow-md border whitespace-nowrap group ${activeSubTab === 'newtrip'
+            ? 'bg-gradient-to-r from-orange-600 to-pink-600 text-white border-transparent scale-105'
+            : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white border-transparent hover:shadow-lg hover:scale-105'
+            }`}
+        >
+          <div className="w-6 h-6 bg-white/20 rounded-lg flex items-center justify-center group-hover:rotate-90 transition-transform">
+            <i className="ri-add-line text-lg font-bold"></i>
+          </div>
+          <span className="font-bold">Nova Viagem</span>
+        </button>
+
+        <div className="w-px h-8 bg-gray-200 mx-1 flex-shrink-0"></div>
+
         {/* Trip Filters */}
         {[
           { id: 'all', icon: 'ri-map-pin-line', label: 'Todas', color: 'blue', count: trips.length },
@@ -2353,6 +2504,7 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
           { id: 'goals', icon: 'ri-trophy-line', label: 'Metas' },
           { id: 'suggestions', icon: 'ri-lightbulb-line', label: 'Sugestões' },
           { id: 'retrospectives', icon: 'ri-movie-2-line', label: 'Retrospectivas' },
+          { id: 'services', icon: 'ri-shopping-bag-3-line', label: 'Meus Serviços' },
         ].map(item => (
           <button
             key={item.id}
@@ -2387,11 +2539,75 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
         />
       )}
 
+      {/* Review Modal */}
+      {showReviewModal && selectedReviewExperience && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl animate-scaleIn">
+            <div className="p-8">
+              <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i className="ri-star-line text-4xl"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-center text-gray-900 mb-2">Avaliar Experiência</h3>
+              <p className="text-gray-500 text-center mb-8">
+                Como foi sua experiência com <b>{selectedReviewExperience.experience?.title}</b>? Sua opinião ajuda outros viajantes!
+              </p>
+
+              <div className="space-y-6">
+                <div className="flex justify-center gap-3">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setReviewRating(star)}
+                      className={`text-3xl transition-all transform hover:scale-125 ${reviewRating >= star ? 'text-amber-500' : 'text-gray-200'}`}
+                    >
+                      <i className={reviewRating >= star ? "ri-star-fill" : "ri-star-line"}></i>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700">Comentário (opcional)</label>
+                  <textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    rows={4}
+                    placeholder="Conte o que achou de mais especial, o atendimento, etc..."
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-purple-500 transition-all resize-none text-sm"
+                  ></textarea>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={handleSubmitReview}
+                    disabled={isSubmittingReview}
+                    className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white rounded-2xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    {isSubmittingReview ? (
+                      <i className="ri-loader-4-line animate-spin"></i>
+                    ) : (
+                      <i className="ri-send-plane-fill"></i>
+                    )}
+                    Enviar Avaliação
+                  </button>
+                  <button
+                    onClick={() => setShowReviewModal(false)}
+                    className="w-full py-4 bg-gray-100 text-gray-600 rounded-2xl font-bold hover:bg-gray-200 transition-all"
+                  >
+                    Agora não
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeSubTab === 'stats' && renderStatsContent()}
       {activeSubTab === 'maps' && renderMapsContent()}
       {activeSubTab === 'goals' && renderGoalsContent()}
       {activeSubTab === 'suggestions' && renderSuggestionsContent()}
       {activeSubTab === 'retrospectives' && renderRetrospectivesContent()}
+      {activeSubTab === 'services' && renderServicesContent()}
 
       {/* Share Modal */}
       {/* Share Modal */}

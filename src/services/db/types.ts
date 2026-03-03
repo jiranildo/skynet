@@ -1,11 +1,26 @@
 // ==================== TIPOS ====================
 
+export interface Entity {
+  id: string;
+  name: string;
+  type: 'agency' | 'supplier' | 'individual';
+  created_at: string;
+  updated_at: string;
+  theme_config?: {
+    primary_color?: string;
+    secondary_color?: string;
+    logo_url?: string;
+    [key: string]: any;
+  };
+}
+
 export interface User {
   id: string;
   username: string;
   full_name: string;
   first_name?: string;
   last_name?: string;
+  email?: string;
   avatar_url: string;
   bio?: string;
   website?: string;
@@ -13,7 +28,21 @@ export interface User {
   following_count?: number;
   posts_count?: number;
   privacy_setting?: 'public' | 'private' | 'friends';
-  role?: 'user' | 'business' | 'admin' | 'agent';
+  role?: 'super_admin' | 'admin' | 'viajante' | 'agente' | 'fornecedor';
+  entity_id?: string;
+  created_at?: string;
+  status?: 'active' | 'suspended' | 'banned';
+  created_by?: string;
+  force_password_reset?: boolean;
+  creator?: {
+    id: string;
+    full_name: string;
+    username: string;
+  };
+  entity?: {
+    id: string;
+    name: string;
+  };
   // Settings
   location?: string;
   language?: string;
@@ -130,6 +159,8 @@ export interface Trip {
   metadata?: any;
   price_tm?: number;
   isPurchased?: boolean;
+  responsible_agent_id?: string;
+  responsible_agency_id?: string;
   // UI bridging fields (optional)
   places?: any[]; // legacy alias for itinerary
   sharedWith?: any[];
@@ -404,6 +435,49 @@ export interface Story {
   likes_count?: number;
   views_count?: number;
   users?: User;
+}
+
+export interface Experience {
+  id: string;
+  supplier_id: string;
+  title: string;
+  description?: string;
+  category: 'Hospedagem' | 'Passeio' | 'Transporte' | 'Restaurante' | 'Pacote' | 'Outros';
+  price: number;
+  currency: 'TM' | 'BRL';
+  cover_image?: string;
+  media_gallery?: string[];
+  video_urls?: string[];
+  files_urls?: string[];
+  map_data?: any;
+  location?: string;
+  created_at: string;
+  updated_at: string;
+  seller?: {
+    id: string;
+    full_name: string;
+    avatar_url: string;
+    username: string;
+  };
+}
+
+export interface ExperienceReview {
+  id: string;
+  experience_id: string;
+  user_id: string;
+  rating: number;
+  comment?: string;
+  created_at: string;
+  user?: User;
+}
+
+export interface UserExperience {
+  id: string;
+  user_id: string;
+  experience_id: string;
+  status: 'available' | 'used';
+  created_at: string;
+  experience?: Experience;
 }
 
 export interface Reel {

@@ -4,7 +4,6 @@ import MobileNav from '@/pages/home/components/MobileNav';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import FloatingMenu from '@/components/FloatingMenu';
-import BetaLabel from '@/components/BetaLabel';
 import NotificationsPanel from '@/pages/home/components/NotificationsPanel';
 import CreateMenu from '@/components/CreateMenu';
 import CreateStoryModal from '@/pages/home/components/CreateStoryModal';
@@ -12,6 +11,7 @@ import WalletWidget from '@/components/WalletWidget';
 import GamificationWidget from '@/components/GamificationWidget';
 import CheckInModal from '@/components/CheckInModal';
 import { useUnreadCounts } from '@/hooks/useUnreadCounts';
+import { useEffect } from 'react';
 
 interface MainLayoutProps {
     children: React.ReactNode;
@@ -30,9 +30,19 @@ export default function MainLayout({ children }: MainLayoutProps) {
     const [showGamification, setShowGamification] = useState(false);
     const [showCheckIn, setShowCheckIn] = useState(false);
     const [createModalTab, setCreateModalTab] = useState<'POST' | 'STORY' | 'REEL' | 'TEMPLATES' | null>(null);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
     // Hidden on specific pages
     const isAuthPage = ['/login', '/signup'].includes(location.pathname);
+
+    useEffect(() => {
+        const handleOpenCreateModal = (e: any) => {
+            setCreateModalTab(e.detail);
+        };
+        window.addEventListener('open-create-modal', handleOpenCreateModal);
+        return () => window.removeEventListener('open-create-modal', handleOpenCreateModal);
+    }, []);
+
     if (isAuthPage) return <>{children}</>;
 
     const handleCreateOption = (option: string) => {
@@ -60,13 +70,20 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 <Sidebar
                     onNotificationsClick={() => setShowNotifications(true)}
                     onCreateClick={() => setShowCreateMenu(true)}
+                    onCreatePostClick={() => setCreateModalTab('POST')}
                     onWalletClick={() => setShowWallet(true)}
                     onGamificationClick={() => setShowGamification(true)}
+                    onCheckInClick={() => setShowCheckIn(true)}
+                    isCollapsed={isSidebarCollapsed}
+                    onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
                 />
             </div>
 
             {/* Main Content Area */}
-            <main className="md:ml-64 min-h-screen relative">
+            <main
+                className={`min-h-screen relative transition-all duration-300 ${isSidebarCollapsed ? 'md:ml-20' : 'md:ml-64'
+                    }`}
+            >
                 <Suspense fallback={
                     <div className="h-screen flex items-center justify-center">
                         <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
@@ -92,7 +109,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
             {/* Global Elements */}
             <FloatingMenu />
-            <BetaLabel />
 
             {/* Modals & Panels */}
             {showNotifications && (

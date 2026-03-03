@@ -29,6 +29,29 @@ export default function Stories() {
           ]);
           setUserProfile(profile);
           setUserStories(storiesData);
+
+          // Load Trips based on role
+          const trips = await getTrips(user.id, profile?.role);
+
+          // Filter: Upcoming or Ongoing
+          const relevantTrips = trips.filter(t => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const tripDateStr = t.end_date || t.start_date;
+            if (!tripDateStr) return false; // Skip trips without any dates in this view
+
+            let tripEnd;
+            if (tripDateStr.includes('T')) {
+              tripEnd = new Date(tripDateStr);
+            } else {
+              const [y, m, d] = tripDateStr.split('-').map(Number);
+              tripEnd = new Date(y, m - 1, d);
+            }
+            return tripEnd >= today;
+          }).sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+
+          setUniqueTrips(relevantTrips);
         } catch (error) {
           console.error("Error loading stories data:", error);
         } finally {
@@ -37,32 +60,6 @@ export default function Stories() {
       }
     };
     loadData();
-
-    // Load Trips from Supabase
-    if (user) {
-      getTrips(user.id).then(trips => {
-        // Filter: Upcoming or Ongoing (end date >= today or, if no end date, start date >= today)
-        const relevantTrips = trips.filter(t => {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-
-          const tripDateStr = t.end_date || t.start_date;
-          let tripEnd;
-
-          // Handle 'YYYY-MM-DD' (UTC) vs ISO vs Local
-          if (tripDateStr.includes('T')) {
-            tripEnd = new Date(tripDateStr);
-          } else {
-            // Parse YYYY-MM-DD as local midnight to avoid timezone shift
-            const [y, m, d] = tripDateStr.split('-').map(Number);
-            tripEnd = new Date(y, m - 1, d);
-          }
-
-          return tripEnd >= today;
-        }).sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-        setUniqueTrips(relevantTrips);
-      }).catch(err => console.error("Error fetching trips:", err));
-    }
   }, [user]);
 
   const initials = userProfile?.full_name

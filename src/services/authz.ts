@@ -33,29 +33,44 @@ function getAdminEmailAllowlist(): Set<string> {
   return new Set(emails);
 }
 
-export async function isUserAdmin(user: User | null): Promise<boolean> {
+export async function isUserSuperAdmin(user: User | null): Promise<boolean> {
   if (!user) return false;
 
-  if (hasAdminMetadata(user)) return true;
-
-  const adminEmails = getAdminEmailAllowlist();
-  const authEmail = toNormalizedEmail(user.email);
-  if (authEmail && adminEmails.has(authEmail)) return true;
+  const appRole = String(user.app_metadata?.role ?? '').toLowerCase();
+  if (appRole === 'super_admin') return true;
 
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('*')
+      .select('role')
       .eq('id', user.id)
       .maybeSingle();
 
     if (error || !data) return false;
+    return String((data as any).role).toLowerCase() === 'super_admin';
+  } catch {
+    return false;
+  }
+}
 
+export async function isUserAdmin(user: User | null): Promise<boolean> {
+  if (!user) return false;
+
+  const appRole = String(user.app_metadata?.role ?? '').toLowerCase();
+  const userRole = String(user.user_metadata?.role ?? '').toLowerCase();
+
+  if (['super_admin', 'admin'].includes(appRole) || ['super_admin', 'admin'].includes(userRole)) return true;
+
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (error || !data) return false;
     const role = String((data as any).role ?? '').toLowerCase();
-    const isAdmin = toBoolean((data as any).is_admin);
-    const profileEmail = toNormalizedEmail((data as any).email);
-
-    return role === 'admin' || isAdmin || (profileEmail && adminEmails.has(profileEmail));
+    return ['super_admin', 'admin'].includes(role);
   } catch {
     return false;
   }
@@ -67,7 +82,7 @@ export async function isUserAgent(user: User | null): Promise<boolean> {
   const appRole = String(user.app_metadata?.role ?? '').toLowerCase();
   const userRole = String(user.user_metadata?.role ?? '').toLowerCase();
 
-  if (appRole === 'agent' || userRole === 'agent') return true;
+  if (['super_admin', 'agente', 'agent'].includes(appRole) || ['super_admin', 'agente', 'agent'].includes(userRole)) return true;
 
   try {
     const { data, error } = await supabase
@@ -79,8 +94,33 @@ export async function isUserAgent(user: User | null): Promise<boolean> {
     if (error || !data) return false;
 
     const role = String((data as any).role ?? '').toLowerCase();
-    return role === 'agent';
+    return ['super_admin', 'agente', 'agent'].includes(role);
   } catch {
     return false;
   }
 }
+
+export async function isUserSupplier(user: User | null): Promise<boolean> {
+  if (!user) return false;
+
+  const appRole = String(user.app_metadata?.role ?? '').toLowerCase();
+  const userRole = String(user.user_metadata?.role ?? '').toLowerCase();
+
+  if (['super_admin', 'fornecedor', 'supplier'].includes(appRole) || ['super_admin', 'fornecedor', 'supplier'].includes(userRole)) return true;
+
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (error || !data) return false;
+
+    const role = String((data as any).role ?? '').toLowerCase();
+    return ['super_admin', 'fornecedor', 'supplier'].includes(role);
+  } catch {
+    return false;
+  }
+}
+

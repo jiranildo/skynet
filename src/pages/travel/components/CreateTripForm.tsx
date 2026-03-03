@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { useAuth } from '../../../context/AuthContext';
-import { createTrip, updateTrip } from '../../../services/supabase';
+import { createTrip, updateTrip, getAgencies, getAgents } from '../../../services/supabase';
+import type { Entity, User as DBUser } from '../../../services/db/types';
+import { useEffect } from 'react';
 
 interface CreateTripFormProps {
     onCancel: () => void;
@@ -49,8 +51,44 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
         budget: getBudgetLevel(initialData?.budget),
         description: initialData?.description || '',
         coverImage: initialData?.cover_image || '',
-        priceTm: initialData?.price_tm || 0
+        priceTm: initialData?.price_tm || 0,
+        responsibleAgentId: initialData?.responsible_agent_id || '',
+        responsibleAgencyId: initialData?.responsible_agency_id || ''
     });
+
+    const [agencies, setAgencies] = useState<Entity[]>([]);
+    const [agents, setAgents] = useState<DBUser[]>([]);
+    const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
+
+    const userRole = user?.user_metadata?.role || user?.app_metadata?.role;
+    const isAgentUser = userRole === 'agente' || userRole === 'admin';
+    const userAgencyId = user?.user_metadata?.entity_id;
+
+    useEffect(() => {
+        // Se for agente, já preenche a agência dele por padrão
+        if (isAgentUser && userAgencyId && !tripForm.responsibleAgencyId) {
+            setTripForm(prev => ({ ...prev, responsibleAgencyId: userAgencyId, responsibleAgentId: user.id }));
+        }
+    }, [isAgentUser, userAgencyId, user?.id]);
+
+    useEffect(() => {
+        const fetchResponsibles = async () => {
+            setIsLoadingResponsibles(true);
+            try {
+                const [agenciesData, agentsData] = await Promise.all([
+                    getAgencies(),
+                    getAgents()
+                ]);
+                setAgencies(agenciesData);
+                setAgents(agentsData);
+            } catch (error) {
+                console.error('Error fetching responsibles:', error);
+            } finally {
+                setIsLoadingResponsibles(false);
+            }
+        };
+        fetchResponsibles();
+    }, []);
 
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const [generationProgress, setGenerationProgress] = useState(0);
@@ -165,7 +203,9 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
             metadata: {
                 startTime: tripForm.startTime,
                 endTime: tripForm.endTime
-            }
+            },
+            responsible_agent_id: tripForm.responsibleAgentId || null,
+            responsible_agency_id: tripForm.responsibleAgencyId || null
         };
 
         try {
@@ -419,6 +459,75 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
                                 * Se for maior que zero, outros usuários terão que pagar essa quantia em TM para visualizar seu itinerário completo após publicá-lo.
                             </p>
                         </div>
+                    </div>
+
+                    {/* Trip Responsible (Agencies & Agents) */}
+                    <div className="bg-blue-50 rounded-xl p-5 border border-blue-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                                <i className="ri-user-star-line text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900">Responsável pela Viagem</h3>
+                                <p className="text-sm text-gray-600">Escolha quem ajudará você a planejar esta viagem.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Agency Selection */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Agência de Viagens (Opcional)
+                                </label>
+                                <select
+                                    value={tripForm.responsibleAgencyId}
+                                    onChange={(e) => {
+                                        const agencyId = e.target.value;
+                                        setTripForm({
+                                            ...tripForm,
+                                            responsibleAgencyId: agencyId,
+                                            // Reset agent if it doesn't belong to the new agency
+                                            responsibleAgentId: ''
+                                        });
+                                    }}
+                                    disabled={isAgentUser}
+                                    className={`w-full px-4 py-3 border border-blue-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 ${isAgentUser ? 'bg-gray-100 cursor-not-allowed opacity-70' : 'bg-white'}`}
+                                >
+                                    {!isAgentUser && <option value="">Nenhuma agência</option>}
+                                    {agencies.map(agency => (
+                                        <option key={agency.id} value={agency.id}>{agency.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Agent Selection */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Agente de Viagem (Opcional)
+                                </label>
+                                <select
+                                    value={tripForm.responsibleAgentId}
+                                    onChange={(e) => setTripForm({ ...tripForm, responsibleAgentId: e.target.value })}
+                                    className="w-full px-4 py-3 border border-blue-200 bg-white rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700"
+                                >
+                                    <option value="">Nenhum agente específico</option>
+                                    {agents
+                                        .filter(agent => {
+                                            if (isAgentUser && userAgencyId) {
+                                                return agent.entity_id === userAgencyId;
+                                            }
+                                            return !tripForm.responsibleAgencyId || agent.entity_id === tripForm.responsibleAgencyId;
+                                        })
+                                        .map(agent => (
+                                            <option key={agent.id} value={agent.id}>{agent.full_name}</option>
+                                        ))
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-3">
+                            * Ao associar um agente ou agência, sua viagem será compartilhada automaticamente com eles para suporte.
+                        </p>
                     </div>
 
                     {/* Cover Image */}

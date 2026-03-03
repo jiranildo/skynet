@@ -16,8 +16,7 @@ import Sidebar from './components/Sidebar';
 import ExploreView from './components/ExploreView';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { getUnreadMessagesCount, getUnreadNotificationsCount } from '@/services/supabase';
-import HeaderActions from '../../components/HeaderActions';
+import Header from '../../components/layout/Header';
 import { useUnreadCounts } from '@/hooks/useUnreadCounts';
 
 export default function HomePage() {
@@ -88,41 +87,45 @@ export default function HomePage() {
   };
 
   return (
-    <div className="md:py-6">
-      <div className="animate-fadeIn">
-        {activeTab === 'feed' ? (
-          <>
-            <Stories />
-            <Feed onEdit={(post) => {
-              setEditingPost(post);
-              setCreateModalTab('POST');
-            }} />
-          </>
-        ) : activeTab === 'explore' ? (
-          <ExploreView />
-        ) : (
-          <div className="fixed inset-0 top-[57px] bottom-[72px] md:top-0 md:bottom-0 md:left-64 bg-black z-10 overflow-hidden">
-            <ReelsView onCreateReel={() => setCreateModalTab('REEL')} />
-          </div>
+    <div className="min-h-screen">
+      <Header onShowNotifications={() => setShowNotifications(!showNotifications)} />
+
+      <div className="md:py-6">
+        <div className="animate-fadeIn">
+          {activeTab === 'feed' ? (
+            <>
+              <Stories />
+              <Feed onEdit={(post) => {
+                setEditingPost(post);
+                setCreateModalTab('POST');
+              }} />
+            </>
+          ) : activeTab === 'explore' ? (
+            <ExploreView />
+          ) : (
+            <div className="fixed inset-0 top-[57px] bottom-[72px] md:top-0 md:bottom-0 md:left-64 bg-black z-10 overflow-hidden">
+              <ReelsView onCreateReel={() => setCreateModalTab('REEL')} />
+            </div>
+          )}
+        </div>
+
+        {/* Unified Create Modal (Local editing state) */}
+        {(createModalTab || editingPost) && (
+          <CreateStoryModal
+            onClose={() => {
+              setCreateModalTab(null);
+              setEditingPost(null);
+            }}
+            onSuccess={() => {
+              setCreateModalTab(null);
+              setEditingPost(null);
+              window.location.reload();
+            }}
+            initialTab={createModalTab || 'POST'}
+            editingPost={editingPost}
+          />
         )}
       </div>
-
-      {/* Unified Create Modal (Local editing state) */}
-      {(createModalTab || editingPost) && (
-        <CreateStoryModal
-          onClose={() => {
-            setCreateModalTab(null);
-            setEditingPost(null);
-          }}
-          onSuccess={() => {
-            setCreateModalTab(null);
-            setEditingPost(null);
-            window.location.reload();
-          }}
-          initialTab={createModalTab || 'POST'}
-          editingPost={editingPost}
-        />
-      )}
     </div>
   );
 }

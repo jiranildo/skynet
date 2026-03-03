@@ -14,6 +14,7 @@ export * from './db/notifications';
 export * from './db/gamification';
 export * from './db/wallet';
 export * from './db/sharing';
+export * from './db/entities';
 
 export { supabase };
 export default supabase;

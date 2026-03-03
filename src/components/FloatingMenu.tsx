@@ -9,10 +9,12 @@ import { useSmartTravelAgent } from '@/pages/travel/hooks/useSmartTravelAgent';
 import { RecommendationCard, Recommendation } from '@/pages/travel/components/RecommendationCard';
 import { CATEGORIES, Category } from '@/pages/travel/components/CategorySelectionModal';
 import CheckInModal from './CheckInModal';
+import { useNavigate } from 'react-router-dom';
 
 export default function FloatingMenu() {
   const persona = useContextualPersona();
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
 
   // Navigation State
   const [viewMode, setViewMode] = useState<'suggestions' | 'categories'>('suggestions');
@@ -992,22 +994,20 @@ export default function FloatingMenu() {
                               </p>
                               <div className="flex overflow-x-auto gap-3 pb-2 -mx-4 px-4 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                 {[
-                                  { label: 'Check-In', icon: 'ri-map-pin-user-fill', color: 'sky', keywords: 'checkin, check-in, check out... ', desc: 'Registrar sua localização atual e compartilhar momentos...' },
-                                  { label: 'Voos', icon: 'ri-plane-fill', color: 'blue', keywords: 'voos, passagem aérea, aéreo, origem, destino, ida e volta, datas, classe econômica, executiva, milhas, bagagem', desc: 'Pesquisar opções de voos disponíveis...' },
-                                  { label: 'Acomodações', icon: 'ri-hotel-fill', color: 'indigo', keywords: 'hotel, hospedagem, acomodação, resort, airbnb, pousada...', desc: 'Pesquisar hospedagens no destino especificado...' },
-                                  { label: 'Pacotes', icon: 'ri-suitcase-2-fill', color: 'purple', keywords: 'pacote de viagem, pacote turístico, voo + hotel...', desc: 'Pesquisar pacotes de viagem completos...' },
-                                  { label: 'Carros', icon: 'ri-roadster-fill', color: 'emerald', keywords: 'alugar carro, locadora, rent a car...', desc: 'Pesquisar opções de aluguel de carro...' },
-                                  { label: 'Cruzeiros', icon: 'ri-ship-fill', color: 'cyan', keywords: 'cruzeiro, navio, cabine...', desc: 'Pesquisar cruzeiros disponíveis...' },
                                   { label: 'Ingressos', icon: 'ri-ticket-2-fill', color: 'amber', keywords: 'ingresso, ticket, parque, museu, show...', desc: 'Pesquisar ingressos e experiências...' },
+                                  { label: 'Check-In', icon: 'ri-map-pin-user-fill', color: 'sky', action: () => { setIsOpen(false); setShowCheckIn(true); } },
+                                  { label: 'Criar Post', icon: 'ri-quill-pen-fill', color: 'pink', keywords: 'post, publicação, foto...', desc: 'Criar uma nova publicação...' },
+                                  { label: 'Blog', icon: 'ri-article-fill', color: 'teal', action: () => { setIsOpen(false); navigate('/travel?tab=blogs'); } },
+                                  { label: 'Desafios', icon: 'ri-trophy-fill', color: 'yellow', keywords: 'gameficação, pontos, conquistas...', desc: 'Ver desafios e painel de conquistas...' },
                                   { label: 'Transfer', icon: 'ri-taxi-fill', color: 'zinc', keywords: 'transfer, traslado, aeroporto hotel...', desc: 'Pesquisar serviços de transporte...' },
                                   { label: 'Guias', icon: 'ri-user-star-fill', color: 'orange', keywords: 'guia turístico, tour guide, passeio guiado...', desc: 'Pesquisar guias turísticos locais...' },
                                   { label: 'Seguro', icon: 'ri-shield-cross-fill', color: 'rose', keywords: 'seguro viagem, cobertura médica, assistência...', desc: 'Pesquisar planos de seguro viagem...' },
                                   { label: 'Ofertas', icon: 'ri-price-tag-3-fill', color: 'red', keywords: 'promoção viagem, oferta voo, desconto...', desc: 'Pesquisar ofertas e promoções...' },
                                   { label: 'Vistos', icon: 'ri-passport-fill', color: 'slate', keywords: 'visto, passaporte, documentação...', desc: 'Pesquisar exigências de documentação...' },
-                                ].map((item, idx) => (
+                                ].map((item: any, idx) => (
                                   <button
                                     key={idx}
-                                    onClick={() => handleSearchOptionClick(item.label, `Gostaria de pesquisar sobre ${item.label}. \nContexto: ${item.desc} \nPalavras-chave: ${item.keywords}`)}
+                                    onClick={() => item.action ? item.action() : handleSearchOptionClick(item.label, `Gostaria de pesquisar sobre ${item.label}. \nContexto: ${item.desc} \nPalavras-chave: ${item.keywords}`)}
                                     className="flex-none w-24 snap-start flex flex-col items-center gap-2 group"
                                   >
                                     <div className={`w-14 h-14 rounded-2xl bg-${item.color}-50 text-${item.color}-600 flex items-center justify-center shadow-sm border border-${item.color}-100 group-hover:scale-110 transition-transform`}>

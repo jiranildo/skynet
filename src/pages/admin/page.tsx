@@ -1,16 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import MobileNav from '../home/components/MobileNav';
 import { useAuth } from '../../context/AuthContext';
-import { isUserAdmin } from '../../services/authz';
+import { isUserAdmin, isUserSuperAdmin } from '../../services/authz';
+import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, type ManageUserPayload, getAdminEntities, createAdminEntity, updateAdminEntity, deleteAdminEntity, type ManageEntityPayload, getAdminMarketplaceItems, updateMarketplaceItemStatus, deleteAdminMarketplaceItem, type AdminMarketplaceItem, getAdminAnalytics } from '../../services/db/admin';
+import AdminUserModal from './components/AdminUserModal';
+import AdminEntityModal from './components/AdminEntityModal';
+import { AlertModal } from '../../components/AlertModal';
+import { ConfirmationModal } from '../../components/ConfirmationModal';
+import type { User as DBUser, Entity as DBEntity, Experience } from '../../services/db/types';
+
+interface MarketplaceItem extends AdminMarketplaceItem { }
 
 interface User {
   id: string;
   name: string;
+  full_name?: string;
+  username?: string;
   email: string;
   avatar: string;
-  role: 'user' | 'business' | 'admin' | 'agent';
+  role: DBUser['role'];
   verified: boolean;
   joinedAt: string;
   stats: {
@@ -22,20 +32,17 @@ interface User {
     level: number;
   };
   status: 'active' | 'suspended' | 'banned';
+  entity_id?: string;
+  creator?: {
+    full_name?: string;
+    username?: string;
+  };
+  entity?: {
+    name?: string;
+  };
 }
 
-interface MarketplaceItem {
-  id: string;
-  title: string;
-  seller: {
-    id: string;
-    name: string;
-  };
-  price: number;
-  sales: number;
-  status: 'pending' | 'approved' | 'rejected';
-  createdAt: string;
-}
+// Interface duplicated, removing redundant one
 
 interface Report {
   id: string;
@@ -64,8 +71,9 @@ export default function AdminPage() {
   const { user, loading, signOut } = useAuth();
   const [isAdminChecked, setIsAdminChecked] = useState(false);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'marketplace' | 'reports' | 'analytics' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'entities' | 'marketplace' | 'reports' | 'analytics' | 'settings'>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
+  const [entities, setEntities] = useState<DBEntity[]>([]);
   const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [stats, setStats] = useState<SystemStats>({
@@ -80,10 +88,28 @@ export default function AdminPage() {
   });
   // const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterRole, setFilterRole] = useState<'all' | 'user' | 'business' | 'admin'>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'suspended' | 'banned'>('all');
+  const [filterRole, setFilterRole] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [currentUserRole, setCurrentUserRole] = useState<string>('viajante');
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<User | null>(null);
+  const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
+  const [entityToEdit, setEntityToEdit] = useState<DBEntity | null>(null);
+
+  const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '', type: 'info' as 'info' | 'success' | 'warning' | 'danger' });
+  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => { }, type: 'danger' as 'danger' | 'warning' | 'info' | 'success' });
+
+  const showAlert = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'danger' = 'info') => {
+    setAlertConfig({ isOpen: true, title, message, type });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, type: 'info' | 'success' | 'warning' | 'danger' = 'danger') => {
+    setConfirmConfig({ isOpen: true, title, message, onConfirm, type });
+  };
 
   const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [analyticsDays, setAnalyticsDays] = useState(30);
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -112,6 +138,9 @@ export default function AdminPage() {
         return;
       }
 
+      const isSuper = await isUserSuperAdmin(user);
+      setCurrentUserRole(isSuper ? 'super_admin' : 'admin');
+
       loadData();
     };
 
@@ -121,128 +150,77 @@ export default function AdminPage() {
     };
   }, [user, loading, navigate, signOut]);
 
+  // Re-fetch analytics when days filter changes
+  useEffect(() => {
+    if (user && isAdminChecked && hasAdminAccess) {
+      const isSuper = currentUserRole === 'super_admin';
+      const entityId = user.user_metadata?.entity_id;
+      fetchAnalytics(isSuper, entityId);
+    }
+  }, [analyticsDays, user, isAdminChecked, hasAdminAccess, currentUserRole]);
+
   if (loading || !isAdminChecked) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
   if (!user || !hasAdminAccess) return null;
 
-  const loadData = async () => {
-    // Carregar usuários mockados
-    const mockUsers: User[] = [
-      {
-        id: '1',
-        name: 'João Silva',
-        email: 'joao@email.com',
-        avatar: 'https://readdy.ai/api/search-image?query=professional%20man%20portrait%20smiling%20friendly&width=100&height=100&seq=user1&orientation=squarish',
-        role: 'user',
+  async function loadData() {
+    console.log('[loadData] Starting loadData...');
+    let loadedUsers: User[] = [];
+    let isSuper = false;
+    let entityId = user?.user_metadata?.entity_id;
+
+    try {
+      console.log('[loadData] Calling getAdminUsers()');
+      const dbUsers = await getAdminUsers();
+      console.log('[loadData] Received dbUsers:', dbUsers.length);
+      loadedUsers = dbUsers.map(u => ({
+        id: u.id,
+        name: u.full_name || u.username || 'Usuário',
+        full_name: u.full_name,
+        username: u.username,
+        email: u.email || `@${u.username}`,
+        avatar: u.avatar_url || 'https://readdy.ai/api/search-image?query=placeholder&width=100&height=100',
+        role: u.role as any,
         verified: true,
-        joinedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
+        joinedAt: u.created_at || new Date().toISOString(),
         stats: {
-          posts: 45,
-          trips: 12,
-          followers: 234,
-          following: 189,
-          travelMoney: 1250,
-          level: 8
-        },
-        status: 'active'
-      },
-      {
-        id: '2',
-        name: 'Maria Santos',
-        email: 'maria@email.com',
-        avatar: 'https://readdy.ai/api/search-image?query=professional%20woman%20portrait%20smiling%20friendly&width=100&height=100&seq=user2&orientation=squarish',
-        role: 'business',
-        verified: true,
-        joinedAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
-        stats: {
-          posts: 89,
-          trips: 25,
-          followers: 1234,
-          following: 456,
-          travelMoney: 5670,
-          level: 15
-        },
-        status: 'active'
-      },
-      {
-        id: '3',
-        name: 'Pedro Costa',
-        email: 'pedro@email.com',
-        avatar: 'https://readdy.ai/api/search-image?query=professional%20man%20portrait%20smiling%20confident&width=100&height=100&seq=user3&orientation=squarish',
-        role: 'user',
-        verified: false,
-        joinedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        stats: {
-          posts: 12,
-          trips: 3,
-          followers: 45,
-          following: 67,
-          travelMoney: 320,
-          level: 3
-        },
-        status: 'active'
-      },
-      {
-        id: '4',
-        name: 'Ana Oliveira',
-        email: 'ana@email.com',
-        avatar: 'https://readdy.ai/api/search-image?query=professional%20woman%20portrait%20smiling%20elegant&width=100&height=100&seq=user4&orientation=squarish',
-        role: 'business',
-        verified: true,
-        joinedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString(),
-        stats: {
-          posts: 156,
-          trips: 42,
-          followers: 3456,
-          following: 234,
-          travelMoney: 12340,
-          level: 22
-        },
-        status: 'active'
-      },
-      {
-        id: '5',
-        name: 'Carlos Mendes',
-        email: 'carlos@email.com',
-        avatar: 'https://readdy.ai/api/search-image?query=professional%20man%20portrait%20serious%20business&width=100&height=100&seq=user5&orientation=squarish',
-        role: 'user',
-        verified: false,
-        joinedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-        stats: {
-          posts: 5,
-          trips: 1,
-          followers: 12,
-          following: 34,
-          travelMoney: 150,
+          posts: u.posts_count || 0,
+          trips: 0,
+          followers: u.followers_count || 0,
+          following: u.following_count || 0,
+          travelMoney: 0,
           level: 1
         },
-        status: 'suspended'
+        status: (u.status as any) || 'active',
+        entity_id: u.entity_id,
+        creator: u.creator,
+        entity: u.entity
+      }));
+      setUsers(loadedUsers);
+
+      isSuper = await isUserSuperAdmin(user as any);
+      if (!isSuper && !entityId) {
+        const currentUserDb = dbUsers.find(u => u.id === user?.id);
+        if (currentUserDb) {
+          entityId = currentUserDb.entity_id;
+        }
       }
-    ];
 
-    setUsers(mockUsers);
-
-    // Carregar itens do marketplace
-    const savedMarketplace = localStorage.getItem('marketplace-items');
-    if (savedMarketplace) {
-      const items = JSON.parse(savedMarketplace);
-      setMarketplaceItems(items.map((item: any) => ({
-        id: item.id,
-        title: item.title,
-        seller: {
-          id: item.seller.id,
-          name: item.seller.name
-        },
-        price: item.price,
-        sales: item.sales,
-        status: item.status || 'approved',
-        createdAt: item.createdAt
-      })));
+      const dbEntities = await getAdminEntities(isSuper ? 'super_admin' : 'admin', entityId);
+      setEntities(dbEntities);
+    } catch (e) {
+      console.error('[loadData] Failed to load data:', e);
     }
 
-    // Carregar reports mockados
+    try {
+      const items = await getAdminMarketplaceItems();
+      setMarketplaceItems(items);
+    } catch (e) {
+      console.error('Failed to load marketplace items:', e);
+    }
+
     const mockReports: Report[] = [
       {
         id: '1',
@@ -265,75 +243,88 @@ export default function AdminPage() {
         createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
       }
     ];
-
     setReports(mockReports);
 
-    // Load actual RPC analytics from Supabase
+    fetchAnalytics(isSuper, entityId);
+  }
+
+  const fetchAnalytics = async (isSuperParam: boolean, entityIdParam?: string) => {
     try {
-      const { supabase } = await import('../../services/db/client');
-      const { data, error } = await supabase.rpc('get_admin_analytics');
-      if (data && !error) {
-        setAnalyticsData(data);
+      setIsAnalyticsLoading(true);
+      const data = await getAdminAnalytics(
+        isSuperParam ? 'super_admin' : 'admin',
+        entityIdParam,
+        analyticsDays
+      );
+
+      setAnalyticsData(data);
+      if (data) {
         setStats({
-          totalUsers: data.totalUsers || mockUsers.length,
-          activeUsers: data.activeUsers || mockUsers.filter(u => u.status === 'active').length,
-          totalPosts: data.totalPosts || mockUsers.reduce((sum, u) => sum + u.stats.posts, 0),
-          totalTrips: data.totalTrips || mockUsers.reduce((sum, u) => sum + u.stats.trips, 0),
-          totalMarketplaceItems: savedMarketplace ? JSON.parse(savedMarketplace).length : 0,
-          totalRevenue: data.totalRevenue || mockUsers.reduce((sum, u) => sum + u.stats.travelMoney, 0),
-          pendingReports: mockReports.filter(r => r.status === 'pending').length,
+          totalUsers: data.totalUsers || 0,
+          activeUsers: data.activeUsers || 0,
+          totalPosts: data.totalPosts || 0,
+          totalTrips: data.totalTrips || 0,
+          totalMarketplaceItems: data.totalMarketplaceItems || 0,
+          totalRevenue: data.totalRevenue || 0,
+          pendingReports: 2, // From mock
           pendingApprovals: 0
         });
       }
     } catch (e) {
       console.error('Failed to fetch analytics', e);
+    } finally {
+      setIsAnalyticsLoading(false);
     }
   };
 
-  const handleUserAction = (userId: string, action: 'verify' | 'suspend' | 'ban' | 'activate' | 'promote' | 'demote') => {
-    const updatedUsers = users.map(user => {
-      if (user.id === userId) {
-        switch (action) {
-          case 'verify':
-            return { ...user, verified: true };
-          case 'suspend':
-            return { ...user, status: 'suspended' as const };
-          case 'ban':
-            return { ...user, status: 'banned' as const };
-          case 'activate':
-            return { ...user, status: 'active' as const };
-          case 'promote':
-            return { ...user, role: user.role === 'user' ? 'business' as const : 'admin' as const };
-          case 'demote':
-            return { ...user, role: user.role === 'admin' ? 'business' as const : 'user' as const };
-          default:
-            return user;
-        }
-      }
-      return user;
-    });
 
-    setUsers(updatedUsers);
-    alert(`✅ Ação "${action}" executada com sucesso!`);
+  const handleDeleteUser = async (userId: string) => {
+    showConfirm('Confirmar Exclusão', 'Tem certeza que deseja excluir este usuário? Esta ação não pode ser desfeita.', async () => {
+      try {
+        await deleteAdminUser(userId);
+        setUsers(prev => prev.filter(u => u.id !== userId));
+        showAlert('Sucesso', '✅ Usuário excluído com sucesso.', 'success');
+      } catch (error: any) {
+        showAlert('Erro', error.message || 'Erro ao excluir usuário.', 'danger');
+      }
+    });
   };
 
-  const handleMarketplaceAction = (itemId: string, action: 'approve' | 'reject' | 'remove') => {
-    const updatedItems = marketplaceItems.map(item => {
-      if (item.id === itemId) {
-        switch (action) {
-          case 'approve':
-            return { ...item, status: 'approved' as const };
-          case 'reject':
-            return { ...item, status: 'rejected' as const };
-          default:
-            return item;
-        }
+  const handleSaveUser = async (data: ManageUserPayload, isEdit: boolean) => {
+    try {
+      if (isEdit && userToEdit) {
+        await updateAdminUser(userToEdit.id, data);
+      } else {
+        await createAdminUser(data);
       }
-      return item;
-    }).filter(item => action !== 'remove' || item.id !== itemId);
+      loadData(); // refresh list
+    } catch (error: any) {
+      throw error; // Let modal handle it
+    }
+  };
 
-    setMarketplaceItems(updatedItems);
-    alert(`✅ Item ${action === 'approve' ? 'aprovado' : action === 'reject' ? 'rejeitado' : 'removido'} com sucesso!`);
+  const handleMarketplaceAction = async (itemId: string, itemType: 'trip' | 'experience', action: 'approve' | 'reject' | 'remove') => {
+    try {
+      if (action === 'remove') {
+        showConfirm('Excluir Item', 'Tem certeza que deseja excluir este item do marketplace?', async () => {
+          await deleteAdminMarketplaceItem(itemId, itemType);
+          setMarketplaceItems(prev => prev.filter(item => item.id !== itemId));
+          showAlert('Sucesso', '✅ Item removido com sucesso!', 'success');
+        });
+        return;
+      }
+
+      const newStatus = action === 'approve' ? 'approved' : 'rejected';
+      await updateMarketplaceItemStatus(itemId, itemType, newStatus);
+
+      setMarketplaceItems(prev => prev.map(item =>
+        item.id === itemId ? { ...item, status: newStatus as any } : item
+      ));
+
+      showAlert('Sucesso', `✅ Item ${action === 'approve' ? 'aprovado' : 'rejeitado'} com sucesso!`, 'success');
+    } catch (error: any) {
+      showAlert('Erro', error.message || 'Erro ao processar ação.', 'danger');
+    }
   };
 
   const handleReportAction = (reportId: string, action: 'resolve' | 'dismiss') => {
@@ -345,14 +336,18 @@ export default function AdminPage() {
     });
 
     setReports(updatedReports);
-    alert(`✅ Denúncia ${action === 'resolve' ? 'resolvida' : 'descartada'} com sucesso!`);
+    showAlert('Sucesso', `✅ Denúncia ${action === 'resolve' ? 'resolvida' : 'descartada'} com sucesso!`, 'success');
   };
 
   const getRoleBadge = (role: string) => {
     const badges: Record<string, { text: string; color: string; bg: string }> = {
       user: { text: 'Usuário', color: 'text-gray-700', bg: 'bg-gray-100' },
+      viajante: { text: 'Viajante', color: 'text-gray-700', bg: 'bg-gray-100' },
       business: { text: 'Business', color: 'text-purple-700', bg: 'bg-purple-100' },
-      admin: { text: 'Admin', color: 'text-red-700', bg: 'bg-red-100' }
+      agente: { text: 'Agente', color: 'text-blue-700', bg: 'bg-blue-100' },
+      fornecedor: { text: 'Fornecedor', color: 'text-orange-700', bg: 'bg-orange-100' },
+      admin: { text: 'Admin', color: 'text-red-700', bg: 'bg-red-100' },
+      super_admin: { text: 'Super Admin', color: 'text-rose-700', bg: 'bg-rose-100' },
     };
     return badges[role] || badges.user;
   };
@@ -424,6 +419,7 @@ export default function AdminPage() {
             {[
               { id: 'dashboard' as const, label: 'Dashboard', icon: 'ri-dashboard-line' },
               { id: 'users' as const, label: 'Usuários', icon: 'ri-user-line' },
+              { id: 'entities' as const, label: 'Empresas', icon: 'ri-building-4-line' },
               { id: 'marketplace' as const, label: 'Marketplace', icon: 'ri-store-line' },
               { id: 'reports' as const, label: 'Denúncias', icon: 'ri-alarm-warning-line', badge: stats.pendingReports },
               { id: 'analytics' as const, label: 'Analytics', icon: 'ri-line-chart-line' },
@@ -457,103 +453,269 @@ export default function AdminPage() {
           <div className="space-y-4 md:space-y-6">
             {/* Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-              <div className="bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl md:rounded-2xl p-4 md:p-6 text-white">
-                <div className="flex items-center justify-between mb-2 md:mb-4">
-                  <i className="ri-user-line text-2xl md:text-4xl opacity-80"></i>
-                  <span className="text-xl md:text-3xl font-bold">{stats.totalUsers}</span>
+              {[
+                { label: 'Usuários', value: stats.totalUsers, sub: `${stats.activeUsers} ativos`, icon: 'ri-user-line', color: 'from-blue-500 to-cyan-500' },
+                { label: 'Posts', value: stats.totalPosts, sub: 'Engajamento', icon: 'ri-article-line', color: 'from-green-500 to-emerald-500' },
+                { label: 'Viagens', value: stats.totalTrips, sub: 'Roteiros', icon: 'ri-flight-takeoff-line', color: 'from-purple-500 to-pink-500' },
+                { label: 'Marketplace', value: stats.totalMarketplaceItems, sub: 'Serviços/Roteiros', icon: 'ri-store-line', color: 'from-orange-500 to-pink-500' }
+              ].map((card, idx) => (
+                <div key={idx} className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 md:p-6 text-white shadow-lg overflow-hidden relative group`}>
+                  <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                    <i className={`${card.icon} text-8xl md:text-9xl`}></i>
+                  </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <i className={`${card.icon} text-2xl md:text-3xl opacity-80 shadow-sm`}></i>
+                    <span className="text-xl md:text-3xl font-black">{card.value.toLocaleString()}</span>
+                  </div>
+                  <h3 className="text-white/90 text-xs md:text-sm font-bold uppercase tracking-wider mb-1">{card.label}</h3>
+                  <p className="text-white/70 text-xs">{card.sub}</p>
                 </div>
-                <h3 className="text-white/90 text-xs md:text-sm font-medium mb-1">Total de Usuários</h3>
-                <p className="text-white/70 text-xs">{stats.activeUsers} ativos</p>
+              ))}
+
+              <div className="bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl p-4 md:p-6 text-white shadow-lg lg:col-span-2">
+                <div className="flex items-center justify-between mb-2">
+                  <i className="ri-money-dollar-circle-line text-2xl md:text-3xl opacity-80"></i>
+                  <span className="text-xl md:text-3xl font-black">{stats.totalRevenue.toLocaleString()} TM</span>
+                </div>
+                <h3 className="text-white/90 text-xs md:text-sm font-bold uppercase tracking-wider mb-1">Economia Gerada (Travel Money)</h3>
+                <p className="text-white/80 text-xs">Volume total de transações na plataforma</p>
               </div>
 
-              <div className="bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl md:rounded-2xl p-4 md:p-6 text-white">
-                <div className="flex items-center justify-between mb-2 md:mb-4">
-                  <i className="ri-article-line text-2xl md:text-4xl opacity-80"></i>
-                  <span className="text-xl md:text-3xl font-bold">{stats.totalPosts}</span>
+              <div className="bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl p-4 md:p-6 text-white shadow-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <i className="ri-alarm-warning-line text-2xl md:text-3xl opacity-80"></i>
+                  <span className="text-xl md:text-3xl font-black">{stats.pendingReports}</span>
                 </div>
-                <h3 className="text-white/90 text-xs md:text-sm font-medium mb-1">Posts Publicados</h3>
-                <p className="text-white/70 text-xs">Conteúdo gerado</p>
+                <h3 className="text-white/90 text-xs md:text-sm font-bold uppercase tracking-wider mb-1">Denúncias Pendentes</h3>
+                <p className="text-white/80 text-xs">Ação imediata recomendada</p>
               </div>
 
-              <div className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl md:rounded-2xl p-4 md:p-6 text-white">
-                <div className="flex items-center justify-between mb-2 md:mb-4">
-                  <i className="ri-flight-takeoff-line text-2xl md:text-4xl opacity-80"></i>
-                  <span className="text-xl md:text-3xl font-bold">{stats.totalTrips}</span>
+              <div className="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl p-4 md:p-6 text-white shadow-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <i className="ri-line-chart-line text-2xl md:text-3xl opacity-80"></i>
+                  <span className="text-xl md:text-3xl font-black">+24%</span>
                 </div>
-                <h3 className="text-white/90 text-xs md:text-sm font-medium mb-1">Viagens Criadas</h3>
-                <p className="text-white/70 text-xs">Roteiros planejados</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-orange-500 to-pink-500 rounded-xl md:rounded-2xl p-4 md:p-6 text-white">
-                <div className="flex items-center justify-between mb-2 md:mb-4">
-                  <i className="ri-store-line text-2xl md:text-4xl opacity-80"></i>
-                  <span className="text-xl md:text-3xl font-bold">{stats.totalMarketplaceItems}</span>
-                </div>
-                <h3 className="text-white/90 text-xs md:text-sm font-medium mb-1">Itens Marketplace</h3>
-                <p className="text-white/70 text-xs">Roteiros à venda</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-yellow-500 to-orange-500 rounded-xl md:rounded-2xl p-4 md:p-6 text-white">
-                <div className="flex items-center justify-between mb-2 md:mb-4">
-                  <i className="ri-money-dollar-circle-line text-2xl md:text-4xl opacity-80"></i>
-                  <span className="text-xl md:text-3xl font-bold">{stats.totalRevenue.toLocaleString()}</span>
-                </div>
-                <h3 className="text-white/90 text-xs md:text-sm font-medium mb-1">Travel Money Total</h3>
-                <p className="text-white/70 text-xs">Economia da plataforma</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-red-500 to-pink-500 rounded-xl md:rounded-2xl p-4 md:p-6 text-white">
-                <div className="flex items-center justify-between mb-2 md:mb-4">
-                  <i className="ri-alarm-warning-line text-2xl md:text-4xl opacity-80"></i>
-                  <span className="text-xl md:text-3xl font-bold">{stats.pendingReports}</span>
-                </div>
-                <h3 className="text-white/90 text-xs md:text-sm font-medium mb-1">Denúncias Pendentes</h3>
-                <p className="text-white/70 text-xs">Requer atenção</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl md:rounded-2xl p-4 md:p-6 text-white">
-                <div className="flex items-center justify-between mb-2 md:mb-4">
-                  <i className="ri-check-line text-2xl md:text-4xl opacity-80"></i>
-                  <span className="text-xl md:text-3xl font-bold">{stats.pendingApprovals}</span>
-                </div>
-                <h3 className="text-white/90 text-xs md:text-sm font-medium mb-1">Aprovações Pendentes</h3>
-                <p className="text-white/70 text-xs">Marketplace</p>
-              </div>
-
-              <div className="bg-gradient-to-br from-pink-500 to-rose-500 rounded-xl md:rounded-2xl p-4 md:p-6 text-white">
-                <div className="flex items-center justify-between mb-2 md:mb-4">
-                  <i className="ri-line-chart-line text-2xl md:text-4xl opacity-80"></i>
-                  <span className="text-xl md:text-3xl font-bold">+24%</span>
-                </div>
-                <h3 className="text-white/90 text-xs md:text-sm font-medium mb-1">Crescimento</h3>
-                <p className="text-white/70 text-xs">Últimos 30 dias</p>
+                <h3 className="text-white/90 text-xs md:text-sm font-bold uppercase tracking-wider mb-1">Crescimento Mensal</h3>
+                <p className="text-white/80 text-xs">Novos usuários vs anterior</p>
               </div>
             </div>
 
-            {/* Recent Activity */}
-            <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-              <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-4 md:mb-6 flex items-center gap-2">
-                <i className="ri-time-line text-red-500"></i>
-                Atividade Recente
-              </h2>
-              <div className="space-y-3 md:space-y-4">
-                {[
-                  { icon: 'ri-user-add-line', color: 'text-green-500', text: 'Novo usuário registrado: Carlos Mendes', time: '5 min atrás' },
-                  { icon: 'ri-store-line', color: 'text-purple-500', text: 'Novo roteiro publicado no Marketplace', time: '15 min atrás' },
-                  { icon: 'ri-alarm-warning-line', color: 'text-red-500', text: 'Nova denúncia recebida', time: '2h atrás' },
-                  { icon: 'ri-money-dollar-circle-line', color: 'text-yellow-500', text: 'Transação de 250 TM realizada', time: '3h atrás' },
-                  { icon: 'ri-article-line', color: 'text-blue-500', text: '12 novos posts publicados', time: '5h atrás' }
-                ].map((activity, index) => (
-                  <div key={index} className="flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                    <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full bg-white flex items-center justify-center ${activity.color} flex-shrink-0`}>
-                      <i className={`${activity.icon} text-lg md:text-xl`}></i>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Main Growth Chart */}
+              <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">
+                      {currentUserRole === 'super_admin' ? 'Crescimento da Plataforma' : 'Crescimento da Base de Clientes'}
+                    </h2>
+                    <p className="text-xs text-gray-500">Acúmulo de novos usuários nos últimos {analyticsDays} dias</p>
+                  </div>
+                  <div className="flex gap-1 bg-gray-50 p-1 rounded-xl">
+                    {[1, 7, 30, 90, 365].map(d => (
+                      <button
+                        key={d}
+                        onClick={() => setAnalyticsDays(d)}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${analyticsDays === d ? 'bg-white shadow-sm text-red-600' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        {d}d
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analyticsData?.platformGrowth || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} minTickGap={30} />
+                      <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} width={30} />
+                      <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} width={40} />
+                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+
+                      <Line yAxisId="left" type="monotone" dataKey="users" name="Usuários" stroke="#ef4444" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                      <Line yAxisId="left" type="monotone" dataKey="posts" name="Posts" stroke="#10b981" strokeWidth={3} dot={false} />
+                      <Line yAxisId="left" type="monotone" dataKey="trips" name="Viagens" stroke="#3b82f6" strokeWidth={3} dot={false} />
+                      <Line yAxisId="left" type="monotone" dataKey="marketplace" name="Marketplace" stroke="#8b5cf6" strokeWidth={3} dot={false} />
+                      <Line yAxisId="left" type="monotone" dataKey="entities" name="Empresas" stroke="#64748b" strokeWidth={3} dot={false} />
+                      <Line yAxisId="right" type="monotone" dataKey="revenue" name="Vol. Transacional (TM)" stroke="#f59e0b" strokeWidth={3} dot={false} strokeDasharray="5 5" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
+                <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <i className="ri-flashlight-line text-yellow-500"></i>
+                  Atividade de Monitoramento
+                </h2>
+                <div className="flex-1 space-y-4 overflow-y-auto max-h-[300px] pr-2 scrollbar-hide">
+                  {(analyticsData?.recentActivity || []).length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                      <i className="ri-inbox-line text-4xl mb-2"></i>
+                      <p className="text-sm">Nenhuma atividade recente</p>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs md:text-sm font-medium text-gray-900 truncate">{activity.text}</p>
-                      <p className="text-xs text-gray-500">{activity.time}</p>
+                  ) : (
+                    (analyticsData?.recentActivity || []).map((activity: any, index: number) => {
+                      // Format relative time (e.g., '2h', 'Agora')
+                      const diffInMinutes = Math.floor((new Date().getTime() - new Date(activity.created_at).getTime()) / 60000);
+                      let timeString = 'Agora';
+                      if (diffInMinutes > 0 && diffInMinutes < 60) timeString = `${diffInMinutes}m`;
+                      else if (diffInMinutes >= 60 && diffInMinutes < 1440) timeString = `${Math.floor(diffInMinutes / 60)}h`;
+                      else if (diffInMinutes >= 1440) timeString = `${Math.floor(diffInMinutes / 1440)}d`;
+
+                      return (
+                        <div key={index} className="flex gap-4 p-3 rounded-2xl hover:bg-gray-50 transition-colors cursor-default">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activity.color} flex-shrink-0 shadow-sm font-bold`}>
+                            <i className={activity.icon}></i>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start gap-2">
+                              <p className="text-sm font-bold text-gray-900 truncate">{activity.action}</p>
+                              <span className="text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">{timeString}</span>
+                            </div>
+                            <p className="text-xs text-gray-500 truncate">{activity.details}</p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <button
+                  onClick={() => setActiveTab('reports')}
+                  className="mt-6 w-full py-3 bg-gray-50 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
+                >
+                  Ver Log Completo <i className="ri-arrow-right-s-line"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-gray-900">Análise de Performance</h2>
+                <p className="text-sm text-gray-500">Dados detalhados dos últimos {analyticsDays} dias</p>
+              </div>
+              <div className="flex gap-2">
+                {[30, 90, 365].map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setAnalyticsDays(d)}
+                    className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${analyticsDays === d ? 'bg-red-600 text-white shadow-lg shadow-red-200' : 'bg-white border border-gray-100 text-gray-500 hover:bg-gray-50'}`}
+                  >
+                    {d} Dias
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Revenue Velocity Chart */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-gray-900">Velocidade de Receita (TM)</h3>
+                  <p className="text-xs text-gray-500">Comparativo entre Travel Money ganho vs gasto</p>
+                </div>
+                <div className="h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analyticsData?.revenueData || []}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} />
+                      <Tooltip
+                        cursor={{ fill: '#f9fafb' }}
+                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Legend iconType="circle" />
+                      <Bar dataKey="earned" name="Ganhos" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="spent" name="Gastos" fill="#f87171" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Category Distribution Chart */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-gray-900">Distribuição de Conteúdo</h3>
+                  <p className="text-xs text-gray-500">Mix de produtos no marketplace por categoria</p>
+                </div>
+                <div className="h-[250px] flex items-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Roteiros de Viagem', value: stats.totalTrips },
+                          { name: 'Experiências/Serviços', value: stats.totalMarketplaceItems - stats.totalTrips }
+                        ]}
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        <Cell fill="#ef4444" />
+                        <Cell fill="#fca5a5" />
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none' }} />
+                      <Legend verticalAlign="bottom" height={36} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="hidden sm:block pl-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                        <span className="text-xs font-bold text-gray-600">Roteiros Completo</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-red-300"></div>
+                        <span className="text-xs font-bold text-gray-600">Serviços Avulsos</span>
+                      </div>
                     </div>
                   </div>
-                ))}
+                </div>
+              </div>
+
+              {/* Top Performer Sections */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <i className="ri-medal-line text-yellow-500"></i>
+                  Top Destinos em Alta
+                </h3>
+                <div className="space-y-4">
+                  {['Paris, França', 'Maldivas', 'Toscana, Itália', 'Kioto, Japão'].map((dest, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="w-6 text-xs font-bold text-gray-300">#{idx + 1}</span>
+                        <p className="text-sm font-bold text-gray-900">{dest}</p>
+                      </div>
+                      <span className="text-xs font-bold text-green-500 bg-green-50 px-2 py-1 rounded-lg">+{12 + idx * 5}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <i className="ri-award-line text-blue-500"></i>
+                  Maiores Fornecedores
+                </h3>
+                <div className="space-y-4">
+                  {['Global Travels Inc', 'Elite Experiences', 'Nomad Adventures', 'Luxury Stay Group'].map((vendor, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="w-6 text-xs font-bold text-gray-300">#{idx + 1}</span>
+                        <p className="text-sm font-bold text-gray-900">{vendor}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-gray-900">{3200 - idx * 400} TM</p>
+                        <p className="text-[10px] text-gray-500">Volume Vendas</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -562,6 +724,15 @@ export default function AdminPage() {
         {/* Users Tab */}
         {activeTab === 'users' && (
           <div className="space-y-4 md:space-y-6">
+            <div className="flex justify-between items-center bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 p-3 md:p-4">
+              <h2 className="text-lg font-bold text-gray-900">Gerenciamento de Usuários</h2>
+              <button
+                onClick={() => { setUserToEdit(null); setIsUserModalOpen(true); }}
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all text-sm font-medium flex items-center gap-2"
+              >
+                <i className="ri-user-add-line"></i> Novo Usuário
+              </button>
+            </div>
             {/* Filters */}
             <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 p-3 md:p-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
@@ -578,13 +749,15 @@ export default function AdminPage() {
 
                 <select
                   value={filterRole}
-                  onChange={(e) => setFilterRole(e.target.value as any)}
+                  onChange={(e) => setFilterRole(e.target.value)}
                   className="px-3 md:px-4 py-2 md:py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-red-500 text-sm"
                 >
                   <option value="all">Todas as Funções</option>
-                  <option value="user">Usuário</option>
-                  <option value="business">Business</option>
+                  <option value="viajante">Viajante</option>
+                  <option value="agente">Agente</option>
+                  <option value="fornecedor">Fornecedor</option>
                   <option value="admin">Admin</option>
+                  {currentUserRole === 'super_admin' && <option value="super_admin">Super Admin</option>}
                 </select>
 
                 <select
@@ -610,6 +783,8 @@ export default function AdminPage() {
                       <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Função</th>
                       <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
                       <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Estatísticas</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Empresa</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Criado por</th>
                       <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Membro desde</th>
                       <th className="px-3 md:px-6 py-3 md:py-4 text-right text-xs font-semibold text-gray-600 uppercase">Ações</th>
                     </tr>
@@ -636,6 +811,9 @@ export default function AdminPage() {
                                   )}
                                 </div>
                                 <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                                {user.username && !user.email.startsWith('@') && (
+                                  <p className="text-[10px] text-gray-400 truncate">@{user.username}</p>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -657,54 +835,44 @@ export default function AdminPage() {
                             </div>
                           </td>
                           <td className="px-3 md:px-6 py-3 md:py-4">
+                            <span className="text-xs md:text-sm text-gray-800 font-medium">
+                              {user.entity?.name || '-'}
+                            </span>
+                          </td>
+                          <td className="px-3 md:px-6 py-3 md:py-4">
+                            <div className="flex flex-col">
+                              <span className="text-xs md:text-sm text-gray-800 font-medium">
+                                {user.creator?.full_name || '-'}
+                              </span>
+                              {user.creator?.username && (
+                                <span className="text-xs text-gray-500">
+                                  @{user.creator.username}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 md:px-6 py-3 md:py-4">
                             <span className="text-xs md:text-sm text-gray-600 whitespace-nowrap">
                               {new Date(user.joinedAt).toLocaleDateString('pt-BR')}
                             </span>
                           </td>
                           <td className="px-3 md:px-6 py-3 md:py-4">
                             <div className="flex items-center justify-end gap-1 md:gap-2">
-                              {!user.verified && (
-                                <button
-                                  onClick={() => handleUserAction(user.id, 'verify')}
-                                  className="p-1.5 md:p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
-                                  title="Verificar"
-                                >
-                                  <i className="ri-verified-badge-line text-sm md:text-base"></i>
-                                </button>
-                              )}
-                              {user.status === 'active' && (
-                                <button
-                                  onClick={() => handleUserAction(user.id, 'suspend')}
-                                  className="p-1.5 md:p-2 bg-orange-100 text-orange-600 rounded-lg hover:bg-orange-200 transition-colors"
-                                  title="Suspender"
-                                >
-                                  <i className="ri-pause-circle-line text-sm md:text-base"></i>
-                                </button>
-                              )}
-                              {user.status === 'suspended' && (
-                                <button
-                                  onClick={() => handleUserAction(user.id, 'activate')}
-                                  className="p-1.5 md:p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors"
-                                  title="Ativar"
-                                >
-                                  <i className="ri-play-circle-line text-sm md:text-base"></i>
-                                </button>
-                              )}
-                              {user.role !== 'admin' && (
-                                <button
-                                  onClick={() => handleUserAction(user.id, 'promote')}
-                                  className="p-1.5 md:p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors"
-                                  title="Promover"
-                                >
-                                  <i className="ri-arrow-up-circle-line text-sm md:text-base"></i>
-                                </button>
-                              )}
+                              {/* Edit Button */}
                               <button
-                                onClick={() => handleUserAction(user.id, 'ban')}
-                                className="p-1.5 md:p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
-                                title="Banir"
+                                onClick={() => { setUserToEdit(user); setIsUserModalOpen(true); }}
+                                className="p-1.5 md:p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                                title="Editar"
                               >
-                                <i className="ri-forbid-line text-sm md:text-base"></i>
+                                <i className="ri-edit-line text-sm md:text-base"></i>
+                              </button>
+                              {/* Delete Button */}
+                              <button
+                                onClick={() => handleDeleteUser(user.id)}
+                                className="p-1.5 md:p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                                title="Excluir"
+                              >
+                                <i className="ri-delete-bin-line text-sm md:text-base"></i>
                               </button>
                             </div>
                           </td>
@@ -718,71 +886,202 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Entities Tab */}
+        {activeTab === 'entities' && (
+          <div className="space-y-4 md:space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <h2 className="text-xl md:text-2xl font-bold text-gray-900">Empresas (Look & Feel)</h2>
+              {currentUserRole === 'super_admin' && (
+                <button
+                  onClick={() => { setEntityToEdit(null); setIsEntityModalOpen(true); }}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors shadow-sm font-medium flex items-center justify-center gap-2"
+                >
+                  <i className="ri-add-line text-lg"></i>
+                  Nova Empresa
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {entities.map(entity => (
+                <div key={entity.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="h-24 bg-gray-50 flex items-center justify-center p-4 border-b border-gray-100 relative" style={{ backgroundColor: entity.theme_config?.primary_color || '#f97316' }}>
+                    {entity.theme_config?.logo_url ? (
+                      <img src={entity.theme_config.logo_url} alt={entity.name} className="max-h-16 max-w-full drop-shadow-md" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                        <i className="ri-building-4-fill text-3xl text-white"></i>
+                      </div>
+                    )}
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button
+                        onClick={() => { setEntityToEdit(entity); setIsEntityModalOpen(true); }}
+                        className="p-1.5 bg-white/20 hover:bg-white/40 backdrop-blur-md rounded-lg text-white transition-all shadow-sm"
+                        title="Personalizar Look & Feel"
+                      >
+                        <i className="ri-palette-line"></i>
+                      </button>
+                      {currentUserRole === 'super_admin' && (
+                        <button
+                          onClick={async () => {
+                            showConfirm('Excluir Empresa', 'Tem certeza que deseja excluir esta empresa?', async () => {
+                              try {
+                                await deleteAdminEntity(entity.id);
+                                loadData();
+                              } catch (e: any) { showAlert('Erro', e.message, 'danger'); }
+                            });
+                          }}
+                          className="p-1.5 bg-red-500/20 hover:bg-red-500/40 backdrop-blur-md text-white rounded-lg transition-all shadow-sm"
+                          title="Excluir Empresa"
+                        >
+                          <i className="ri-delete-bin-line"></i>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-bold text-gray-900 text-lg mb-1 truncate">{entity.name}</h3>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium capitalize">
+                        {entity.type === 'agency' ? 'Agência' : entity.type === 'supplier' ? 'Fornecedor' : 'Individual'}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        Criado em {new Date(entity.created_at).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 mt-4">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Tema Aplicado:</p>
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 border border-gray-100">
+                        <span className="text-xs text-gray-600">Cor Primária</span>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs text-gray-500">{entity.theme_config?.primary_color || '#f97316'}</code>
+                          <div className="w-4 h-4 rounded-full border border-gray-200" style={{ backgroundColor: entity.theme_config?.primary_color || '#f97316' }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Marketplace Tab */}
         {activeTab === 'marketplace' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="space-y-4 md:space-y-6">
+            <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 p-3 md:p-4">
+              <h2 className="text-lg font-bold text-gray-900">Gerenciamento do Marketplace</h2>
+            </div>
+
+            <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[800px]">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Roteiro</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Vendedor</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Preço</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Vendas</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase">Ações</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Roteiro</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Vendedor</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Preço</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Vendas</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Período/Local</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-right text-xs font-semibold text-gray-600 uppercase">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {marketplaceItems.map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <h4 className="font-semibold text-gray-900 text-sm">{item.title}</h4>
+                        <td className="px-3 md:px-6 py-3 md:py-4">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={item.cover_image}
+                              alt={item.title}
+                              className="w-12 h-10 rounded-lg object-cover"
+                            />
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 text-sm truncate">{item.title}</p>
+                              <p className={`text-[10px] font-bold uppercase ${item.item_type === 'trip' ? 'text-blue-600' : 'text-purple-600'}`}>
+                                {item.item_type === 'trip' ? 'Roteiro' : item.category || 'Passeio'}
+                              </p>
+                            </div>
+                          </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm text-gray-600">{item.seller.name}</span>
+                        <td className="px-3 md:px-6 py-3 md:py-4">
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={item.seller?.avatar_url || 'https://readdy.ai/api/search-image?query=placeholder&width=100&height=100'}
+                              className="w-6 h-6 rounded-full object-cover"
+                              alt=""
+                            />
+                            <span className="text-sm text-gray-700">{item.seller?.full_name || item.seller?.username || 'Vendedor'}</span>
+                          </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm font-semibold text-gray-900">{item.price} TM</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm text-gray-600">{item.sales}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${item.status === 'approved' ? 'bg-green-100 text-green-700' :
-                            item.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-red-100 text-red-700'
-                            }`}>
-                            {item.status === 'approved' ? 'Aprovado' : item.status === 'pending' ? 'Pendente' : 'Rejeitado'}
+                        <td className="px-3 md:px-6 py-3 md:py-4">
+                          <span className="font-bold text-gray-900 text-sm">
+                            {item.price} {item.currency}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-3 md:px-6 py-3 md:py-4">
+                          <span className="text-sm font-medium text-gray-600">
+                            {item.sales} {item.sales === 1 ? 'venda' : 'vendas'}
+                          </span>
+                        </td>
+                        <td className="px-3 md:px-6 py-3 md:py-4">
+                          <div className="flex flex-col gap-1">
+                            {(item.start_date || item.end_date) ? (
+                              <div className="flex items-center gap-1 text-[11px] text-gray-500">
+                                <i className="ri-calendar-line"></i>
+                                <span>
+                                  {item.start_date ? new Date(item.start_date).toLocaleDateString('pt-BR') : '...'} - {item.end_date ? new Date(item.end_date).toLocaleDateString('pt-BR') : '...'}
+                                </span>
+                              </div>
+                            ) : null}
+                            <div className="flex items-center gap-1 text-[11px] text-gray-600 font-medium">
+                              <i className="ri-map-pin-line"></i>
+                              <span>{item.destination || item.location || 'N/A'}</span>
+                            </div>
+                            <div className="mt-1">
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${item.visibility === 'public' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'}`}>
+                                {item.visibility === 'public' ? 'PÚBLICO' : 'PRIVADO'}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 md:px-6 py-3 md:py-4">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${item.status === 'approved' ? 'bg-green-100 text-green-700' :
+                            item.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                            {item.status === 'approved' ? 'Aprovado' :
+                              item.status === 'rejected' ? 'Reprovado' : 'Pendente'}
+                          </span>
+                        </td>
+                        <td className="px-3 md:px-6 py-3 md:py-4">
                           <div className="flex items-center justify-end gap-2">
-                            {item.status === 'pending' && (
-                              <>
-                                <button
-                                  onClick={() => handleMarketplaceAction(item.id, 'approve')}
-                                  className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors"
-                                  title="Aprovar"
-                                >
-                                  <i className="ri-check-line"></i>
-                                </button>
-                                <button
-                                  onClick={() => handleMarketplaceAction(item.id, 'reject')}
-                                  className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
-                                  title="Rejeitar"
-                                >
-                                  <i className="ri-close-line"></i>
-                                </button>
-                              </>
+                            {item.status !== 'approved' && (
+                              <button
+                                onClick={() => handleMarketplaceAction(item.id, item.item_type, 'approve')}
+                                className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                                title="Aprovar"
+                              >
+                                <i className="ri-check-line text-lg"></i>
+                              </button>
+                            )}
+                            {item.status !== 'rejected' && (
+                              <button
+                                onClick={() => handleMarketplaceAction(item.id, item.item_type, 'reject')}
+                                className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-colors"
+                                title="Reprovar"
+                              >
+                                <i className="ri-close-line text-lg"></i>
+                              </button>
                             )}
                             <button
-                              onClick={() => handleMarketplaceAction(item.id, 'remove')}
-                              className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                              onClick={() => handleMarketplaceAction(item.id, item.item_type, 'remove')}
+                              className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
                               title="Remover"
                             >
-                              <i className="ri-delete-bin-line"></i>
+                              <i className="ri-delete-bin-line text-lg"></i>
                             </button>
                           </div>
                         </td>
@@ -859,88 +1158,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Analytics Tab */}
-        {activeTab === 'analytics' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-bold text-gray-900">Métricas Principais</h2>
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                <button className="px-3 py-1 text-sm font-medium rounded-md bg-white shadow-sm text-gray-900">30 Dias</button>
-                <button className="px-3 py-1 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">90 Dias</button>
-                <button className="px-3 py-1 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">1 Ano</button>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* User Growth Chart */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="font-bold text-gray-900">Crescimento de Usuários</h3>
-                    <p className="text-sm text-gray-500">Acúmulo diário de novos registros</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
-                    <i className="ri-user-add-line text-xl"></i>
-                  </div>
-                </div>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      data={analyticsData?.usersGrowth || []}
-                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                    >
-                      <defs>
-                        <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <Tooltip
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      />
-                      <Area type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Travel Money Velocity */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="font-bold text-gray-900">Economia Travel Money</h3>
-                    <p className="text-sm text-gray-500">TM Gerado vs TM Gasto</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-500">
-                    <i className="ri-money-dollar-circle-line text-xl"></i>
-                  </div>
-                </div>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={analyticsData?.tmVelocity || []}
-                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                      <Tooltip
-                        cursor={{ fill: '#f9fafb' }}
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                      <Bar dataKey="earn" name="TM Ganho" fill="#4ade80" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                      <Bar dataKey="spend" name="TM Gasto" fill="#f87171" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
@@ -966,6 +1184,52 @@ export default function AdminPage() {
         }}
         onCreateClick={() => window.REACT_APP_NAVIGATE('/')}
         onMenuClick={() => { }}
+      />
+
+      {/* Modals */}
+      {isUserModalOpen && (
+        <AdminUserModal
+          isOpen={isUserModalOpen}
+          onClose={() => setIsUserModalOpen(false)}
+          onSave={handleSaveUser}
+          userToEdit={userToEdit as any}
+          currentUserRole={currentUserRole}
+          entities={entities}
+        />
+      )}
+
+      {isEntityModalOpen && (
+        <AdminEntityModal
+          isOpen={isEntityModalOpen}
+          onClose={() => setIsEntityModalOpen(false)}
+          onSave={async (data, isEdit) => {
+            if (isEdit && entityToEdit) {
+              await updateAdminEntity(entityToEdit.id, data);
+            } else {
+              await createAdminEntity(data);
+            }
+            loadData();
+          }}
+          entityToEdit={entityToEdit}
+          currentUserRole={currentUserRole}
+        />
+      )}
+
+      <AlertModal
+        isOpen={alertConfig.isOpen}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+      />
+
+      <ConfirmationModal
+        isOpen={confirmConfig.isOpen}
+        onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmConfig.onConfirm}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        type={confirmConfig.type}
       />
     </div>
   );
