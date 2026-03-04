@@ -10,6 +10,7 @@ import CreateStoryModal from '@/pages/home/components/CreateStoryModal';
 import WalletWidget from '@/components/WalletWidget';
 import GamificationWidget from '@/components/GamificationWidget';
 import CheckInModal from '@/components/CheckInModal';
+import MobileMenu from './MobileMenu';
 import { useUnreadCounts } from '@/hooks/useUnreadCounts';
 import { useEffect } from 'react';
 
@@ -29,6 +30,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     const [showWallet, setShowWallet] = useState(false);
     const [showGamification, setShowGamification] = useState(false);
     const [showCheckIn, setShowCheckIn] = useState(false);
+    const [showMobileMenu, setShowMobileMenu] = useState(false);
     const [createModalTab, setCreateModalTab] = useState<'POST' | 'STORY' | 'REEL' | 'TEMPLATES' | null>(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -103,9 +105,16 @@ export default function MainLayout({ children }: MainLayoutProps) {
                         else if (tab === 'reels') navigate('/reels'); // Note: Need a route for this
                     }}
                     onCreateClick={() => setShowCreateMenu(true)}
-                    onMenuClick={() => navigate('/settings')}
+                    onMenuClick={() => setShowMobileMenu(true)}
                 />
             </div>
+
+            <MobileMenu
+                isOpen={showMobileMenu}
+                onClose={() => setShowMobileMenu(false)}
+                onWalletClick={() => setShowWallet(true)}
+                onGamificationClick={() => setShowGamification(true)}
+            />
 
             {/* Global Elements */}
             <FloatingMenu />

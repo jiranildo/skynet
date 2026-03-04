@@ -7,6 +7,7 @@ import ManagedTrips from './components/ManagedTrips';
 import FinancialPanel from './components/FinancialPanel';
 import AgentStats from './components/AgentStats';
 import AgentInBox from './components/AgentInBox';
+import InfoWidgets from './components/InfoWidgets';
 
 export type AgentTab = 'overview' | 'messages' | 'creator' | 'trips';
 
@@ -67,26 +68,30 @@ export default function AgentDashboard() {
                     </div>
                 </div>
 
-                {/* Tabs */}
-                <div className="flex items-center gap-2 mt-8 bg-white p-1 rounded-2xl shadow-sm border border-gray-100 w-fit overflow-x-auto max-w-full">
-                    <button
-                        onClick={() => setActiveTab('trips')}
-                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'trips' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
-                    >
-                        Experiências
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('overview')}
-                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'overview' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
-                    >
-                        Dashboard
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('messages')}
-                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'messages' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
-                    >
-                        Mensagens
-                    </button>
+                {/* Tabs & Widgets */}
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mt-8">
+                    <div className="flex items-center gap-2 bg-white p-1 rounded-2xl shadow-sm border border-gray-100 w-fit overflow-x-auto max-w-full no-scrollbar">
+                        <button
+                            onClick={() => setActiveTab('trips')}
+                            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'trips' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
+                        >
+                            Experiências
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('overview')}
+                            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'overview' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
+                        >
+                            Dashboard
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('messages')}
+                            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'messages' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
+                        >
+                            Mensagens
+                        </button>
+                    </div>
+
+                    <InfoWidgets />
                 </div>
             </header>
 
