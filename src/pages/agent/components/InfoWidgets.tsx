@@ -29,7 +29,7 @@ export default function InfoWidgets() {
     ];
 
     return (
-        <div className="flex flex-wrap items-center gap-4 mt-6 md:mt-0">
+        <div className="flex flex-row items-center gap-4 w-fit min-w-full">
             {/* Clocks Section */}
             <div className="flex items-center gap-3 bg-white/50 backdrop-blur-sm p-2 px-4 rounded-2xl border border-gray-100 shadow-sm overflow-x-auto no-scrollbar">
                 <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 border-r border-gray-100 pr-3 mr-1 whitespace-nowrap">

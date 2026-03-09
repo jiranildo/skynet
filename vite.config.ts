@@ -68,7 +68,7 @@ export default defineConfig({
   ],
   base,
   build: {
-    sourcemap: true,
+    sourcemap: process.env.NODE_ENV === 'production' ? true : 'inline',
   },
   resolve: {
     alias: {

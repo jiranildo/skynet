@@ -89,54 +89,83 @@ export default function SupplierExperiences() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {experiences.map(exp => (
-                        <div key={exp.id} className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden group hover:shadow-lg transition-all duration-300">
-                            <div className="h-48 relative overflow-hidden">
-                                {exp.cover_image ? (
-                                    <img src={exp.cover_image} alt={exp.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                ) : (
-                                    <div className="w-full h-full bg-gradient-to-r from-purple-100 to-pink-100 flex items-center justify-center text-purple-300">
-                                        <i className="ri-image-line text-4xl"></i>
+                    {experiences.map(exp => {
+                        const isExpired = exp.validity_end_date ? new Date(exp.validity_end_date) < new Date(new Date().setHours(0, 0, 0, 0)) : false;
+
+                        return (
+                            <div key={exp.id} className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden group hover:shadow-lg transition-all duration-300">
+                                <div className="h-48 relative overflow-hidden">
+                                    {exp.cover_image ? (
+                                        <img src={exp.cover_image} alt={exp.title} className={`w-full h-full object-cover transition-transform duration-500 ${isExpired ? 'grayscale' : 'group-hover:scale-110'}`} />
+                                    ) : (
+                                        <div className={`w-full h-full bg-gradient-to-r from-purple-100 to-pink-100 flex items-center justify-center text-purple-300 ${isExpired ? 'grayscale' : ''}`}>
+                                            <i className="ri-image-line text-4xl"></i>
+                                        </div>
+                                    )}
+                                    <div className="absolute top-3 left-3 bg-white/90 px-3 py-1 rounded-full text-xs font-bold text-gray-800 shadow-sm">
+                                        {exp.category}
                                     </div>
-                                )}
-                                <div className="absolute top-3 left-3 bg-white/90 px-3 py-1 rounded-full text-xs font-bold text-gray-800 shadow-sm">
-                                    {exp.category}
-                                </div>
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <div className="absolute bottom-4 right-4 flex gap-2">
-                                        <button onClick={() => handleEdit(exp)} className="w-10 h-10 bg-white text-gray-900 rounded-xl hover:bg-purple-50 hover:text-purple-600 transition-colors flex items-center justify-center shadow-lg">
-                                            <i className="ri-pencil-line"></i>
-                                        </button>
-                                        <button onClick={() => handleDelete(exp.id)} className="w-10 h-10 bg-white text-gray-900 rounded-xl hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center shadow-lg">
-                                            <i className="ri-delete-bin-line"></i>
-                                        </button>
+                                    {isExpired && (
+                                        <div className="absolute top-3 right-3 bg-red-500/90 text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm flex items-center gap-1">
+                                            <i className="ri-error-warning-line"></i> Expirado
+                                        </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="absolute bottom-4 right-4 flex gap-2">
+                                            <button onClick={() => handleEdit(exp)} className="w-10 h-10 bg-white text-gray-900 rounded-xl hover:bg-purple-50 hover:text-purple-600 transition-colors flex items-center justify-center shadow-lg">
+                                                <i className="ri-pencil-line"></i>
+                                            </button>
+                                            <button onClick={() => handleDelete(exp.id)} className="w-10 h-10 bg-white text-gray-900 rounded-xl hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center shadow-lg">
+                                                <i className="ri-delete-bin-line"></i>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div className="p-5">
-                                <h3 className="font-bold text-gray-900 text-lg mb-1 truncate">{exp.title}</h3>
-                                <div className="flex items-center gap-1 text-sm text-gray-500 mb-3">
-                                    <i className="ri-map-pin-line"></i>
-                                    <span className="truncate">{exp.location || 'Localização não definida'}</span>
-                                </div>
-                                <p className="text-gray-600 text-sm line-clamp-2 mb-4 h-10">
-                                    {exp.description || 'Sem descrição.'}
-                                </p>
-                                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                                    <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">Valor</div>
-                                    <div className="font-black text-gray-900 flex items-center gap-1">
-                                        {exp.price > 0 ? (
-                                            <>
-                                                {exp.price} <span className="text-sm font-semibold text-purple-600">{exp.currency}</span>
-                                            </>
-                                        ) : (
-                                            <span className="text-green-600">GRÁTIS</span>
+                                <div className="p-5">
+                                    <h3 className="font-bold text-gray-900 text-lg mb-1 truncate">{exp.title}</h3>
+                                    <div className="flex items-center gap-1 text-sm text-gray-500 mb-3">
+                                        <i className="ri-map-pin-line"></i>
+                                        <span className="truncate">{exp.location || 'Localização não definida'}</span>
+                                    </div>
+
+                                    {(exp.validity_start_date || exp.validity_end_date) && (
+                                        <div className="flex items-center gap-1.5 text-xs text-purple-600 font-medium mb-3 bg-purple-50 px-2 py-1 rounded-lg w-fit">
+                                            <i className="ri-calendar-event-line"></i>
+                                            {exp.validity_start_date ? new Date(exp.validity_start_date).toLocaleDateString('pt-BR') : 'Agora'} - {exp.validity_end_date ? new Date(exp.validity_end_date).toLocaleDateString('pt-BR') : 'Indeterminado'}
+                                        </div>
+                                    )}
+
+                                    <p className="text-gray-600 text-sm line-clamp-2 mb-4 h-10">
+                                        {exp.description || 'Sem descrição.'}
+                                    </p>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-2 text-xs font-bold px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg">
+                                            <i className="ri-shopping-cart-2-line"></i>
+                                            {exp.sales_count && exp.sales_count > 0 ? `${exp.sales_count} vendas` : 'Sem vendas'}
+                                        </div>
+                                        {exp.sales_count && exp.sales_count > 0 && exp.total_revenue && (
+                                            <div className="text-xs font-bold text-gray-400">
+                                                Total: R$ {(exp.total_revenue / 1000).toFixed(1)}k
+                                            </div>
                                         )}
                                     </div>
+
+                                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                                        <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">Valor</div>
+                                        <div className="font-black text-gray-900 flex items-center gap-1">
+                                            {exp.price > 0 ? (
+                                                <>
+                                                    {exp.price} <span className="text-sm font-semibold text-purple-600">{exp.currency}</span>
+                                                </>
+                                            ) : (
+                                                <span className="text-green-600">GRÁTIS</span>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             )}
 

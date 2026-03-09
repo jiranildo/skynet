@@ -51,7 +51,7 @@ export default function SupplierDashboard() {
             <header className="mb-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-black text-gray-900">Painel do Fornecedor</h1>
+                        <h1 className="text-3xl font-black text-gray-900">Portal de Serviços</h1>
                         <p className="text-gray-500 font-medium">Bem-vindo de volta! Gerencie e acompanhe seus serviços corporativos.</p>
                     </div>
                 </div>

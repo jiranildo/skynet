@@ -11,7 +11,8 @@ import TripFinanceTab from './TripFinanceTab';
 import { Recommendation } from './RecommendationCard';
 import ActivityAttachmentsModal from './ActivityAttachmentsModal';
 import { getUserAcquiredExperiences, useUserExperience } from '@/services/db/experiences';
-import { UserExperience } from '@/services/db/types';
+import { ErrorDetailsModal } from '../../../components/ErrorDetailsModal';
+import { UserExperience, TripJournalEntry } from '@/services/db/types';
 
 interface Activity {
   id: string;
@@ -112,6 +113,9 @@ export default function TripPlanningModal({
   });
 
   const [activeDayIndex, setActiveDayIndex] = useState(0); // 0 to N are days, -1 is Pre, 999 is Post
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [apiError, setApiError] = useState<any>(null);
+  const [generationProgress, setGenerationProgress] = useState(0);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
@@ -378,9 +382,13 @@ export default function TripPlanningModal({
             }
           } catch (e) {
             console.warn("Falha ao fazer parse do JSON deste lote de dias.", e, jsonStr);
+            setApiError(e);
+            setShowErrorModal(true);
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error("Falha de comunicação com a IA neste lote.", e);
+          setApiError(e);
+          setShowErrorModal(true);
         }
       }
 
@@ -484,6 +492,8 @@ export default function TripPlanningModal({
 
     } catch (error) {
       console.error("AI Generation Error:", error);
+      setApiError(error);
+      setShowErrorModal(true);
       alert("Erro ao gerar roteiro. Tente novamente.");
     } finally {
       setIsGeneratingItinerary(false);
@@ -703,6 +713,8 @@ export default function TripPlanningModal({
       }
     } catch (error) {
       console.error("Erro na Pesquisa AI:", error);
+      setApiError(error);
+      setShowErrorModal(true);
       alert("Não foi possível completar a pesquisa. Tente novamente.");
     } finally {
       setIsPerformingResearch(false);
@@ -839,6 +851,8 @@ export default function TripPlanningModal({
 
     } catch (error) {
       console.error("Erro ao carregar mais itens:", error);
+      setApiError(error);
+      setShowErrorModal(true);
       alert("Não foi possível carregar mais itens.");
     } finally {
       setIsLoadingMore(false);
@@ -876,6 +890,8 @@ export default function TripPlanningModal({
       })
       .catch(err => {
         console.error('Failed to save AI itinerary:', err);
+        setApiError(err);
+        setShowErrorModal(true);
         alert('Erro ao salvar o roteiro gerado. Tente novamente.');
       });
 
@@ -918,6 +934,8 @@ export default function TripPlanningModal({
         })
         .catch(err => {
           console.error('Save failed:', err);
+          setApiError(err);
+          setShowErrorModal(true);
           setSaveStatus('error');
         });
     }, 1000); // 1s debounce
@@ -934,6 +952,8 @@ export default function TripPlanningModal({
         if (onTripUpdated) onTripUpdated(updatedTrip);
       } catch (error) {
         console.error('Error saving on close:', error);
+        setApiError(error);
+        setShowErrorModal(true);
       }
     }
     onClose();
@@ -957,6 +977,8 @@ export default function TripPlanningModal({
       }
     } catch (error) {
       console.error('Failed to save preferences:', error);
+      setApiError(error);
+      setShowErrorModal(true);
       alert('Erro ao salvar preferências.');
     }
   };
@@ -1011,6 +1033,8 @@ export default function TripPlanningModal({
         }
       } catch (error) {
         console.error('Error fetching coordinates:', error);
+        setApiError(error);
+        setShowErrorModal(true);
       }
     }
 
@@ -1073,6 +1097,8 @@ export default function TripPlanningModal({
           alert('Sua sugestão de inclusão foi enviada para o proprietário!');
         }).catch(err => {
           console.error('Failed to save inclusion suggestion:', err);
+          setApiError(err);
+          setShowErrorModal(true);
           alert('Erro ao enviar sugestão de inclusão. Por favor, tente novamente.');
         });
       }
@@ -1142,6 +1168,8 @@ export default function TripPlanningModal({
           })
           .catch(err => {
             console.error('Failed to save deletion:', err);
+            setApiError(err);
+            setShowErrorModal(true);
             alert('Erro ao salvar exclusão: ' + err.message);
           });
 
@@ -1177,6 +1205,8 @@ export default function TripPlanningModal({
         alert('Sua sugestão de remoção foi enviada para o proprietário!');
       } catch (err) {
         console.error('Failed to save removal suggestion:', err);
+        setApiError(err);
+        setShowErrorModal(true);
         alert('Erro ao enviar sugestão de remoção.');
       }
     }
@@ -1204,6 +1234,8 @@ export default function TripPlanningModal({
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
       console.error("Error clearing day:", error);
+      setApiError(error);
+      setShowErrorModal(true);
       setSaveStatus('error');
       alert("Erro ao limpar dia. Tente novamente.");
     }
@@ -2296,7 +2328,7 @@ export default function TripPlanningModal({
               ) : (
                 <div className="grid grid-cols-1 gap-4">
                   {userExperiences
-                    .filter(ue => ue.status === 'available')
+                    .filter(ue => ue.status === 'available' && (!ue.experience?.validity_end_date || new Date(ue.experience.validity_end_date) >= new Date()))
                     .map((ue) => (
                       <button
                         key={ue.id}
@@ -2322,7 +2354,20 @@ export default function TripPlanningModal({
                           setItinerary(nextState);
                           await updateTrip(trip.id, { itinerary: nextState });
                           await useUserExperience(ue.id);
-                          setUserExperiences(prev => prev.map(p => p.id === ue.id ? { ...p, status: 'used' } : p));
+
+                          // Update local state with new quantity/status
+                          setUserExperiences(prev => prev.map(p => {
+                            if (p.id === ue.id) {
+                              const newQty = (p.quantity || 1) - 1;
+                              return {
+                                ...p,
+                                quantity: newQty,
+                                status: newQty <= 0 ? 'used' : 'available'
+                              };
+                            }
+                            return p;
+                          }));
+
                           setIsSelectingService(false);
 
                           if (onTripUpdated) {
@@ -2348,6 +2393,11 @@ export default function TripPlanningModal({
                             <i className="ri-map-pin-line text-purple-500"></i>
                             {ue.experience?.location}
                           </div>
+                          {ue.quantity > 1 && (
+                            <div className="mt-2 inline-flex items-center px-2 py-0.5 rounded-lg bg-purple-100 text-purple-700 text-[10px] font-bold">
+                              {ue.quantity} disponiveis
+                            </div>
+                          )}
                         </div>
                         <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 opacity-0 group-hover:opacity-100 transition-opacity">
                           <i className="ri-add-line text-xl font-bold"></i>
@@ -2366,7 +2416,14 @@ export default function TripPlanningModal({
           </div>
         </div>
       )}
-    </div >
+      {/* Error Details Modal */}
+      <ErrorDetailsModal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        title="Erro na Geração por IA"
+        error={apiError}
+        context="TripPlanningModal.tsx: AI Chunk Generation"
+      />
+    </div>
   );
 }
-

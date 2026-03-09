@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; padding: 0; background: #333; }
+  #board { width: 1920px; height: 1082px; background: url('/images/board_game_bg.webp') no-repeat; cursor: crosshair; position: relative; }
+  .dot { position: absolute; width: 10px; height: 10px; background: red; border-radius: 50%; transform: translate(-50%, -50%); }
+</style>
+</head>
+<body>
+<div id="board"></div>
+<script>
+  const coords = [];
+  document.getElementById('board').addEventListener('click', function(e) {
+    const rect = this.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / 1920) * 100;
+    const y = ((e.clientY - rect.top) / 1082) * 100;
+    
+    coords.push({x: parseFloat(x.toFixed(2)), y: parseFloat(y.toFixed(2))});
+    
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    dot.style.left = x + '%';
+    dot.style.top = y + '%';
+    this.appendChild(dot);
+    
+    console.log(JSON.stringify(coords));
+  });
+</script>
+</body>
+</html>

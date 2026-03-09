@@ -200,7 +200,7 @@ export const getAdminMarketplaceItems = async (): Promise<AdminMarketplaceItem[]
         .select(`
             *,
             seller:supplier_id(id, full_name, username, avatar_url),
-            sales_count:user_experiences(count)
+            user_experiences(quantity)
         `);
 
     if (role === 'admin' && entityId) {
@@ -238,7 +238,7 @@ export const getAdminMarketplaceItems = async (): Promise<AdminMarketplaceItem[]
         seller: item.seller as any,
         price: item.price,
         currency: item.currency || 'TM',
-        sales: item.sales_count?.[0]?.count || 0,
+        sales: item.user_experiences?.reduce((acc: number, curr: any) => acc + (curr.quantity || 1), 0) || 0,
         status: item.status || 'pending',
         created_at: item.created_at,
         cover_image: item.cover_image || '',

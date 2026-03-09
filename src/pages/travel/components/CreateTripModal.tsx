@@ -105,10 +105,11 @@ export default function CreateTripModal({ isOpen, onClose, onSuccess }: CreateTr
                             <i className="ri-map-2-line text-lg sm:text-2xl"></i>
                         </div>
                         <div>
-                            <h2 className="text-lg sm:text-2xl font-bold">Criar Nova Viagem</h2>
+                            <h2 className="text-xl font-bold text-gray-900 border-l-4 border-purple-500 pl-3">Criar Nova Viagem</h2>
                             <p className="text-white/90 text-xs sm:text-sm">Planeje sua próxima aventura</p>
                         </div>
                     </div>
+
                     <button
                         onClick={onClose}
                         className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"

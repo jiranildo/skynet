@@ -60,7 +60,7 @@ export default function DrinksFoodPage() {
   };
 
   const handleExploreClick = () => {
-    setActiveTab('suggestions');
+    setActiveTab('history');
   };
 
   const handleAddExperienceClick = () => {
@@ -81,11 +81,20 @@ export default function DrinksFoodPage() {
                 Drinks & Food
               </h1>
             </button>
-            <HeaderActions
-              onShowNotifications={() => setShowNotifications(true)}
-              showMenu={true}
-              onShowMenu={() => setShowMenu(true)}
-            />
+            <div className="flex items-center gap-2">
+              <HeaderActions
+                onShowNotifications={() => setShowNotifications(true)}
+                showMenu={true}
+                onShowMenu={() => setShowMenu(true)}
+              />
+              <button
+                onClick={() => setShowAddExperience(true)}
+                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-lg hover:shadow-lg transition-all duration-300 text-sm font-medium whitespace-nowrap"
+              >
+                <i className="ri-add-line text-lg"></i>
+                Nova Experiência
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -208,20 +217,20 @@ export default function DrinksFoodPage() {
 
           <button
             onClick={handleCreateClick}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+            className="flex flex-col items-center gap-0.5 sm:gap-1 p-1 sm:p-2 group"
           >
-            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-pink-200 group-hover:scale-110 transition-transform">
               <i className="ri-add-line text-xl sm:text-2xl text-white"></i>
             </div>
-            <span className="text-[9px] sm:text-[10px] font-medium">Criar</span>
+            <span className="text-[9px] sm:text-[10px] font-medium text-gray-600">Criar</span>
           </button>
 
           <button
             onClick={handleAddExperienceClick}
             className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
           >
-            <i className="ri-star-line text-xl sm:text-2xl"></i>
-            <span className="text-[9px] sm:text-[10px] font-medium">Experiência</span>
+            <i className="ri-add-box-line text-xl sm:text-2xl"></i>
+            <span className="text-[9px] sm:text-[10px] font-medium whitespace-nowrap">Nova Exp.</span>
           </button>
 
           <div className="relative">

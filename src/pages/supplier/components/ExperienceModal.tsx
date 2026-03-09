@@ -23,6 +23,10 @@ export default function ExperienceModal({ experience, onClose, onSuccess, suppli
     const [videoUrls, setVideoUrls] = useState<string[]>(experience?.video_urls || []);
     const [filesUrls, setFilesUrls] = useState<string[]>(experience?.files_urls || []);
     const [mapUrl, setMapUrl] = useState(experience?.map_data?.embed_url || '');
+    const [validityStartDate, setValidityStartDate] = useState(experience?.validity_start_date || '');
+    const [validityEndDate, setValidityEndDate] = useState(experience?.validity_end_date || '');
+    const [contactEmail, setContactEmail] = useState(experience?.contact_email || '');
+    const [contactPhone, setContactPhone] = useState(experience?.contact_phone || '');
     const [uploadingField, setUploadingField] = useState<string | null>(null);
 
     const handleAddMedia = (setter: React.Dispatch<React.SetStateAction<string[]>>) => {
@@ -102,7 +106,11 @@ export default function ExperienceModal({ experience, onClose, onSuccess, suppli
             media_gallery: mediaGallery.filter(url => url.trim() !== ''),
             video_urls: videoUrls.filter(url => url.trim() !== ''),
             files_urls: filesUrls.filter(url => url.trim() !== ''),
-            map_data: { embed_url: mapUrl }
+            map_data: { embed_url: mapUrl },
+            validity_start_date: validityStartDate || null,
+            validity_end_date: validityEndDate || null,
+            contact_email: contactEmail || null,
+            contact_phone: contactPhone || null
         };
 
         let result;
@@ -200,6 +208,57 @@ export default function ExperienceModal({ experience, onClose, onSuccess, suppli
                                     <option value="TM">Travel Money (TM)</option>
                                     <option value="BRL">Real (R$)</option>
                                 </select>
+                            </div>
+
+                            <div className="space-y-2 md:col-span-2">
+                                <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4 mt-2">Período de Validade</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">Data Inicial</label>
+                                        <input
+                                            type="date"
+                                            value={validityStartDate}
+                                            onChange={(e) => setValidityStartDate(e.target.value)}
+                                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-purple-500 transition-all text-gray-700"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">Data Final</label>
+                                        <input
+                                            type="date"
+                                            value={validityEndDate}
+                                            onChange={(e) => setValidityEndDate(e.target.value)}
+                                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-purple-500 transition-all text-gray-700"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Até quando esta oferta é válida (opcional)</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 md:col-span-2">
+                                <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2 mb-4 mt-2">Informações de Contato</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">Email de Contato</label>
+                                        <input
+                                            type="email"
+                                            value={contactEmail}
+                                            onChange={(e) => setContactEmail(e.target.value)}
+                                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-purple-500 transition-all"
+                                            placeholder="Ex: contato@empresa.com"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">Telefone / WhatsApp</label>
+                                        <input
+                                            type="tel"
+                                            value={contactPhone}
+                                            onChange={(e) => setContactPhone(e.target.value)}
+                                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-purple-500 transition-all"
+                                            placeholder="Ex: +55 11 99999-9999"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="space-y-2 md:col-span-2">
@@ -393,7 +452,7 @@ export default function ExperienceModal({ experience, onClose, onSuccess, suppli
                             </div>
                         </div>
                     </form>
-                </div>
+                </div >
 
                 <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-3xl">
                     <button
@@ -413,7 +472,7 @@ export default function ExperienceModal({ experience, onClose, onSuccess, suppli
                         {experience ? 'Salvar Alterações' : 'Criar Experiência'}
                     </button>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

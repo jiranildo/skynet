@@ -22,9 +22,10 @@ const tripTypes = [
 ];
 
 const budgetOptions = [
-    { id: 'low', name: 'Econômica', range: 'Até R$ 3.000', color: 'text-green-500' },
-    { id: 'medium', name: 'Moderada', range: 'R$ 3.000 - R$ 8.000', color: 'text-blue-500' },
-    { id: 'high', name: 'Luxo', range: 'Acima de R$ 8.000', color: 'text-purple-500' }
+    { id: 'low', name: 'Econômica', range: 'Até R$ 5.000', color: 'text-green-500' },
+    { id: 'medium', name: 'Moderada', range: 'R$ 5.000 - R$ 10.000', color: 'text-blue-500' },
+    { id: 'high', name: 'Luxo', range: 'Acima de R$ 10.000', color: 'text-purple-500' },
+    { id: 'super_luxo', name: 'Super Luxo', range: 'Valor personalizado', color: 'text-orange-500' }
 ];
 
 export default function CreateTripForm({ onCancel, onSuccess, initialData }: CreateTripFormProps) {
@@ -53,7 +54,8 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
         coverImage: initialData?.cover_image || '',
         priceTm: initialData?.price_tm || 0,
         responsibleAgentId: initialData?.responsible_agent_id || '',
-        responsibleAgencyId: initialData?.responsible_agency_id || ''
+        responsibleAgencyId: initialData?.responsible_agency_id || '',
+        customBudget: initialData?.metadata?.customBudget || ''
     });
 
     const [agencies, setAgencies] = useState<Entity[]>([]);
@@ -202,7 +204,8 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
             status: 'planning' as const,
             metadata: {
                 startTime: tripForm.startTime,
-                endTime: tripForm.endTime
+                endTime: tripForm.endTime,
+                customBudget: tripForm.customBudget
             },
             responsible_agent_id: tripForm.responsibleAgentId || null,
             responsible_agency_id: tripForm.responsibleAgencyId || null
@@ -225,27 +228,24 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden animate-fadeIn">
+        <div className="animate-fadeIn">
             {/* Header */}
-            <div className="flex items-center justify-between p-6 pb-0 mb-6">
-                <div>
-                    <h2 className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">
+            <div className="flex items-center justify-between mb-8">
+                <div className="border-l-4 border-orange-500 pl-4">
+                    <h2 className="text-xl font-bold text-gray-900">
                         {initialData ? 'Editar Viagem' : 'Criar Nova Viagem'}
                     </h2>
-                    <p className="text-gray-500">
-                        {initialData ? 'Atualize os detalhes da sua aventura' : 'Comece a planejar sua próxima aventura'}
-                    </p>
                 </div>
                 <button
                     onClick={onCancel}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    className="p-3 hover:bg-white rounded-full transition-colors border-2 border-transparent hover:border-gray-100 hover:shadow-sm"
                 >
-                    <i className="ri-close-line text-2xl text-gray-500"></i>
+                    <i className="ri-close-line text-3xl text-gray-500"></i>
                 </button>
             </div>
 
-            {/* Form Content */}
-            <div className="p-6 pt-0">
+            {/* Form Content in its own container */}
+            <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden p-8">
                 <div className="space-y-6 max-w-4xl mx-auto">
 
                     {/* Trip Name */}
@@ -388,29 +388,52 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
                         </label>
                         <div className="space-y-3">
                             {budgetOptions.map((budget) => (
-                                <button
-                                    key={budget.id}
-                                    onClick={() => setTripForm({ ...tripForm, budget: budget.id })}
-                                    className={`w-full p-4 rounded-xl border-2 transition-all text-left ${tripForm.budget === budget.id
-                                        ? 'border-orange-500 bg-orange-50'
-                                        : 'border-gray-200 hover:border-gray-300'
-                                        }`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h4 className={`font-semibold ${budget.color} text-sm`}>{budget.name}</h4>
-                                            <p className="text-gray-600 text-xs">{budget.range}</p>
+                                <div key={budget.id} className="space-y-3">
+                                    <button
+                                        onClick={() => setTripForm({ ...tripForm, budget: budget.id })}
+                                        className={`w-full p-4 rounded-xl border-2 transition-all text-left ${tripForm.budget === budget.id
+                                            ? 'border-orange-500 bg-orange-50'
+                                            : 'border-gray-200 hover:border-gray-300'
+                                            }`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h4 className={`font-semibold ${budget.color} text-sm`}>{budget.name}</h4>
+                                                <p className="text-gray-600 text-xs">{budget.range}</p>
+                                            </div>
+                                            <div className={`w-5 h-5 rounded-full border-2 ${tripForm.budget === budget.id
+                                                ? 'border-orange-500 bg-orange-500'
+                                                : 'border-gray-300'
+                                                }`}>
+                                                {tripForm.budget === budget.id && (
+                                                    <div className="w-full h-full rounded-full bg-white scale-50"></div>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className={`w-5 h-5 rounded-full border-2 ${tripForm.budget === budget.id
-                                            ? 'border-orange-500 bg-orange-500'
-                                            : 'border-gray-300'
-                                            }`}>
-                                            {tripForm.budget === budget.id && (
-                                                <div className="w-full h-full rounded-full bg-white scale-50"></div>
-                                            )}
+                                    </button>
+
+                                    {/* Custom Budget Input for Super Luxo */}
+                                    {budget.id === 'super_luxo' && tripForm.budget === 'super_luxo' && (
+                                        <div className="mt-2 pl-4 border-l-2 border-orange-200 animate-slideDown">
+                                            <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                                                Defina o valor do orçamento
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">R$</span>
+                                                <input
+                                                    type="number"
+                                                    value={tripForm.customBudget}
+                                                    onChange={(e) => setTripForm({ ...tripForm, customBudget: e.target.value })}
+                                                    placeholder="0,00"
+                                                    className="w-full pl-10 pr-4 py-3 border border-orange-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 bg-white text-gray-700 font-bold"
+                                                />
+                                            </div>
+                                            <p className="text-[10px] text-gray-400 mt-1 italic">
+                                                * Valor livre para inclusão conforme sua preferência.
+                                            </p>
                                         </div>
-                                    </div>
-                                </button>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     </div>
@@ -437,7 +460,7 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
                             </div>
                             <div>
                                 <h3 className="font-bold text-gray-900">Marketplace de Roteiros</h3>
-                                <p className="text-sm text-gray-600">Monetize seu roteiro no Skynet.</p>
+                                <p className="text-sm text-gray-600">Monetize seu roteiro no SARA Play.</p>
                             </div>
                         </div>
                         <div className="mt-4">
@@ -642,7 +665,7 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-4 pt-6 border-t border-gray-100">
+            <div className="flex gap-4 pt-8 mt-8 border-t border-gray-50">
                 <button
                     onClick={onCancel}
                     className="flex-1 px-6 py-3 border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all"

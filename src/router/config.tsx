@@ -16,6 +16,7 @@ const LoginPage = lazy(() => import('../pages/auth/login'));
 const SignupPage = lazy(() => import('../pages/auth/signup'));
 const SettingsPage = lazy(() => import('../pages/settings/page'));
 const NotFound = lazy(() => import('../pages/NotFound'));
+const SkynetExplorerPage = lazy(() => import('../pages/skynet-explorer/page'));
 
 const routes: RouteObject[] = [
   {
@@ -74,6 +75,10 @@ const routes: RouteObject[] = [
   {
     path: '/settings',
     element: <SettingsPage />,
+  },
+  {
+    path: '/skynet-explorer',
+    element: <SkynetExplorerPage />,
   },
   {
     path: '*',

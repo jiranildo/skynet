@@ -300,13 +300,6 @@ export default function MarketplaceTab() {
     }
 
     try {
-      const isOwned = await checkExperienceAcquisition(currentUser.id, exp.id);
-      if (isOwned) {
-        setShowExperienceModal(false);
-        setShowAlreadyOwnedModal(true);
-        return;
-      }
-
       const result = await acquireExperience(currentUser.id, exp.id);
 
       if (!result) {
@@ -984,6 +977,41 @@ export default function MarketplaceTab() {
                     </h3>
                     <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{selectedExperience.description || 'Nenhuma descrição fornecida.'}</p>
                   </div>
+
+                  {(selectedExperience.validity_start_date || selectedExperience.validity_end_date || selectedExperience.contact_email || selectedExperience.contact_phone) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-purple-50 p-5 rounded-2xl border border-purple-100">
+                      {(selectedExperience.validity_start_date || selectedExperience.validity_end_date) && (
+                        <div>
+                          <p className="text-sm font-semibold text-purple-900 mb-1 flex items-center gap-2">
+                            <i className="ri-calendar-check-line"></i> Período de Validade
+                          </p>
+                          <p className="text-gray-700 text-sm">
+                            {selectedExperience.validity_start_date ? new Date(selectedExperience.validity_start_date).toLocaleDateString('pt-BR') : 'Agora'} até {selectedExperience.validity_end_date ? new Date(selectedExperience.validity_end_date).toLocaleDateString('pt-BR') : 'Indeterminado'}
+                          </p>
+                        </div>
+                      )}
+                      {(selectedExperience.contact_email || selectedExperience.contact_phone) && (
+                        <div>
+                          <p className="text-sm font-semibold text-purple-900 mb-1 flex items-center gap-2">
+                            <i className="ri-contacts-book-2-line"></i> Contato do Fornecedor
+                          </p>
+                          <p className="text-gray-700 text-sm flex items-center gap-2 mt-1">
+                            <i className="ri-user-line text-purple-500"></i> {selectedExperience.seller?.full_name || selectedExperience.seller?.username || 'Fornecedor'}
+                          </p>
+                          {selectedExperience.contact_email && (
+                            <p className="text-gray-700 text-sm flex items-center gap-2 mt-1">
+                              <i className="ri-mail-line text-purple-500"></i> {selectedExperience.contact_email}
+                            </p>
+                          )}
+                          {selectedExperience.contact_phone && (
+                            <p className="text-gray-700 text-sm flex items-center gap-2 mt-1">
+                              <i className="ri-whatsapp-line text-green-500"></i> {selectedExperience.contact_phone}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {((selectedExperience.video_urls?.length || 0) > 0 || (selectedExperience.files_urls?.length || 0) > 0) && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

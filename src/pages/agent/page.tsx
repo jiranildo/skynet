@@ -69,7 +69,7 @@ export default function AgentDashboard() {
                 </div>
 
                 {/* Tabs & Widgets */}
-                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mt-8">
+                <div className="mt-8 flex flex-col gap-4">
                     <div className="flex items-center gap-2 bg-white p-1 rounded-2xl shadow-sm border border-gray-100 w-fit overflow-x-auto max-w-full no-scrollbar">
                         <button
                             onClick={() => setActiveTab('trips')}
@@ -91,7 +91,9 @@ export default function AgentDashboard() {
                         </button>
                     </div>
 
-                    <InfoWidgets />
+                    <div className="w-full overflow-x-auto no-scrollbar pb-2">
+                        <InfoWidgets />
+                    </div>
                 </div>
             </header>
 

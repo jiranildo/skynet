@@ -34,6 +34,19 @@ export default function MainLayout({ children }: MainLayoutProps) {
     const [createModalTab, setCreateModalTab] = useState<'POST' | 'STORY' | 'REEL' | 'TEMPLATES' | null>(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+    const handleNotificationsClick = React.useCallback(() => setShowNotifications(true), []);
+    const handleCreateClick = React.useCallback(() => setShowCreateMenu(true), []);
+    const handleCreatePostClick = React.useCallback(() => setCreateModalTab('POST'), []);
+    const handleWalletClick = React.useCallback(() => setShowWallet(true), []);
+    const handleGamificationClick = React.useCallback(() => setShowGamification(true), []);
+    const handleSkynetExplorerClick = React.useCallback(() => {
+        setShowMobileMenu(false);
+        navigate('/skynet-explorer');
+    }, [navigate]);
+    const handleCheckInClick = React.useCallback(() => setShowCheckIn(true), []);
+    const handleToggleSidebar = React.useCallback(() => setIsSidebarCollapsed(prev => !prev), []);
+    const handleCloseMobileMenu = React.useCallback(() => setShowMobileMenu(false), []);
+
     // Hidden on specific pages
     const isAuthPage = ['/login', '/signup'].includes(location.pathname);
 
@@ -70,16 +83,18 @@ export default function MainLayout({ children }: MainLayoutProps) {
             {/* Desktop Sidebar */}
             <div className="hidden md:block">
                 <Sidebar
-                    onNotificationsClick={() => setShowNotifications(true)}
-                    onCreateClick={() => setShowCreateMenu(true)}
-                    onCreatePostClick={() => setCreateModalTab('POST')}
-                    onWalletClick={() => setShowWallet(true)}
-                    onGamificationClick={() => setShowGamification(true)}
-                    onCheckInClick={() => setShowCheckIn(true)}
+                    onNotificationsClick={handleNotificationsClick}
+                    onCreateClick={handleCreateClick}
+                    onCreatePostClick={handleCreatePostClick}
+                    onWalletClick={handleWalletClick}
+                    onGamificationClick={handleGamificationClick}
+                    onSkynetExplorerClick={handleSkynetExplorerClick}
+                    onCheckInClick={handleCheckInClick}
                     isCollapsed={isSidebarCollapsed}
-                    onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                    onToggleCollapse={handleToggleSidebar}
                 />
             </div>
+
 
             {/* Main Content Area */}
             <main
@@ -96,25 +111,29 @@ export default function MainLayout({ children }: MainLayoutProps) {
             </main>
 
             {/* Mobile Nav */}
-            <div className="md:hidden">
-                <MobileNav
-                    activeTab={location.pathname === '/' ? 'feed' : ''}
-                    onTabChange={(tab) => {
-                        if (tab === 'feed') navigate('/');
-                        else if (tab === 'explore') navigate('/explore'); // Note: Need a route for this
-                        else if (tab === 'reels') navigate('/reels'); // Note: Need a route for this
-                    }}
-                    onCreateClick={() => setShowCreateMenu(true)}
-                    onMenuClick={() => setShowMobileMenu(true)}
-                />
-            </div>
+            {!['/drinks-food', '/travel', '/cellar'].includes(location.pathname) && (
+                <div className="md:hidden">
+                    <MobileNav
+                        activeTab={location.pathname === '/' ? 'feed' : ''}
+                        onTabChange={(tab) => {
+                            if (tab === 'feed') navigate('/');
+                            else if (tab === 'explore') navigate('/explore'); // Note: Need a route for this
+                            else if (tab === 'reels') navigate('/reels'); // Note: Need a route for this
+                        }}
+                        onCreateClick={() => setShowCreateMenu(true)}
+                        onMenuClick={() => setShowMobileMenu(true)}
+                    />
+                </div>
+            )}
 
             <MobileMenu
                 isOpen={showMobileMenu}
-                onClose={() => setShowMobileMenu(false)}
-                onWalletClick={() => setShowWallet(true)}
-                onGamificationClick={() => setShowGamification(true)}
+                onClose={handleCloseMobileMenu}
+                onWalletClick={handleWalletClick}
+                onGamificationClick={handleGamificationClick}
+                onSkynetExplorerClick={handleSkynetExplorerClick}
             />
+
 
             {/* Global Elements */}
             <FloatingMenu />

@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { ensureUserProfile, User as UserType } from '@/services/supabase';
 import { useUnreadCounts } from '@/hooks/useUnreadCounts';
 import { isUserAdmin, isUserAgent as checkIsAgent, isUserSupplier as checkIsSupplier, isUserSuperAdmin as checkIsSuperAdmin } from '@/services/authz';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Reorder } from 'framer-motion';
 
 interface SidebarProps {
     onNotificationsClick?: () => void;
@@ -12,6 +12,7 @@ interface SidebarProps {
     onCreatePostClick?: () => void;
     onWalletClick?: () => void;
     onGamificationClick?: () => void;
+    onSkynetExplorerClick?: () => void;
     onCheckInClick?: () => void;
     isCollapsed: boolean;
     onToggleCollapse: () => void;
@@ -23,6 +24,7 @@ export default function Sidebar({
     onCreatePostClick,
     onWalletClick,
     onGamificationClick,
+    onSkynetExplorerClick,
     onCheckInClick,
     isCollapsed,
     onToggleCollapse
@@ -32,10 +34,95 @@ export default function Sidebar({
     const [isAgent, setIsAgent] = useState(false);
     const [isSupplier, setIsSupplier] = useState(false);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+    const [isReordering, setIsReordering] = useState(false);
+
     const { unreadMessages, unreadNotifications } = useUnreadCounts();
     const navigate = useNavigate();
     const location = useLocation();
     const { user, signOut, themeConfig } = useAuth();
+
+    // 1. Define all possible Menu Items
+    const baseMenuItems = useMemo(() => [
+        { id: 'home', label: 'Início', icon: 'home', path: '/' },
+        { id: 'travel', label: 'Viagens', icon: 'flight-takeoff', path: '/travel' },
+        { id: 'drinks-food', label: 'Drinks & Food', icon: 'restaurant-2', path: '/drinks-food' },
+        { id: 'cellar', label: 'Minha Adega', icon: 'goblet', path: '/cellar' },
+        { id: 'messages', label: 'Mensagens', icon: 'message-3', path: '/messages', badge: unreadMessages },
+        { id: 'settings', label: 'Meu Espaço', icon: 'settings-4', path: '/settings' },
+    ], [unreadMessages]);
+
+    const roleMenuItems = useMemo(() => {
+        const items = [];
+        if (isAgent || isAdmin) {
+            items.push({ id: 'agent', label: 'Portal do Agente', icon: 'briefcase', path: '/agent' });
+        }
+        if (isSupplier || isAdmin) {
+            items.push({ id: 'supplier', label: 'Portal de Serviços', icon: 'store-2', path: '/supplier' });
+        }
+        if (isAdmin) {
+            items.push({ id: 'admin', label: 'Administração', icon: 'shield-star', path: '/admin' });
+        }
+        return items;
+    }, [isAgent, isSupplier, isAdmin]);
+
+    const allVisibleMenuItems = useMemo(() => [...baseMenuItems, ...roleMenuItems], [baseMenuItems, roleMenuItems]);
+
+    const quickActionItems = useMemo(() => [
+        { id: 'create-post', label: 'Criar Post', icon: 'quill-pen', action: onCreatePostClick },
+        { id: 'checkin', label: 'Check In-Out', icon: 'map-pin-user', action: onCheckInClick },
+        { id: 'blog', label: 'Blog de Viagens', icon: 'article', action: () => navigate('/travel?tab=blogs') },
+        { id: 'gamification', label: 'Gameficação', icon: 'trophy', action: onGamificationClick },
+        { id: 'notifications', label: 'Notificações', icon: 'notification-3', action: onNotificationsClick, badge: unreadNotifications },
+        { id: 'wallet', label: 'Carteira', icon: 'wallet', action: onWalletClick },
+        { id: 'skynet-explorer', label: 'SARA Play Explorer', icon: 'gamepad-line', action: onSkynetExplorerClick },
+    ], [onCreatePostClick, onCheckInClick, navigate, onGamificationClick, onNotificationsClick, unreadNotifications, onWalletClick, onSkynetExplorerClick]);
+
+    // Managed state for current order
+    const [currentMenuItems, setCurrentMenuItems] = useState<any[]>([]);
+    const [currentQuickActions, setCurrentQuickActions] = useState<any[]>([]);
+
+    // Load and sync orders
+    useEffect(() => {
+        const savedMenuOrder = localStorage.getItem('socialhub_sidebar_menu_order');
+        const menuOrder = savedMenuOrder ? JSON.parse(savedMenuOrder) : [];
+
+        const sortedMenu = [...allVisibleMenuItems].sort((a, b) => {
+            const indexA = menuOrder.indexOf(a.id);
+            const indexB = menuOrder.indexOf(b.id);
+            if (indexA === -1 && indexB === -1) return 0;
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+        });
+        setCurrentMenuItems(sortedMenu);
+    }, [allVisibleMenuItems]);
+
+    useEffect(() => {
+        const savedQuickOrder = localStorage.getItem('socialhub_sidebar_quick_order');
+        const quickOrder = savedQuickOrder ? JSON.parse(savedQuickOrder) : [];
+
+        const sortedQuick = [...quickActionItems].sort((a, b) => {
+            const indexA = quickOrder.indexOf(a.id);
+            const indexB = quickOrder.indexOf(b.id);
+            if (indexA === -1 && indexB === -1) return 0;
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+        });
+        setCurrentQuickActions(sortedQuick);
+    }, [quickActionItems]);
+
+    const handleReorderMenu = (newItems: any[]) => {
+        setCurrentMenuItems(newItems);
+        const newOrder = newItems.map(item => item.id);
+        localStorage.setItem('socialhub_sidebar_menu_order', JSON.stringify(newOrder));
+    };
+
+    const handleReorderQuick = (newItems: any[]) => {
+        setCurrentQuickActions(newItems);
+        const newOrder = newItems.map(item => item.id);
+        localStorage.setItem('socialhub_sidebar_quick_order', JSON.stringify(newOrder));
+    };
 
     useEffect(() => {
         const loadProfile = async () => {
@@ -65,29 +152,6 @@ export default function Sidebar({
     const initials = userProfile?.full_name
         ? userProfile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
         : user?.email?.[0].toUpperCase() || 'U';
-
-    const menuItems = [
-        { id: 'home', label: 'Início', icon: 'home', path: '/' },
-        { id: 'travel', label: 'Viagens', icon: 'flight-takeoff', path: '/travel' },
-        { id: 'drinks-food', label: 'Drinks & Food', icon: 'restaurant-2', path: '/drinks-food' },
-        { id: 'cellar', label: 'Minha Adega', icon: 'goblet', path: '/cellar' },
-        { id: 'messages', label: 'Mensagens', icon: 'message-3', path: '/messages', badge: unreadMessages },
-        { id: 'settings', label: 'Meu Espaço', icon: 'settings-4', path: '/settings' },
-    ];
-
-    if (isAgent || isAdmin) {
-        menuItems.push({ id: 'agent', label: 'Portal do Agente', icon: 'briefcase', path: '/agent' });
-    }
-
-    if (isSupplier || isAdmin) {
-        menuItems.push({ id: 'supplier', label: 'Painel do Fornecedor', icon: 'store-2', path: '/supplier' });
-    }
-
-
-
-    if (isAdmin) {
-        menuItems.push({ id: 'admin', label: 'Administração', icon: 'shield-star', path: '/admin' });
-    }
 
     return (
         <aside
@@ -124,25 +188,37 @@ export default function Sidebar({
 
             {/* Navigation */}
             <nav className="flex-1 overflow-y-auto px-4 space-y-8 scrollbar-hide">
+                {/* Menu Principal */}
                 <div>
                     {!isCollapsed && (
                         <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Menu Principal</p>
                     )}
-                    <ul className="space-y-1">
-                        {menuItems.map((item) => {
+                    <Reorder.Group
+                        axis="y"
+                        values={currentMenuItems}
+                        onReorder={handleReorderMenu}
+                        className="space-y-1"
+                    >
+                        {currentMenuItems.map((item) => {
                             const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
                             return (
-                                <li key={item.id}>
+                                <Reorder.Item
+                                    key={item.id}
+                                    value={item}
+                                    dragListener={isReordering}
+                                    className="relative list-none"
+                                >
                                     <button
-                                        onClick={() => navigate(item.path)}
+                                        onClick={() => !isReordering && navigate(item.path)}
+                                        disabled={isReordering}
                                         title={isCollapsed ? item.label : undefined}
                                         className={`w-full flex items-center rounded-2xl transition-all duration-300 group ${isCollapsed ? 'justify-center py-3' : 'gap-4 px-4 py-3'
                                             } ${isActive
                                                 ? 'bg-gradient-to-r from-gray-900 to-gray-800 text-white shadow-lg shadow-gray-200'
                                                 : 'hover:bg-gray-50 text-gray-600'
-                                            }`}
+                                            } ${isReordering ? 'border-2 border-dashed border-indigo-200 cursor-grab active:cursor-grabbing scale-95 opacity-80' : ''}`}
                                     >
-                                        <div className={`w-6 h-6 flex items-center justify-center transition-transform group-hover:scale-110 relative`}>
+                                        <div className="w-6 h-6 flex items-center justify-center transition-transform group-hover:scale-110 relative">
                                             <i className={`ri-${item.icon}-${isActive ? 'fill' : 'line'} text-xl`}></i>
                                             {isCollapsed && item.badge && item.badge > 0 && (
                                                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold h-4 w-4 rounded-full flex items-center justify-center border border-white">
@@ -160,115 +236,90 @@ export default function Sidebar({
                                                 )}
                                             </>
                                         )}
+                                        {isReordering && (
+                                            <div className="ml-auto opacity-40 group-hover:opacity-100 transition-opacity">
+                                                <i className="ri-draggable text-lg"></i>
+                                            </div>
+                                        )}
                                     </button>
-                                </li>
+                                </Reorder.Item>
                             );
                         })}
-                    </ul>
+                    </Reorder.Group>
                 </div>
 
-
+                {/* Ações Rápidas */}
                 <div>
                     {!isCollapsed && (
                         <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Ações Rápidas</p>
                     )}
-                    <ul className="space-y-1">
-                        <li>
-                            <button
-                                onClick={onCreatePostClick}
-                                title={isCollapsed ? "Criar Post" : undefined}
-                                className={`w-full flex items-center rounded-xl hover:bg-gray-50 text-gray-700 font-medium transition-all group ${isCollapsed ? 'justify-center py-3' : 'gap-3 px-3 py-2'
-                                    }`}
+                    <Reorder.Group
+                        axis="y"
+                        values={currentQuickActions}
+                        onReorder={handleReorderQuick}
+                        className="space-y-1"
+                    >
+                        {currentQuickActions.map((item) => (
+                            <Reorder.Item
+                                key={item.id}
+                                value={item}
+                                dragListener={isReordering}
+                                className="list-none"
                             >
-                                <div className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors">
-                                    <i className="ri-quill-pen-line text-lg text-gray-600"></i>
-                                </div>
-                                {!isCollapsed && <span className="text-sm">Criar Post</span>}
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                onClick={onCheckInClick}
-                                title={isCollapsed ? "Check In-Out" : undefined}
-                                className={`w-full flex items-center rounded-xl hover:bg-gray-50 text-gray-700 font-medium transition-all group ${isCollapsed ? 'justify-center py-3' : 'gap-3 px-3 py-2'
-                                    }`}
-                            >
-                                <div className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors">
-                                    <i className="ri-map-pin-user-line text-lg text-gray-600"></i>
-                                </div>
-                                {!isCollapsed && <span className="text-sm">Check In-Out</span>}
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                onClick={() => navigate('/travel?tab=blogs')}
-                                title={isCollapsed ? "Blog de Viagens" : undefined}
-                                className={`w-full flex items-center rounded-xl hover:bg-gray-50 text-gray-700 font-medium transition-all group ${isCollapsed ? 'justify-center py-3' : 'gap-3 px-3 py-2'
-                                    }`}
-                            >
-                                <div className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors">
-                                    <i className="ri-article-line text-lg text-gray-600"></i>
-                                </div>
-                                {!isCollapsed && <span className="text-sm">Blog de Viagens</span>}
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                onClick={onGamificationClick}
-                                title={isCollapsed ? "Gameficação" : undefined}
-                                className={`w-full flex items-center rounded-xl hover:bg-gray-50 text-gray-700 font-medium transition-all group ${isCollapsed ? 'justify-center py-3' : 'gap-3 px-3 py-2'
-                                    }`}
-                            >
-                                <div className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors">
-                                    <i className="ri-trophy-line text-lg text-gray-600"></i>
-                                </div>
-                                {!isCollapsed && <span className="text-sm">Gameficação</span>}
-                            </button>
-                        </li>
-                        <div className="h-px bg-gray-100 my-2"></div>
-                        <li>
-                            <button
-                                onClick={onNotificationsClick}
-                                title={isCollapsed ? "Notificações" : undefined}
-                                className={`w-full flex items-center rounded-xl hover:bg-gray-50 text-gray-700 font-medium transition-all group ${isCollapsed ? 'justify-center py-3' : 'gap-3 px-3 py-2'
-                                    }`}
-                            >
-                                <div className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors relative">
-                                    <i className="ri-notification-3-line text-lg text-gray-600"></i>
-                                    {isCollapsed && unreadNotifications > 0 && (
-                                        <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[8px] font-bold h-4 w-4 rounded-full flex items-center justify-center border border-white">
-                                            {unreadNotifications}
-                                        </span>
-                                    )}
-                                </div>
-                                {!isCollapsed && (
-                                    <>
-                                        <span className="text-sm">Notificações</span>
-                                        {unreadNotifications > 0 && (
-                                            <span className="ml-auto bg-orange-500 text-white text-[10px] font-bold h-5 w-5 rounded-full flex items-center justify-center">
-                                                {unreadNotifications}
+                                <button
+                                    onClick={() => !isReordering && item.action?.()}
+                                    disabled={isReordering}
+                                    title={isCollapsed ? item.label : undefined}
+                                    className={`w-full flex items-center rounded-xl hover:bg-gray-50 text-gray-700 font-medium transition-all group ${isCollapsed ? 'justify-center py-3' : 'gap-3 px-3 py-2'
+                                        } ${isReordering ? 'border border-dashed border-indigo-200 cursor-grab active:cursor-grabbing scale-95 opacity-80' : ''}`}
+                                >
+                                    <div className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors relative">
+                                        <i className={`ri-${item.icon}-${item.id === 'notifications' && item.badge && item.badge > 0 ? 'fill' : 'line'} text-lg text-gray-600`}></i>
+                                        {item.badge && item.badge > 0 && (
+                                            <span className={`absolute -top-1 -right-1 text-white text-[8px] font-bold h-4 w-4 rounded-full flex items-center justify-center border border-white ${item.id === 'notifications' ? 'bg-orange-500' : 'bg-red-500'}`}>
+                                                {item.badge}
                                             </span>
                                         )}
-                                    </>
-                                )}
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                onClick={onWalletClick}
-                                title={isCollapsed ? "Carteira" : undefined}
-                                className={`w-full flex items-center rounded-xl hover:bg-gray-50 text-gray-700 font-medium transition-all group ${isCollapsed ? 'justify-center py-3' : 'gap-3 px-3 py-2'
-                                    }`}
-                            >
-                                <div className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors">
-                                    <i className="ri-wallet-line text-lg text-gray-600"></i>
-                                </div>
-                                {!isCollapsed && <span className="text-sm">Carteira</span>}
-                            </button>
-                        </li>
-                    </ul>
+                                    </div>
+                                    {!isCollapsed && (
+                                        <>
+                                            <span className="text-sm">{item.label}</span>
+                                            {item.badge && item.badge > 0 && !isCollapsed && item.id !== 'notifications' && (
+                                                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold h-5 w-5 rounded-full flex items-center justify-center">
+                                                    {item.badge}
+                                                </span>
+                                            )}
+                                            {item.id === 'notifications' && item.badge && item.badge > 0 && !isCollapsed && (
+                                                <span className="ml-auto bg-orange-500 text-white text-[10px] font-bold h-5 w-5 rounded-full flex items-center justify-center">
+                                                    {item.badge}
+                                                </span>
+                                            )}
+                                        </>
+                                    )}
+                                    {isReordering && (
+                                        <div className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity">
+                                            <i className="ri-draggable text-lg"></i>
+                                        </div>
+                                    )}
+                                </button>
+                            </Reorder.Item>
+                        ))}
+                    </Reorder.Group>
                 </div>
             </nav>
+
+            {/* Bottom Actions */}
+            <div className="px-4 py-2 border-t border-gray-50">
+                <button
+                    onClick={() => setIsReordering(!isReordering)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${isReordering ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-gray-50 text-gray-500'}`}
+                >
+                    <div className={`w-8 h-8 flex items-center justify-center rounded-lg ${isReordering ? 'bg-white/20' : 'bg-gray-50'}`}>
+                        <i className={`${isReordering ? 'ri-check-line' : 'ri-equalizer-line'} text-lg`}></i>
+                    </div>
+                    {!isCollapsed && <span className="text-sm font-bold">{isReordering ? 'Salvar Ordem' : 'Personalizar'}</span>}
+                </button>
+            </div>
 
             {/* User Profile */}
             <div className={`p-4 border-t border-gray-50 ${isCollapsed ? 'flex flex-col items-center gap-2' : ''}`}>

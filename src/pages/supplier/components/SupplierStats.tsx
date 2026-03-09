@@ -2,6 +2,8 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getSupplierAnalyticsDashboard, SupplierDashboardData } from '@/services/db/supplier';
+import { getSupplierExperiences } from '@/services/db/experiences';
+import { Experience } from '@/services/db/types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 
 type TimeFilter = 30 | 90 | 365;
@@ -10,6 +12,7 @@ export default function SupplierStats() {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState<SupplierDashboardData | null>(null);
+    const [experiences, setExperiences] = useState<Experience[]>([]);
     const [timeFilter, setTimeFilter] = useState<TimeFilter>(30);
 
     const COLORS = ['#f97316', '#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f43f5e'];
@@ -18,8 +21,12 @@ export default function SupplierStats() {
         async function loadStats() {
             if (user?.id) {
                 setLoading(true);
-                const data = await getSupplierAnalyticsDashboard(user.id, timeFilter);
-                setStats(data);
+                const [analyticsData, experiencesData] = await Promise.all([
+                    getSupplierAnalyticsDashboard(user.id, timeFilter),
+                    getSupplierExperiences(user.id)
+                ]);
+                setStats(analyticsData);
+                setExperiences(experiencesData);
                 setLoading(false);
             }
         }
@@ -74,8 +81,8 @@ export default function SupplierStats() {
                         key={filter}
                         onClick={() => setTimeFilter(filter as TimeFilter)}
                         className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${timeFilter === filter
-                                ? 'bg-gray-900 text-white shadow-md'
-                                : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'
+                            ? 'bg-gray-900 text-white shadow-md'
+                            : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100'
                             }`}
                     >
                         {filter === 365 ? '1 Ano' : `${filter} Dias`}
@@ -147,6 +154,80 @@ export default function SupplierStats() {
                             </PieChart>
                         </ResponsiveContainer>
                     </div>
+                </div>
+            </div>
+
+            {/* Service Performance Table/List */}
+            <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                        <i className="ri-bar-chart-box-line text-emerald-500"></i>
+                        Desempenho por Serviço
+                    </h3>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-50">
+                                <th className="pb-4 px-4">Serviço</th>
+                                <th className="pb-4 px-4">Vendas (Qtde)</th>
+                                <th className="pb-4 px-4">Receita (Valor)</th>
+                                <th className="pb-4 px-4">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {experiences.length === 0 ? (
+                                <tr>
+                                    <td colSpan={4} className="py-8 text-center text-gray-400 font-medium">
+                                        Nenhum serviço encontrado.
+                                    </td>
+                                </tr>
+                            ) : (
+                                experiences.map((exp) => {
+                                    const isExpired = exp.validity_end_date ? new Date(exp.validity_end_date) < new Date(new Date().setHours(0, 0, 0, 0)) : false;
+                                    return (
+                                        <tr key={exp.id} className="group hover:bg-gray-50 transition-colors">
+                                            <td className="py-4 px-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0">
+                                                        {exp.cover_image ? (
+                                                            <img src={exp.cover_image} alt={exp.title} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                                                <i className="ri-image-line"></i>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <span className="font-bold text-gray-900 truncate max-w-[200px]">{exp.title}</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 font-bold text-sm">
+                                                    {exp.sales_count || 0}
+                                                </span>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <span className="font-black text-gray-900">
+                                                    R$ {((exp.total_revenue || 0) / 1000).toFixed(2)}k
+                                                </span>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                {isExpired ? (
+                                                    <span className="px-3 py-1 rounded-full bg-red-50 text-red-600 text-xs font-bold">
+                                                        Expirado
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-bold">
+                                                        Ativo
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -245,7 +326,6 @@ export default function SupplierStats() {
                     )}
                 </div>
             </div>
-
         </div>
     );
 }

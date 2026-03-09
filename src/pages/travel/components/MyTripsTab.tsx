@@ -8,9 +8,10 @@ import { UserAvatar } from '../../../components/UserAvatar';
 
 
 
-import { getTrips, deleteTrip, updateTrip, Trip, getNetworkUsers, User, createMarketplaceListing, deleteMarketplaceListing, supabase, getGroups, Group, notifySharedGroups } from '../../../services/supabase';
+import { getTrips, deleteTrip, updateTrip, Trip, getNetworkUsers, User, createMarketplaceListing, deleteMarketplaceListing, supabase, getGroups, Group, notifySharedGroups, getTripJournalEntries, createJournalEntry, deleteJournalEntry } from '../../../services/supabase';
 import { getUserAcquiredExperiences, submitExperienceReview } from '../../../services/db/experiences';
-import { UserExperience } from '../../../services/db/types';
+import { UserExperience, TripJournalEntry } from '../../../services/db/types';
+import { ErrorDetailsModal } from '../../../components/ErrorDetailsModal';
 
 interface SharedUser {
   id: string;
@@ -78,7 +79,20 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
   const [shareLink, setShareLink] = useState('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
   const [commentText, setCommentText] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'shared' | 'newtrip' | 'stats' | 'maps' | 'goals' | 'suggestions' | 'retrospectives' | 'services'>(initialSubTab as any || 'trips');
+  const [activeSubTab, setActiveSubTab] = useState<'trips' | 'shared' | 'newtrip' | 'maps' | 'goals' | 'suggestions' | 'retrospectives' | 'services' | 'journal'>(initialSubTab as any || 'maps');
+  const [journalEntries, setJournalEntries] = useState<TripJournalEntry[]>([]);
+  const [selectedJournalTrip, setSelectedJournalTrip] = useState<Trip | null>(null);
+  const [activeJournalDay, setActiveJournalDay] = useState(1);
+  const [isAddingJournalEntry, setIsAddingJournalEntry] = useState(false);
+  const [newJournalEntry, setNewJournalEntry] = useState({
+    type: 'general' as const,
+    title: '',
+    content: '',
+    rating: 5,
+    media_url: ''
+  });
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [apiError, setApiError] = useState<any>(null);
   const [userExperiences, setUserExperiences] = useState<UserExperience[]>([]);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [selectedReviewExperience, setSelectedReviewExperience] = useState<UserExperience | null>(null);
@@ -113,6 +127,10 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     message: '',
     type: 'success'
   });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortBy, setSortBy] = useState<'recent' | 'title' | 'date'>('recent');
+  const [showSortMenu, setShowSortMenu] = useState(false);
 
 
 
@@ -123,6 +141,39 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     loadNetworkUsers();
     refreshExperiences();
   }, [user]);
+
+  useEffect(() => {
+    if (selectedJournalTrip) {
+      loadJournalEntries(selectedJournalTrip.id);
+    }
+  }, [selectedJournalTrip]);
+
+  const loadJournalEntries = async (tripId: string) => {
+    try {
+      const entries = await getTripJournalEntries(tripId);
+      setJournalEntries(entries);
+    } catch (error) {
+      console.error('Error loading journal entries:', error);
+      setApiError(error);
+      setShowErrorModal(true);
+    }
+  };
+
+  const getTripDayCount = (trip: Trip) => {
+    if (!trip.start_date || !trip.end_date) return 1;
+    const start = new Date(trip.start_date);
+    const end = new Date(trip.end_date);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays;
+  };
+
+  const getJournalDayDate = (trip: Trip, day: number) => {
+    if (!trip.start_date) return null;
+    const date = new Date(trip.start_date);
+    date.setDate(date.getDate() + (day - 1));
+    return date;
+  };
 
   const refreshExperiences = async () => {
     if (user) {
@@ -1240,221 +1291,396 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     setIsPlanningModalOpen(true);
   };
 
-  const filteredTrips = trips.filter(trip => {
-    if (filterStatus === 'all') return true;
-    if (filterStatus === 'shared') {
-      return trip.isShared || (trip.sharedWith && trip.sharedWith.length > 0) || trip.marketplaceConfig?.isListed;
-    }
-    if (filterStatus === 'approvals') {
-      return trip.pendingSuggestions?.some((s: any) => s.status === 'pending');
-    }
-    return trip.status === filterStatus;
-  });
+  const filteredTrips = trips
+    .filter(trip => {
+      const matchesSearch =
+        trip.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        trip.destination.toLowerCase().includes(searchTerm.toLowerCase());
+
+      if (!matchesSearch) return false;
+
+      if (filterStatus === 'all') return true;
+      if (filterStatus === 'shared') {
+        return trip.isShared || (trip.sharedWith && trip.sharedWith.length > 0) || trip.marketplaceConfig?.isListed;
+      }
+      if (filterStatus === 'approvals') {
+        return trip.pendingSuggestions?.some((s: any) => s.status === 'pending');
+      }
+      return trip.status === filterStatus;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'title') return a.title.localeCompare(b.title);
+      if (sortBy === 'date') return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+      // default: recent (by created_at or start_date descending)
+      return new Date(b.created_at || b.start_date).getTime() - new Date(a.created_at || a.start_date).getTime();
+    });
 
   const renderTripsContent = () => (
     <>
 
 
-      {/* Trip list header with search/sort if needed */}
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-xl font-bold text-gray-900">
-          {filterStatus === 'all' ? 'Todas as Viagens' :
-            filterStatus === 'completed' ? 'Viagens Concluídas' :
-              filterStatus === 'planning' ? 'Planejando' :
-                filterStatus === 'approvals' ? 'Aprovações Pendentes' : 'Viagens Compartilhadas'}
-        </h3>
+      {/* Refined Search & Filter Header (Matched to Reference) */}
+      <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 mb-8 space-y-4">
+        {/* Search Bar Row */}
+        <div className="relative">
+          <i className="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
+          <input
+            type="text"
+            placeholder="Buscar..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-gray-50/50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-orange-500/10 transition-all text-sm placeholder:text-gray-400"
+          />
+        </div>
+
+        {/* Filters & Controls Row */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* Filter Chips */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            {[
+              { id: 'all', label: 'Todas' },
+              { id: 'planning', label: 'Planejando' },
+              { id: 'shared', label: 'Compartilhadas' },
+              { id: 'approvals', label: 'Pendentes' },
+              { id: 'completed', label: 'Concluídas' },
+            ].map((chip) => {
+              const isActive = filterStatus === chip.id;
+              return (
+                <button
+                  key={chip.id}
+                  onClick={() => setFilterStatus(chip.id)}
+                  className={`px-5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${isActive
+                    ? 'bg-[#FF6B35] text-white shadow-lg shadow-orange-500/20'
+                    : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                    }`}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            {/* Sort Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowSortMenu(!showSortMenu)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 transition-all"
+              >
+                <i className="ri-arrow-down-s-line"></i>
+                {sortBy === 'recent' ? 'Mais Recentes' : sortBy === 'title' ? 'Título' : 'Data'}
+              </button>
+
+              {showSortMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowSortMenu(false)}
+                  ></div>
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 z-20 animate-in fade-in slide-in-from-top-2 duration-200">
+                    {[
+                      { id: 'recent', label: 'Mais Recentes' },
+                      { id: 'title', label: 'Título' },
+                      { id: 'date', label: 'Data da Viagem' },
+                    ].map((option) => (
+                      <button
+                        key={option.id}
+                        onClick={() => {
+                          setSortBy(option.id as any);
+                          setShowSortMenu(false);
+                        }}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-medium transition-all flex items-center justify-between ${sortBy === option.id
+                          ? 'bg-orange-50 text-orange-600'
+                          : 'text-gray-600 hover:bg-gray-50'
+                          }`}
+                      >
+                        {option.label}
+                        {sortBy === option.id && <i className="ri-check-line"></i>}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="w-px h-6 bg-gray-100 mx-1"></div>
+
+            {/* View Toggles */}
+            <div className="flex items-center p-1 bg-gray-50 rounded-xl">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${viewMode === 'grid'
+                  ? 'bg-white text-orange-600 shadow-sm border border-gray-100'
+                  : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                title="Visualização em Cards"
+              >
+                <i className="ri-grid-fill text-lg"></i>
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${viewMode === 'list'
+                  ? 'bg-white text-orange-600 shadow-sm border border-gray-100'
+                  : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                title="Visualização em Lista"
+              >
+                <i className="ri-list-check text-lg"></i>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Trips Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTrips.map((trip) => {
-          const statusBadge = getStatusBadge(trip.status);
-          const daysUntil = getDaysUntilTrip(trip.start_date);
-          const pendingCount = getPendingSuggestionsCount(trip);
-
-          return (
-            <div
-              key={trip.id}
-              onClick={() => handleTripClick(trip)}
-              className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group"
+      {/* Trips Content */}
+      {filteredTrips.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+          <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+            <i className="ri-search-line text-4xl"></i>
+          </div>
+          <h4 className="text-xl font-bold text-gray-700 mb-2">Nenhuma viagem encontrada</h4>
+          <p className="text-gray-500 max-w-sm mx-auto">
+            {searchTerm ? `Não encontramos resultados para "${searchTerm}". Tente uma busca diferente.` : 'Não há viagens nesta categoria.'}
+          </p>
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="mt-4 text-orange-600 font-bold text-sm hover:underline"
             >
-              {/* Cover Image */}
-              <div className="relative h-48 overflow-hidden">
-                <img
-                  src={
-                    trip.cover_image ||
-                    `https://readdy.ai/api/search-image?query=${trip.destination}%20beautiful%20travel%20destination%20scenic%20view&width=400&height=300&seq=trip-${trip.id}&orientation=landscape`
-                  }
-                  alt={trip.title}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+              Limpar busca
+            </button>
+          )}
+        </div>
+      ) : viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredTrips.map((trip) => {
+            const statusBadge = getStatusBadge(trip.status);
+            const daysUntil = getDaysUntilTrip(trip.start_date);
+            const pendingCount = getPendingSuggestionsCount(trip);
 
-                <div className="absolute top-3 left-3 flex items-center gap-2">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md border border-white/20 shadow-lg ${statusBadge.color} ${statusBadge.bg}`}
-                  >
-                    {statusBadge.text}
-                  </span>
-                  {trip.isShared && (
-                    <div className="px-3 py-1 bg-purple-500 text-white rounded-full text-xs font-medium flex items-center gap-1 shadow-lg border border-white/20">
-                      <i className="ri-group-line"></i>
-                      Compartilhada
-                    </div>
-                  )}
-                </div>
+            return (
+              <div
+                key={trip.id}
+                onClick={() => handleTripClick(trip)}
+                className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group"
+              >
+                {/* Cover Image */}
+                <div className="relative h-48 overflow-hidden">
+                  <img
+                    src={
+                      trip.cover_image ||
+                      `https://readdy.ai/api/search-image?query=${trip.destination}%20beautiful%20travel%20destination%20scenic%20view&width=400&height=300&seq=trip-${trip.id}&orientation=landscape`
+                    }
+                    alt={trip.title}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
 
-                {/* Delete Button - Only for Owners/Admins */}
-                {trip.permissions === 'admin' && (
-                  <button
-                    onClick={(e) => handleDeleteTrip(e, trip)}
-                    className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-red-500/80 text-white hover:bg-red-600 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-lg translate-y-2 group-hover:translate-y-0"
-                    title="Excluir Viagem"
-                  >
-                    <i className="ri-delete-bin-line"></i>
-                  </button>
-                )}
-
-
-
-
-                {/* Pending Suggestions Badge */}
-                {
-                  pendingCount > 0 && trip.permissions === 'admin' && (
-                    <div className="absolute top-12 right-3">
-                      <div className="px-3 py-1 bg-yellow-500 text-white rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
-                        <i className="ri-notification-3-line"></i>
-                        {pendingCount} {pendingCount === 1 ? 'sugestão' : 'sugestões'}
-                      </div>
-                    </div>
-                  )
-                }
-
-                {/* Trip Info Overlay */}
-                <div className="absolute bottom-3 left-3 right-3">
-                  <h3
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTripClick(trip);
-                    }}
-                    className="text-white font-bold text-lg mb-1 cursor-pointer hover:underline"
-                  >
-                    {trip.title}
-                  </h3>
-                  <div className="flex items-center gap-2 text-white/90 text-sm">
-                    <i className="ri-map-pin-line"></i>
-                    <span>{trip.destination}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="p-4">
-                {/* Dates */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2 text-gray-600 text-sm">
-                    <i className="ri-calendar-line"></i>
-                    <span>
-                      {formatDate(trip.start_date)} - {formatDate(trip.end_date)}
-                    </span>
-                  </div>
-                  {daysUntil > 0 && daysUntil < 30 && (
-                    <span className="text-orange-600 text-xs font-medium">Em {daysUntil} dias</span>
-                  )}
-                </div>
-
-                {/* Trip Type & Travelers */}
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="flex items-center gap-1.5">
-                    <i className={`${getTripTypeIcon(trip.trip_type)} ${getTripTypeColor(trip.trip_type)}`}></i>
-                    <span className="text-xs text-gray-600 capitalize">{trip.trip_type}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <i className="ri-group-line text-gray-400"></i>
-                    <span className="text-xs text-gray-600">{trip.travelers} pessoas</span>
-                  </div>
-                  {trip.places && trip.places.length > 0 && (
-                    <div className="flex items-center gap-1.5">
-                      <i className="ri-map-pin-2-line text-gray-400"></i>
-                      <span className="text-xs text-gray-600">{trip.places.length} locais</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Collaborators Preview */}
-                {trip.isShared && trip.sharedWith && trip.sharedWith.length > 0 && (
-                  <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
-                    <div className="flex -space-x-2">
-                      {trip.sharedWith.slice(0, 3).map((user, idx) => (
-                        <UserAvatar
-                          key={idx}
-                          src={user.avatar}
-                          name={user.name}
-                          className="w-6 h-6 border-2 border-white"
-                        />
-                      ))}
-                    </div>
-                    <span className="text-xs text-gray-600">
-                      {trip.sharedWith.length}{' '}
-                      {trip.sharedWith.length === 1 ? 'colaborador' : 'colaboradores'}
-                    </span>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-2">
-                  {pendingCount > 0 && trip.permissions === 'admin' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewSuggestions(trip);
-                      }}
-                      className="flex-1 px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:shadow-md transition-all text-sm font-medium flex items-center justify-center gap-2 relative whitespace-nowrap"
+                  <div className="absolute top-3 left-3 flex items-center gap-2">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md border border-white/20 shadow-lg ${statusBadge.color} ${statusBadge.bg}`}
                     >
-                      <i className="ri-notification-3-line"></i>
-                      Revisar ({pendingCount})
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingTrip(trip);
-                      setActiveSubTab('newtrip');
-                    }}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
-                    title="Editar Viagem"
-                  >
-                    <i className="ri-edit-line text-lg"></i>
-                  </button>
+                      {statusBadge.text}
+                    </span>
+                    {trip.isShared && (
+                      <div className="px-3 py-1 bg-purple-500 text-white rounded-full text-xs font-medium flex items-center gap-1 shadow-lg border border-white/20">
+                        <i className="ri-group-line"></i>
+                        Compartilhada
+                      </div>
+                    )}
+                  </div>
+
                   {trip.permissions === 'admin' && (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedTrip(trip);
-                        setShowShareModal(true);
-                      }}
-                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
-                      title="Compartilhar Viagem"
+                      onClick={(e) => handleDeleteTrip(e, trip)}
+                      className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-red-500/80 text-white hover:bg-red-600 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-lg translate-y-2 group-hover:translate-y-0"
+                      title="Excluir Viagem"
                     >
-                      <i className="ri-share-forward-line text-lg"></i>
+                      <i className="ri-delete-bin-line"></i>
                     </button>
                   )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSimulateSuggestion(trip);
-                    }}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
-                    title="Simular sugestão (teste)"
-                  >
-                    <i className="ri-lightbulb-line text-lg"></i>
-                  </button>
+
+                  {pendingCount > 0 && trip.permissions === 'admin' && (
+                    <div className="absolute top-12 right-3">
+                      <div className="px-3 py-1 bg-yellow-500 text-white rounded-full text-xs font-medium flex items-center gap-1 animate-pulse border border-white/20 shadow-lg">
+                        <i className="ri-notification-3-line"></i>
+                        {pendingCount}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <h3 className="text-white font-bold text-lg mb-0.5 truncate">{trip.title}</h3>
+                    <div className="flex items-center gap-1 text-white/90 text-xs">
+                      <i className="ri-map-pin-line text-orange-400"></i>
+                      <span className="truncate">{trip.destination}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 text-gray-500 text-xs font-medium">
+                      <i className="ri-calendar-line text-orange-500"></i>
+                      <span>{formatDate(trip.start_date)} - {formatDate(trip.end_date)}</span>
+                    </div>
+                    {daysUntil > 0 && daysUntil < 30 && (
+                      <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Em {daysUntil} dias
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-lg">
+                      <i className={`${getTripTypeIcon(trip.trip_type)} ${getTripTypeColor(trip.trip_type)} text-xs`}></i>
+                      <span className="text-[10px] font-bold text-gray-600 uppercase tracking-tighter">{trip.trip_type}</span>
+                    </div>
+                    <div className="flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-lg">
+                      <i className="ri-group-line text-blue-500 text-xs"></i>
+                      <span className="text-[10px] font-bold text-gray-600 uppercase tracking-tighter">{trip.travelers} pessoas</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {pendingCount > 0 && trip.permissions === 'admin' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleViewSuggestions(trip); }}
+                        className="flex-1 px-3 py-2 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-all text-xs font-bold flex items-center justify-center gap-2"
+                      >
+                        <i className="ri-notification-3-line"></i>
+                        Revisar
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditingTrip(trip); setActiveSubTab('newtrip'); }}
+                      className="w-10 h-10 bg-gray-50 text-gray-500 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-all flex items-center justify-center border border-gray-100"
+                    >
+                      <i className="ri-edit-line"></i>
+                    </button>
+                    {trip.permissions === 'admin' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedTrip(trip); setShowShareModal(true); }}
+                        className="w-10 h-10 bg-gray-50 text-gray-500 rounded-xl hover:bg-gray-100 hover:text-gray-900 transition-all flex items-center justify-center border border-gray-100"
+                      >
+                        <i className="ri-share-forward-line"></i>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div >
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredTrips.map((trip) => {
+            const statusBadge = getStatusBadge(trip.status);
+            const daysUntil = getDaysUntilTrip(trip.start_date);
+            const pendingCount = getPendingSuggestionsCount(trip);
+
+            return (
+              <div
+                key={trip.id}
+                onClick={() => handleTripClick(trip)}
+                className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm hover:shadow-md transition-all border border-gray-100 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer group hover:border-orange-200"
+              >
+                {/* Compact Thumbnail */}
+                <div className="w-full sm:w-24 h-32 sm:h-24 rounded-xl overflow-hidden flex-shrink-0 relative">
+                  <img
+                    src={trip.cover_image || `https://readdy.ai/api/search-image?query=${trip.destination}%20city&width=200&height=200`}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    alt={trip.title}
+                  />
+                  <div className="absolute top-2 left-2 sm:hidden">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusBadge.color} ${statusBadge.bg}`}>
+                      {statusBadge.text}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Info Section */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center flex-wrap gap-2 mb-1">
+                    <h4 className="font-bold text-gray-900 text-lg truncate group-hover:text-orange-600 transition-colors">
+                      {trip.title}
+                    </h4>
+                    <div className="hidden sm:flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusBadge.color} ${statusBadge.bg}`}>
+                        {statusBadge.text}
+                      </span>
+                      {trip.isShared && (
+                        <span className="px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                          Compartilhada
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500 mt-1">
+                    <div className="flex items-center gap-1.5">
+                      <i className="ri-map-pin-line text-orange-500"></i>
+                      <span className="font-medium text-gray-700">{trip.destination}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <i className="ri-calendar-line text-orange-400"></i>
+                      <span>{formatDate(trip.start_date)} - {formatDate(trip.end_date)}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1 uppercase text-[10px] font-bold tracking-tight">
+                        <i className={getTripTypeIcon(trip.trip_type)}></i>
+                        {trip.trip_type}
+                      </span>
+                      <span className="flex items-center gap-1 uppercase text-[10px] font-bold tracking-tight">
+                        <i className="ri-group-line"></i>
+                        {trip.travelers} pessoas
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Actions */}
+                <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 pt-3 sm:pt-0">
+                  {pendingCount > 0 && trip.permissions === 'admin' && (
+                    <div className="flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold border border-amber-200 animate-pulse">
+                      <i className="ri-notification-3-line"></i>
+                      {pendingCount} Pendentes
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditingTrip(trip); setActiveSubTab('newtrip'); }}
+                      className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400 hover:text-gray-900"
+                      title="Editar"
+                    >
+                      <i className="ri-edit-line text-xl"></i>
+                    </button>
+                    {trip.permissions === 'admin' && (
+                      <>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSelectedTrip(trip); setShowShareModal(true); }}
+                          className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400 hover:text-gray-900"
+                          title="Compartilhar"
+                        >
+                          <i className="ri-share-forward-line text-xl"></i>
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteTrip(e, trip)}
+                          className="p-2 hover:bg-red-50 rounded-xl transition-colors text-gray-400 hover:text-red-500"
+                          title="Excluir"
+                        >
+                          <i className="ri-delete-bin-line text-xl"></i>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Trip Planning Modal */}
       {
@@ -1485,601 +1711,385 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
 
 
 
-  const renderStatsContent = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Destinos Visitados */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-earth-line text-3xl text-blue-500"></i>
-            <span className="text-3xl font-bold text-gray-900">{new Set(trips.map(t => t.destination)).size}</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Destinos Visitados</h4>
-          <p className="text-sm text-gray-600">Lugares únicos explorados</p>
-        </div>
 
-        {/* Continentes */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-global-line text-3xl text-purple-500"></i>
-            <span className="text-3xl font-bold text-gray-900">5</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Continentes</h4>
-          <p className="text-sm text-gray-600">América, Europa, Ásia, África, Oceania</p>
-        </div>
-
-        {/* Países */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-flag-line text-3xl text-red-500"></i>
-            <span className="text-3xl font-bold text-gray-900">
-              {new Set(trips.map(t => t.destination.split(',')[0])).size}
-            </span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Países</h4>
-          <p className="text-sm text-gray-600">Nações diferentes visitadas</p>
-        </div>
-
-        {/* Dias Viajando */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-calendar-check-line text-3xl text-green-500"></i>
-            <span className="text-3xl font-bold text-gray-900">
-              {trips.reduce((acc, trip) => {
-                const start = new Date(trip.start_date);
-                const end = new Date(trip.end_date);
-                const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                return acc + days;
-              }, 0)}
-            </span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Dias Viajando</h4>
-          <p className="text-sm text-gray-600">Total de dias em viagens</p>
-        </div>
-
-        {/* Distância Percorrida */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-flight-takeoff-line text-3xl text-cyan-500"></i>
-            <span className="text-3xl font-bold text-gray-900">{(trips.length * 3500).toLocaleString('pt-BR')}</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Km Percorridos</h4>
-          <p className="text-sm text-gray-600">Distância total estimada</p>
-        </div>
-
-        {/* Viajantes */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-group-line text-3xl text-purple-500"></i>
-            <span className="text-3xl font-bold text-gray-900">{trips.reduce((acc, trip) => acc + trip.travelers, 0)}</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Viajantes</h4>
-          <p className="text-sm text-gray-600">Total de pessoas nas viagens</p>
-        </div>
-
-        {/* Locais Visitados */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-map-pin-2-line text-3xl text-orange-500"></i>
-            <span className="text-3xl font-bold text-gray-900">
-              {trips.reduce((acc, trip) => acc + (trip.places?.length || 0), 0)}
-            </span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Locais Visitados</h4>
-          <p className="text-sm text-gray-600">Pontos turísticos explorados</p>
-        </div>
-
-        {/* Cidades */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-building-line text-3xl text-indigo-500"></i>
-            <span className="text-3xl font-bold text-gray-900">{new Set(trips.map(t => t.destination)).size}</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Cidades</h4>
-          <p className="text-sm text-gray-600">Centros urbanos visitados</p>
-        </div>
-
-        {/* Regiões */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-map-line text-3xl text-teal-500"></i>
-            <span className="text-3xl font-bold text-gray-900">12</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Regiões</h4>
-          <p className="text-sm text-gray-600">Áreas geográficas exploradas</p>
-        </div>
-
-        {/* Viagens Compartilhadas */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-share-line text-3xl text-pink-500"></i>
-            <span className="text-3xl font-bold text-gray-900">{trips.filter(t => t.isShared).length}</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Viagens Compartilhadas</h4>
-          <p className="text-sm text-gray-600">Roteiros colaborativos</p>
-        </div>
-
-        {/* Viagens Concluídas */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-star-line text-3xl text-yellow-500"></i>
-            <span className="text-3xl font-bold text-gray-900">{trips.filter(t => t.status === 'completed').length}</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Viagens Concluídas</h4>
-          <p className="text-sm text-gray-600">Aventuras finalizadas</p>
-        </div>
-
-        {/* Fotos Tiradas */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-camera-line text-3xl text-rose-500"></i>
-            <span className="text-3xl font-bold text-gray-900">
-              {(trips.filter(t => t.status === 'completed').length * 247).toLocaleString('pt-BR')}
-            </span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Fotos Tiradas</h4>
-          <p className="text-sm text-gray-600">Memórias capturadas</p>
-        </div>
-
-        {/* Horas de Voo */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-plane-line text-3xl text-sky-500"></i>
-            <span className="text-3xl font-bold text-gray-900">{trips.length * 8}h</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Horas de Voo</h4>
-          <p className="text-sm text-gray-600">Tempo total no ar</p>
-        </div>
-
-        {/* Idiomas Praticados */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-translate-2 text-3xl text-violet-500"></i>
-            <span className="text-3xl font-bold text-gray-900">7</span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Idiomas Praticados</h4>
-          <p className="text-sm text-gray-600">Línguas diferentes usadas</p>
-        </div>
-
-        {/* Culturas Exploradas */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-ancient-gate-line text-3xl text-amber-500"></i>
-            <span className="text-3xl font-bold text-gray-900">
-              {trips.filter(t => t.trip_type === 'cultural').length}
-            </span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Culturas Exploradas</h4>
-          <p className="text-sm text-gray-600">Experiências culturais</p>
-        </div>
-
-        {/* Aventuras */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-mountain-line text-3xl text-emerald-500"></i>
-            <span className="text-3xl font-bold text-gray-900">
-              {trips.filter(t => t.trip_type === 'adventure').length}
-            </span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Aventuras</h4>
-          <p className="text-sm text-gray-600">Viagens de aventura</p>
-        </div>
-
-        {/* Praias Visitadas */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-sun-line text-3xl text-orange-400"></i>
-            <span className="text-3xl font-bold text-gray-900">
-              {trips.filter(t => t.trip_type === 'leisure').length * 3}
-            </span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Praias Visitadas</h4>
-          <p className="text-sm text-gray-600">Destinos de praia</p>
-        </div>
-
-        {/* Museus Visitados */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-bank-line text-3xl text-slate-500"></i>
-            <span className="text-3xl font-bold text-gray-900">
-              {trips.filter(t => t.trip_type === 'cultural').length * 5}
-            </span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Museus Visitados</h4>
-          <p className="text-sm text-gray-600">Instituições culturais</p>
-        </div>
-
-        {/* Restaurantes */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <i className="ri-restaurant-line text-3xl text-red-400"></i>
-            <span className="text-3xl font-bold text-gray-900">
-              {trips.filter(t => t.status === 'completed').length * 12}
-            </span>
-          </div>
-          <h4 className="font-semibold text-gray-900 mb-1">Restaurantes</h4>
-          <p className="text-sm text-gray-600">Gastronomia local experimentada</p>
-        </div>
-      </div>
-
-      {/* Detailed Stats Sections */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        {/* Por Continente */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <i className="ri-global-line text-purple-500"></i>
-            Viagens por Continente
-          </h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">
-                  🌍
-                </div>
-                <span className="font-semibold text-gray-900">Europa</span>
-              </div>
-              <span className="text-2xl font-bold text-blue-600">{Math.floor(trips.length * 0.4)}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">
-                  🌎
-                </div>
-                <span className="font-semibold text-gray-900">América</span>
-              </div>
-              <span className="text-2xl font-bold text-green-600">{Math.floor(trips.length * 0.3)}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold">
-                  🌏
-                </div>
-                <span className="font-semibold text-gray-900">Ásia</span>
-              </div>
-              <span className="text-2xl font-bold text-orange-600">{Math.floor(trips.length * 0.2)}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center text-white font-bold">
-                  🌍
-                </div>
-                <span className="font-semibold text-gray-900">África</span>
-              </div>
-              <span className="text-2xl font-bold text-yellow-600">{Math.floor(trips.length * 0.07)}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-cyan-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-cyan-500 rounded-full flex items-center justify-center text-white font-bold">
-                  🌏
-                </div>
-                <span className="font-semibold text-gray-900">Oceania</span>
-              </div>
-              <span className="text-2xl font-bold text-cyan-600">{Math.floor(trips.length * 0.03)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Por Tipo de Viagens */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <i className="ri-suitcase-line text-orange-500"></i>
-            Viagens por Tipo
-          </h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <i className="ri-sun-line text-2xl text-orange-500"></i>
-                <span className="font-semibold text-gray-900">Lazer</span>
-              </div>
-              <span className="text-2xl font-bold text-orange-600">
-                {trips.filter(t => t.trip_type === 'leisure').length}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <i className="ri-briefcase-line text-2xl text-blue-500"></i>
-                <span className="font-semibold text-gray-900">Negócios</span>
-              </div>
-              <span className="text-2xl font-bold text-blue-600">
-                {trips.filter(t => t.trip_type === 'business').length}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <i className="ri-mountain-line text-2xl text-green-500"></i>
-                <span className="font-semibold text-gray-900">Aventura</span>
-              </div>
-              <span className="text-2xl font-bold text-green-600">
-                {trips.filter(t => t.trip_type === 'adventure').length}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-pink-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <i className="ri-heart-line text-2xl text-pink-500"></i>
-                <span className="font-semibold text-gray-900">Romântico</span>
-              </div>
-              <span className="text-2xl font-bold text-pink-600">
-                {trips.filter(t => t.trip_type === 'romantic').length}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <i className="ri-group-line text-2xl text-purple-500"></i>
-                <span className="font-semibold text-gray-900">Família</span>
-              </div>
-              <span className="text-2xl font-bold text-purple-600">
-                {trips.filter(t => t.trip_type === 'family').length}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <i className="ri-building-line text-2xl text-amber-500"></i>
-                <span className="font-semibold text-gray-900">Cultural</span>
-              </div>
-              <span className="text-2xl font-bold text-amber-600">
-                {trips.filter(t => t.trip_type === 'cultural').length}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   const renderMapsContent = () => {
-    const visitedDestinations = trips
-      .filter(t => t.status === 'completed')
-      .map(t => t.destination)
-      .join('|');
+    const stats = {
+      destinations: new Set(trips.map(t => t.destination)).size,
+      countries: new Set(trips.map(t => t.destination.split(',')[0])).size,
+      days: trips.reduce((acc, trip) => {
+        if (!trip.start_date || !trip.end_date) return acc;
+        const start = new Date(trip.start_date);
+        const end = new Date(trip.end_date);
+        const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        return acc + days;
+      }, 0),
+      km: (trips.length * 3500).toLocaleString('pt-BR'),
+      travelers: trips.reduce((acc, trip) => acc + (trip.travelers || 0), 0),
+      places: trips.reduce((acc, trip) => acc + (trip.places?.length || 0), 0),
+      continents: 5,
+      cities: new Set(trips.map(t => t.destination)).size,
+      photos: (trips.filter(t => t.status === 'completed').length * 247).toLocaleString('pt-BR'),
+      flightHours: trips.length * 8
+    };
 
     return (
-      <div className="space-y-6">
-        {/* World Map Overview */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          {/* Header */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                  <i className="ri-earth-line text-emerald-500"></i>
-                  Mapa Mundial de Viagens
-                </h3>
-                <p className="text-gray-600 text-sm mt-1">Explore todos os destinos que você já visitou</p>
+      <div className="space-y-8 animate-fadeIn pb-12">
+        {/* Top KPI Row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50/50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-150"></div>
+            <div className="relative flex items-center gap-4">
+              <div className="w-14 h-14 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center text-3xl group-hover:rotate-12 transition-transform">
+                <i className="ri-earth-line"></i>
               </div>
-              <div className="flex items-center gap-3 bg-gradient-to-r from-orange-50 to-pink-50 px-6 py-3 rounded-full border-2 border-orange-200">
-                <i className="ri-map-pin-fill text-orange-500 text-xl"></i>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {trips.filter(t => t.status === 'completed').length}
-                  </p>
-                  <p className="text-xs text-gray-600">Destinos Visitados</p>
-                </div>
+              <div>
+                <p className="text-3xl font-black text-gray-900 leading-none">{stats.destinations}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Destinos</p>
               </div>
             </div>
           </div>
 
-          {/* Mapa Mundial - Imagem de Fundo */}
+          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-red-50/50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-150"></div>
+            <div className="relative flex items-center gap-4">
+              <div className="w-14 h-14 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center text-3xl group-hover:rotate-12 transition-transform">
+                <i className="ri-flag-line"></i>
+              </div>
+              <div>
+                <p className="text-3xl font-black text-gray-900 leading-none">{stats.countries}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Países</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-green-50/50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-150"></div>
+            <div className="relative flex items-center gap-4">
+              <div className="w-14 h-14 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center text-3xl group-hover:rotate-12 transition-transform">
+                <i className="ri-calendar-check-line"></i>
+              </div>
+              <div>
+                <p className="text-3xl font-black text-gray-900 leading-none">{stats.days}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Dias Viajando</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-50/50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-150"></div>
+            <div className="relative flex items-center gap-4">
+              <div className="w-14 h-14 bg-cyan-50 text-cyan-500 rounded-2xl flex items-center justify-center text-3xl group-hover:rotate-12 transition-transform">
+                <i className="ri-flight-takeoff-line"></i>
+              </div>
+              <div>
+                <p className="text-3xl font-black text-gray-900 leading-none">{stats.km}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">KM Percorridos</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* World Map Section */}
+        <div className="bg-white rounded-[48px] shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="border-l-4 border-emerald-500 pl-4">
+              <h3 className="text-3xl font-black text-gray-900 uppercase tracking-tighter flex items-center gap-3">
+                <i className="ri-earth-fill text-emerald-500 animate-pulse"></i>
+                Exploração Global
+              </h3>
+              <p className="text-gray-500 font-medium mt-1">Sua jornada detalhada no mapa do mundo</p>
+            </div>
+            <div className="flex items-center gap-3 bg-gradient-to-r from-orange-500 to-pink-500 px-8 py-4 rounded-[24px] shadow-lg shadow-orange-100 text-white">
+              <i className="ri-map-pin-2-fill text-2xl"></i>
+              <div>
+                <p className="text-2xl font-black leading-none">{destinations.length}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mt-1">Pins no Mapa</p>
+              </div>
+            </div>
+          </div>
+
+          {/* World Map Image Container */}
           <div className="relative w-full h-[700px] bg-gradient-to-br from-blue-50 via-white to-cyan-50">
-            {/* Imagem do Mapa Múndi */}
             <img
               src="https://readdy.ai/api/search-image?query=world%20map%20detailed%20continents%20countries%20geography%20political%20boundaries%20clean%20design%20bright%20colors%20high%20quality%20light%20background%20simple%20modern%20style&width=1600&height=700&seq=world-map-pins-v3&orientation=landscape"
               alt="Mapa Múndi"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover opacity-90"
             />
 
-            {/* Overlay muito leve */}
-            <div className="absolute inset-0 bg-white/10"></div>
-
-            {/* Pins dos Locais Visitados */}
+            {/* Interactive Pins */}
             <div className="absolute inset-0">
-              {destinations.map((destination, idx) => {
-                return (
-                  <div
-                    key={idx}
-                    className="absolute group cursor-pointer z-10"
-                    style={{
-                      top: destination.position.top,
-                      left: destination.position.left,
-                      transform: 'translate(-50%, -50%)',
-                    }}
-                  >
-                    {/* Pin Principal com Cores Variadas */}
-                    <div className="relative">
-                      {/* Círculo de pulso animado */}
-                      <div className="absolute inset-0 w-20 h-20 -translate-x-6 -translate-y-6 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full animate-ping opacity-60"></div>
-
-                      {/* Pin principal - GRANDE E COLORIDO */}
-                      <div className="relative w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full border-4 border-white shadow-2xl flex items-center justify-center hover:scale-125 transition-transform duration-300 animate-bounce">
-                        <i className="ri-map-pin-fill text-white text-3xl"></i>
-                      </div>
-
-                      {/* Linha conectando ao mapa */}
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 w-1.5 h-8 bg-gradient-to-b from-blue-500 to-blue-400 opacity-70"></div>
+              {destinations.map((destination, idx) => (
+                <div
+                  key={idx}
+                  className="absolute group cursor-pointer z-10"
+                  style={{
+                    top: destination.position.top,
+                    left: destination.position.left,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                >
+                  <div className="relative">
+                    <div className="absolute inset-0 w-24 h-24 -translate-x-8 -translate-y-8 bg-blue-500/20 rounded-full animate-ping"></div>
+                    <div className="relative w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full border-4 border-white shadow-2xl flex items-center justify-center hover:scale-125 transition-all duration-300 animate-bounce">
+                      <i className="ri-map-pin-fill text-white text-3xl"></i>
                     </div>
+                  </div>
 
-                    {/* Tooltip com informações da viagem */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-20">
-                      <div className="bg-white rounded-2xl shadow-2xl p-6 min-w-[280px] border-4 border-orange-200">
-                        <div className="flex items-start gap-4">
-                          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
-                            <i className="ri-map-pin-fill text-white text-3xl"></i>
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-bold text-gray-900 text-lg mb-1">{destination.name}</h4>
-                            <p className="text-sm text-gray-600 mb-3">{destination.country}</p>
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <i className="ri-calendar-line text-orange-500"></i>
-                                <span>{destination.dates}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <i className="ri-group-line text-orange-500"></i>
-                                <span>{destination.travelers} {destination.travelers === 1 ? 'person' : 'people'}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <i className="ri-map-pin-2-line text-orange-500"></i>
-                                <span>{destination.places} places visited</span>
-                              </div>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-8 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-20 translate-y-4 group-hover:translate-y-0">
+                    <div className="bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl p-8 min-w-[320px] border-4 border-orange-200">
+                      <div className="flex items-start gap-5">
+                        <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl flex items-center justify-center flex-shrink-0 shadow-lg rotate-3 group-hover:rotate-0 transition-transform">
+                          <i className="ri-map-pin-fill text-white text-4xl"></i>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-black text-gray-900 text-xl mb-1 truncate uppercase tracking-tight">{destination.name}</h4>
+                          <p className="text-sm font-bold text-blue-500 mb-4 uppercase tracking-widest">{destination.country}</p>
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3 text-xs text-gray-500 font-bold">
+                              <i className="ri-calendar-line text-orange-500 text-lg"></i>
+                              <span>{destination.dates}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-gray-500 font-bold">
+                              <i className="ri-group-line text-orange-500 text-lg"></i>
+                              <span>{destination.travelers} VIAJANTES</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-gray-500 font-bold">
+                              <i className="ri-map-pin-2-line text-orange-500 text-lg"></i>
+                              <span>{destination.places} LOCAIS VISITADOS</span>
                             </div>
                           </div>
                         </div>
-
-                        {/* Seta do tooltip */}
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
-                          <div className="w-5 h-5 bg-white border-r-4 border-b-4 border-orange-200 transform rotate-45"></div>
-                        </div>
+                      </div>
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
+                        <div className="w-6 h-6 bg-white border-r-4 border-b-4 border-orange-200 transform rotate-45"></div>
                       </div>
                     </div>
-
-                    {/* Badge com número da viagem */}
-                    <div className="absolute -top-4 -right-4 w-8 h-8 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-full border-4 border-white shadow-xl flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">{idx + 1}</span>
-                    </div>
                   </div>
-                );
-              })}
+
+                  <div className="absolute -top-4 -right-4 w-10 h-10 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-full border-4 border-white shadow-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <span className="text-white text-sm font-black">{idx + 1}</span>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            {/* Legenda Moderna */}
-            <div className="absolute bottom-8 left-8 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-6 border-2 border-orange-200 max-w-xs">
-              <h4 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2">
-                <i className="ri-information-line text-orange-500 text-2xl"></i>
-                Legenda
+            {/* Legend */}
+            <div className="absolute bottom-10 left-10 bg-white/90 backdrop-blur-xl rounded-[32px] shadow-2xl p-8 border-2 border-orange-100 max-w-xs scale-90 origin-bottom-left hover:scale-100 transition-all">
+              <h4 className="font-black text-gray-900 text-xl mb-6 flex items-center gap-3 uppercase tracking-tighter">
+                <i className="ri-guide-line text-orange-500 text-3xl"></i>
+                Guia do Mapa
               </h4>
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-pink-500 rounded-full border-3 border-white shadow-lg flex items-center justify-center">
-                    <i className="ri-map-pin-fill text-white text-sm"></i>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl border-2 border-white shadow-lg flex items-center justify-center">
+                    <i className="ri-map-pin-fill text-white text-lg"></i>
                   </div>
-                  <span className="text-sm text-gray-700 font-medium">Destino visitado</span>
+                  <span className="text-xs font-black text-gray-600 uppercase tracking-widest leading-none">Destino Concluído</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-full border-3 border-white shadow-lg flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">1</span>
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-2xl border-2 border-white shadow-lg flex items-center justify-center">
+                    <span className="text-white text-xs font-black">1</span>
                   </div>
-                  <span className="text-sm text-gray-700 font-medium">Ordem cronológica</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full border-3 border-white shadow-lg animate-ping opacity-60"></div>
-                  <span className="text-sm text-gray-700 font-medium">Animação de destaque</span>
+                  <span className="text-xs font-black text-gray-600 uppercase tracking-widest leading-none">Sequência de Visita</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Lista de Destinos Visitados */}
-          <div className="p-6 bg-gradient-to-br from-orange-50 to-pink-50 border-t-2 border-orange-200">
-            <h4 className="font-bold text-gray-900 text-xl mb-6 flex items-center gap-2">
-              <i className="ri-list-check text-orange-500 text-2xl"></i>
-              Todos os Destinos Visitados ({destinations.length})
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {destinations.map((destination, idx) => (
-                <div key={idx} className="flex items-center gap-4 bg-white rounded-xl p-4 border-2 border-orange-200 hover:shadow-lg hover:scale-105 transition-all cursor-pointer">
-                  <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
-                    <span className="text-white text-sm font-bold">{idx + 1}</span>
+          {/* Summary Cards Below Map */}
+          <div className="p-8 bg-gray-50/50 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm hover:translate-y-[-5px] transition-all">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-purple-50 text-purple-500 rounded-2xl flex items-center justify-center text-2xl">
+                  <i className="ri-group-line"></i>
+                </div>
+                <span className="text-2xl font-black text-gray-900">{stats.travelers}</span>
+              </div>
+              <h4 className="font-black text-gray-900 text-xs uppercase tracking-widest">Viajantes</h4>
+              <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase leading-none">Pessoas em sua rede</p>
+            </div>
+
+            <div className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm hover:translate-y-[-5px] transition-all">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center text-2xl">
+                  <i className="ri-map-pin-2-line"></i>
+                </div>
+                <span className="text-2xl font-black text-gray-900">{stats.places}</span>
+              </div>
+              <h4 className="font-black text-gray-900 text-xs uppercase tracking-widest">Pontos de Interesse</h4>
+              <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase leading-none">Atrações visitadas</p>
+            </div>
+
+            <div className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm hover:translate-y-[-5px] transition-all">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center text-2xl">
+                  <i className="ri-camera-line"></i>
+                </div>
+                <span className="text-2xl font-black text-gray-900">{stats.photos}</span>
+              </div>
+              <h4 className="font-black text-gray-900 text-xs uppercase tracking-widest">Momentos</h4>
+              <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase leading-none">Fotos registradas</p>
+            </div>
+
+            <div className="bg-white rounded-[28px] p-6 border border-gray-100 shadow-sm hover:translate-y-[-5px] transition-all">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-sky-50 text-sky-500 rounded-2xl flex items-center justify-center text-2xl">
+                  <i className="ri-plane-line"></i>
+                </div>
+                <span className="text-2xl font-black text-gray-900">{stats.flightHours}h</span>
+              </div>
+              <h4 className="font-black text-gray-900 text-xs uppercase tracking-widest">Log de Voo</h4>
+              <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase leading-none">Horas totais</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Breakdown Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-white rounded-[40px] p-10 border border-gray-100 shadow-sm">
+            <h3 className="text-2xl font-black text-gray-900 mb-8 flex items-center gap-3 uppercase tracking-tighter">
+              <i className="ri-global-line text-purple-500"></i>
+              Mundo por Continentes
+            </h3>
+            <div className="space-y-4">
+              {[
+                { name: 'Europa', color: 'bg-blue-500', icon: '🌍', percent: 40, count: Math.floor(trips.length * 0.4) },
+                { name: 'América', color: 'bg-green-500', icon: '🌎', percent: 30, count: Math.floor(trips.length * 0.3) },
+                { name: 'Ásia', color: 'bg-orange-500', icon: '🌏', percent: 20, count: Math.floor(trips.length * 0.2) },
+                { name: 'África', color: 'bg-yellow-500', icon: '🌍', percent: 7, count: Math.floor(trips.length * 0.07) },
+                { name: 'Oceania', color: 'bg-cyan-500', icon: '🌏', percent: 3, count: Math.floor(trips.length * 0.03) }
+              ].map((cont) => (
+                <div key={cont.name} className="relative group">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl grayscale group-hover:grayscale-0 transition-all">{cont.icon}</span>
+                      <span className="font-black text-gray-900 uppercase tracking-widest text-xs">{cont.name}</span>
+                    </div>
+                    <span className="text-xl font-black text-gray-900 group-hover:text-purple-600 transition-colors">{cont.count}</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h5 className="font-bold text-gray-900 text-sm truncate">{destination.name}</h5>
-                    <p className="text-xs text-gray-600 truncate">{destination.country}</p>
-                    <p className="text-xs text-gray-500 mt-1">{destination.dates}</p>
+                  <div className="h-4 bg-gray-50 rounded-full overflow-hidden border border-gray-100">
+                    <div
+                      className={`h-full ${cont.color} rounded-full transition-all duration-1000 group-hover:opacity-80`}
+                      style={{ width: `${cont.percent}%` }}
+                    ></div>
                   </div>
-                  <i className="ri-map-pin-fill text-orange-500 text-xl"></i>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-[40px] p-10 border border-gray-100 shadow-sm">
+            <h3 className="text-2xl font-black text-gray-900 mb-8 flex items-center gap-3 uppercase tracking-tighter">
+              <i className="ri-suitcase-fill text-orange-500"></i>
+              Perfil do Viajante
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { type: 'Lazer', icon: 'ri-sun-line', color: 'bg-orange-50 text-orange-600', val: trips.filter(t => t.trip_type === 'leisure').length },
+                { type: 'Negócios', icon: 'ri-briefcase-line', color: 'bg-blue-50 text-blue-600', val: trips.filter(t => t.trip_type === 'business').length },
+                { type: 'Aventura', icon: 'ri-mountain-line', color: 'bg-green-50 text-green-600', val: trips.filter(t => t.trip_type === 'adventure').length },
+                { type: 'Cultural', icon: 'ri-bank-line', color: 'bg-amber-50 text-amber-600', val: trips.filter(t => t.trip_type === 'cultural').length }
+              ].map((item) => (
+                <div key={item.type} className={`p-6 rounded-[24px] ${item.color} flex flex-col items-center justify-center text-center group hover:scale-105 transition-transform`}>
+                  <i className={`${item.icon} text-4xl mb-3`}></i>
+                  <span className="text-2xl font-black leading-none">{item.val}</span>
+                  <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-80">{item.type}</p>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Country/Region Progress Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Estados Unidos Progress */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">🇺🇸</span>
+        {/* Timeline Horizontal List */}
+        <div className="bg-white rounded-[48px] p-10 border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h4 className="font-black text-gray-900 text-2xl uppercase tracking-tighter flex items-center gap-3">
+              <i className="ri-history-line text-blue-500 font-normal"></i>
+              Linha do Tempo ({destinations.length})
+            </h4>
+          </div>
+          <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide px-2">
+            {destinations.map((dest, i) => (
+              <div key={i} className="flex-shrink-0 w-72 bg-gray-50 rounded-[40px] p-8 border border-gray-100 group hover:bg-white hover:shadow-2xl transition-all relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full -mr-12 -mt-12 group-hover:scale-125 transition-transform"></div>
+                <div className="flex items-center gap-4 mb-6 relative">
+                  <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center font-black text-gray-900 border-2 border-gray-100 shadow-sm group-hover:border-blue-500 transition-colors">
+                    {i + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h5 className="font-black text-gray-900 text-lg truncate uppercase tracking-tight leading-none">{dest.name}</h5>
+                    <p className="text-xs font-bold text-blue-500 uppercase tracking-widest mt-1">{dest.country}</p>
+                  </div>
                 </div>
+                <div className="flex items-center gap-3 text-[10px] font-black text-gray-400 bg-white px-5 py-3 rounded-2xl border border-gray-100 group-hover:bg-orange-50 group-hover:border-orange-200 group-hover:text-orange-600 transition-all uppercase tracking-widest">
+                  <i className="ri-calendar-line text-orange-500 text-lg"></i>
+                  {dest.dates}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Regional Progress Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 p-8 group hover:shadow-xl transition-all relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500/5 rounded-full -mr-20 -mt-20"></div>
+            <div className="flex items-center justify-between mb-8 relative">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-blue-100 rounded-3xl flex items-center justify-center text-4xl shadow-inner group-hover:scale-110 transition-transform">🇺🇸</div>
                 <div>
-                  <h3 className="font-bold text-gray-900">Estados Unidos</h3>
-                  <p className="text-sm text-gray-600">Progresso de Estados</p>
+                  <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">Estados Unidos</h3>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mt-1">Território Visitado</p>
                 </div>
               </div>
+              <div className="bg-blue-500 text-white px-4 py-2 rounded-2xl font-black text-lg shadow-lg shadow-blue-100">20%</div>
             </div>
-
-            {/* Progress Bar */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-gray-700">10 de 50 estados visitados</span>
-                <span className="text-sm font-bold text-blue-600">20%</span>
+            <div className="space-y-6 relative">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">10/50 Estados</span>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Faltam 40</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden border border-gray-200">
+                  <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500" style={{ width: '20%' }}></div>
+                </div>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500 rounded-full" style={{ width: '20%' }}></div>
-              </div>
-            </div>
-
-            {/* Visited States */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Estados Visitados:</h4>
               <div className="flex flex-wrap gap-2">
-                {['Nova York', 'Califórnia', 'Flórida', 'Texas', 'Nevada', 'Illinois', 'Massachusetts', 'Washington', 'Arizona', 'Colorado'].map((state, idx) => (
-                  <span key={idx} className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">{state}</span>
+                {['NY', 'CA', 'FL', 'TX', 'NV', 'IL', 'MA', 'WA', 'AZ', 'CO'].map((s, idx) => (
+                  <span key={idx} className="px-3 py-1 bg-blue-50 text-blue-700 rounded-xl text-[10px] font-black border border-blue-100 uppercase">{s}</span>
                 ))}
               </div>
-            </div>
-
-            {/* Next Goal */}
-            <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border border-blue-200">
-              <div className="flex items-center gap-2 mb-1">
-                <i className="ri-flag-line text-blue-600"></i>
-                <span className="text-sm font-semibold text-gray-900">Próxima Meta:</span>
-              </div>
-              <p className="text-xs text-gray-700">Visite mais 15 estados para alcançar 50% de progresso!</p>
             </div>
           </div>
 
-          {/* Brasil Progress */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">🇧🇷</span>
-                </div>
+          <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 p-8 group hover:shadow-xl transition-all relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-green-500/5 rounded-full -mr-20 -mt-20"></div>
+            <div className="flex items-center justify-between mb-8 relative">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-green-100 rounded-3xl flex items-center justify-center text-4xl shadow-inner group-hover:scale-110 transition-transform">🇧🇷</div>
                 <div>
-                  <h3 className="font-bold text-gray-900">Brasil</h3>
-                  <p className="text-sm text-gray-600">Progresso de Estados</p>
+                  <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">Brasil</h3>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mt-1">Território Visitado</p>
                 </div>
               </div>
+              <div className="bg-green-500 text-white px-4 py-2 rounded-2xl font-black text-lg shadow-lg shadow-green-100">30%</div>
             </div>
-
-            {/* Progress Bar */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-gray-700">8 de 27 estados visitados</span>
-                <span className="text-sm font-bold text-green-600">30%</span>
+            <div className="space-y-6 relative">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">8/27 Estados</span>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Faltam 19</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden border border-gray-200">
+                  <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500" style={{ width: '30%' }}></div>
+                </div>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500 rounded-full" style={{ width: '30%' }}></div>
-              </div>
-            </div>
-
-            {/* Visited States */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Estados Visitados:</h4>
               <div className="flex flex-wrap gap-2">
-                {['São Paulo', 'Rio de Janeiro', 'Bahia', 'Minas Gerais', 'Rio Grande do Sul', 'Paraná', 'Santa Catarina', 'Pernambuco'].map((state, idx) => (
-                  <span key={idx} className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-xs font-medium">{state}</span>
+                {['SP', 'RJ', 'BA', 'MG', 'RS', 'PR', 'SC', 'PE'].map((s, idx) => (
+                  <span key={idx} className="px-3 py-1 bg-green-50 text-green-700 rounded-xl text-[10px] font-black border border-green-100 uppercase">{s}</span>
                 ))}
               </div>
-            </div>
-
-            {/* Next Goal */}
-            <div className="mt-4 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
-              <div className="flex items-center gap-2 mb-1">
-                <i className="ri-flag-line text-green-600"></i>
-                <span className="text-sm font-semibold text-gray-900">Próxima Meta:</span>
-              </div>
-              <p className="text-xs text-gray-700">Visite mais 6 estados para alcançar 50% de progresso!</p>
             </div>
           </div>
         </div>
@@ -2089,83 +2099,83 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
 
   const renderGoalsContent = () => (
     <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <i className="ri-trophy-line text-amber-500"></i>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-bold text-gray-900 border-l-4 border-amber-500 pl-3 flex items-center gap-2">
+          <i className="ri-trophy-line"></i>
           Metas de Viagens
         </h3>
+      </div>
 
-        <div className="space-y-4">
-          <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-bold text-gray-900">Visitar 10 Países</h4>
-              <span className="text-sm font-semibold text-amber-600">
-                {new Set(trips.map(t => t.destination)).size}/10
-              </span>
-            </div>
-            <div className="w-full bg-white rounded-full h-3 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
-                style={{ width: `${(new Set(trips.map(t => t.destination)).size / 10) * 100}%` }}
-              ></div>
-            </div>
+      <div className="space-y-4">
+        <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-bold text-gray-900">Visitar 10 Países</h4>
+            <span className="text-sm font-semibold text-amber-600">
+              {new Set(trips.map(t => t.destination)).size}/10
+            </span>
           </div>
+          <div className="w-full bg-white rounded-full h-3 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
+              style={{ width: `${(new Set(trips.map(t => t.destination)).size / 10) * 100}%` }}
+            ></div>
+          </div>
+        </div>
 
-          <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-bold text-gray-900">100 Dias Viajando</h4>
-              <span className="text-sm font-semibold text-blue-600">
-                {trips.reduce((acc, trip) => {
+        <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-bold text-gray-900">100 Dias Viajando</h4>
+            <span className="text-sm font-semibold text-blue-600">
+              {trips.reduce((acc, trip) => {
+                const start = new Date(trip.start_date);
+                const end = new Date(trip.end_date);
+                const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                return acc + days;
+              }, 0)}/100
+            </span>
+          </div>
+          <div className="w-full bg-white rounded-full h-3 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500"
+              style={{
+                width: `${(trips.reduce((acc, trip) => {
                   const start = new Date(trip.start_date);
                   const end = new Date(trip.end_date);
                   const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
                   return acc + days;
-                }, 0)}/100
-              </span>
-            </div>
-            <div className="w-full bg-white rounded-full h-3 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-500"
-                style={{
-                  width: `${(trips.reduce((acc, trip) => {
-                    const start = new Date(trip.start_date);
-                    const end = new Date(trip.end_date);
-                    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                    return acc + days;
-                  }, 0) / 100) * 100}%`
-                }}
-              ></div>
-            </div>
+                }, 0) / 100) * 100}%`
+              }}
+            ></div>
           </div>
+        </div>
 
-          <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-bold text-gray-900">5 Viagens Concluídas</h4>
-              <span className="text-sm font-semibold text-green-600">
-                {trips.filter(t => t.status === 'completed').length}/5
-              </span>
-            </div>
-            <div className="w-full bg-white rounded-full h-3 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500"
-                style={{ width: `${(trips.filter(t => t.status === 'completed').length / 5) * 100}%` }}
-              ></div>
-            </div>
+        <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-bold text-gray-900">5 Viagens Concluídas</h4>
+            <span className="text-sm font-semibold text-green-600">
+              {trips.filter(t => t.status === 'completed').length}/5
+            </span>
           </div>
+          <div className="w-full bg-white rounded-full h-3 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500"
+              style={{ width: `${(trips.filter(t => t.status === 'completed').length / 5) * 100}%` }}
+            ></div>
+          </div>
+        </div>
 
-          <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-200">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-bold text-gray-900">3 Viagens Compartilhadas</h4>
-              <span className="text-sm font-semibold text-purple-600">
-                {trips.filter(t => t.isShared).length}/3
-              </span>
-            </div>
-            <div className="w-full bg-white rounded-full h-3 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
-                style={{ width: `${(trips.filter(t => t.isShared).length / 3) * 100}%` }}
-              ></div>
-            </div>
+        <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-bold text-gray-900">3 Viagens Compartilhadas</h4>
+            <span className="text-sm font-semibold text-purple-600">
+              {trips.filter(t => t.isShared).length}/3
+            </span>
+          </div>
+          <div className="w-full bg-white rounded-full h-3 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+              style={{ width: `${(trips.filter(t => t.isShared).length / 3) * 100}%` }}
+            ></div>
           </div>
         </div>
       </div>
@@ -2174,90 +2184,90 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
 
   const renderSuggestionsContent = () => (
     <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <i className="ri-lightbulb-line text-yellow-500"></i>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-bold text-gray-900 border-l-4 border-yellow-400 pl-3 flex items-center gap-2">
+          <i className="ri-lightbulb-line"></i>
           Sugestões de Viagens
         </h3>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border border-blue-200 hover:shadow-md transition-all cursor-pointer">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
-                <i className="ri-plane-line text-white text-xl"></i>
-              </div>
-              <div>
-                <h4 className="font-bold text-gray-900">Europa no Verão</h4>
-                <p className="text-xs text-gray-600">Melhor época para visitar</p>
-              </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border border-blue-200 hover:shadow-md transition-all cursor-pointer">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
+              <i className="ri-plane-line text-white text-xl"></i>
             </div>
-            <p className="text-sm text-gray-700">Explore as cidades europeias durante o verão com clima perfeito e festivais incríveis.</p>
+            <div>
+              <h4 className="font-bold text-gray-900">Europa no Verão</h4>
+              <p className="text-xs text-gray-600">Melhor época para visitar</p>
+            </div>
           </div>
+          <p className="text-sm text-gray-700">Explore as cidades europeias durante o verão com clima perfeito e festivais incríveis.</p>
+        </div>
 
-          <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200 hover:shadow-md transition-all cursor-pointer">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
-                <i className="ri-mountain-line text-white text-xl"></i>
-              </div>
-              <div>
-                <h4 className="font-bold text-gray-900">Trilhas na América do Sul</h4>
-                <p className="text-xs text-gray-600">Aventura e natureza</p>
-              </div>
+        <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200 hover:shadow-md transition-all cursor-pointer">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+              <i className="ri-mountain-line text-white text-xl"></i>
             </div>
-            <p className="text-sm text-gray-700">Descubra trilhas incríveis em Machu Picchu, Patagônia e outros destinos deslumbrantes.</p>
+            <div>
+              <h4 className="font-bold text-gray-900">Trilhas na América do Sul</h4>
+              <p className="text-xs text-gray-600">Aventura e natureza</p>
+            </div>
           </div>
+          <p className="text-sm text-gray-700">Descubra trilhas incríveis em Machu Picchu, Patagônia e outros destinos deslumbrantes.</p>
+        </div>
 
-          <div className="p-4 bg-gradient-to-br from-orange-50 to-pink-50 rounded-xl border border-orange-200 hover:shadow-md transition-all cursor-pointer">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center">
-                <i className="ri-sun-line text-white text-xl"></i>
-              </div>
-              <div>
-                <h4 className="font-bold text-gray-900">Praias do Caribe</h4>
-                <p className="text-xs text-gray-600">Relaxamento total</p>
-              </div>
+        <div className="p-4 bg-gradient-to-br from-orange-50 to-pink-50 rounded-xl border border-orange-200 hover:shadow-md transition-all cursor-pointer">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center">
+              <i className="ri-sun-line text-white text-xl"></i>
             </div>
-            <p className="text-sm text-gray-700">Aproveite as praias paradisíacas do Caribe com águas cristalinas e resorts de luxo.</p>
+            <div>
+              <h4 className="font-bold text-gray-900">Praias do Caribe</h4>
+              <p className="text-xs text-gray-600">Relaxamento total</p>
+            </div>
           </div>
+          <p className="text-sm text-gray-700">Aproveite as praias paradisíacas do Caribe com águas cristalinas e resorts de luxo.</p>
+        </div>
 
-          <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200 hover:shadow-md transition-all cursor-pointer">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center">
-                <i className="ri-building-line text-white text-xl"></i>
-              </div>
-              <div>
-                <h4 className="font-bold text-gray-900">Cultura Asiática</h4>
-                <p className="text-xs text-gray-600">Experiência única</p>
-              </div>
+        <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200 hover:shadow-md transition-all cursor-pointer">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center">
+              <i className="ri-building-line text-white text-xl"></i>
             </div>
-            <p className="text-sm text-gray-700">Mergulhe na rica cultura asiática visitando templos, mercados e cidades históricas.</p>
+            <div>
+              <h4 className="font-bold text-gray-900">Cultura Asiática</h4>
+              <p className="text-xs text-gray-600">Experiência única</p>
+            </div>
           </div>
+          <p className="text-sm text-gray-700">Mergulhe na rica cultura asiática visitando templos, mercados e cidades históricas.</p>
+        </div>
 
-          <div className="p-4 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border border-red-200 hover:shadow-md transition-all cursor-pointer">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center">
-                <i className="ri-heart-line text-white text-xl"></i>
-              </div>
-              <div>
-                <h4 className="font-bold text-gray-900">Lua de Mel em Paris</h4>
-                <p className="text-xs text-gray-600">Romântico e inesquecível</p>
-              </div>
+        <div className="p-4 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border border-red-200 hover:shadow-md transition-all cursor-pointer">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center">
+              <i className="ri-heart-line text-white text-xl"></i>
             </div>
-            <p className="text-sm text-gray-700">Celebre o amor na cidade mais romântica do mundo com experiências exclusivas.</p>
+            <div>
+              <h4 className="font-bold text-gray-900">Lua de Mel em Paris</h4>
+              <p className="text-xs text-gray-600">Romântico e inesquecível</p>
+            </div>
           </div>
+          <p className="text-sm text-gray-700">Celebre o amor na cidade mais romântica do mundo com experiências exclusivas.</p>
+        </div>
 
-          <div className="p-4 bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl border border-teal-200 hover:shadow-md transition-all cursor-pointer">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center">
-                <i className="ri-group-line text-white text-xl"></i>
-              </div>
-              <div>
-                <h4 className="font-bold text-gray-900">Viagens em Família</h4>
-                <p className="text-xs text-gray-600">Diversão para todos</p>
-              </div>
+        <div className="p-4 bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl border border-teal-200 hover:shadow-md transition-all cursor-pointer">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center">
+              <i className="ri-group-line text-white text-xl"></i>
             </div>
-            <p className="text-sm text-gray-700">Destinos perfeitos para toda a família com atividades para todas as idades.</p>
+            <div>
+              <h4 className="font-bold text-gray-900">Viagens em Família</h4>
+              <p className="text-xs text-gray-600">Diversão para todos</p>
+            </div>
           </div>
+          <p className="text-sm text-gray-700">Destinos perfeitos para toda a família com atividades para todas as idades.</p>
         </div>
       </div>
     </div>
@@ -2343,6 +2353,357 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     </div>
   );
 
+  const handleDeleteJournalEntry = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este registro?')) return;
+    try {
+      await deleteJournalEntry(id);
+      setJournalEntries(prev => prev.filter(e => e.id !== id));
+    } catch (error) {
+      console.error('Error deleting journal entry:', error);
+      setApiError(error);
+      setShowErrorModal(true);
+    }
+  };
+
+  const handleSubmitJournalEntry = async () => {
+    if (!selectedJournalTrip || !user) return;
+    if (!newJournalEntry.title) {
+      alert('Por favor, insira um título');
+      return;
+    }
+
+    try {
+      const entry = await createJournalEntry({
+        trip_id: selectedJournalTrip.id,
+        user_id: user.id,
+        day_number: activeJournalDay,
+        type: newJournalEntry.type,
+        title: newJournalEntry.title,
+        content: newJournalEntry.content,
+        rating: newJournalEntry.rating,
+        media_url: newJournalEntry.media_url,
+        metadata: {}
+      });
+
+      setJournalEntries(prev => [...prev, entry]);
+      setIsAddingJournalEntry(false);
+      setNewJournalEntry({
+        type: 'general',
+        title: '',
+        content: '',
+        rating: 5,
+        media_url: ''
+      });
+    } catch (error) {
+      console.error('Error creating journal entry:', error);
+      setApiError(error);
+      setShowErrorModal(true);
+    }
+  };
+
+  const renderAddJournalEntryModal = () => (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fadeIn">
+      <div className="bg-white rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl animate-scaleIn">
+        <div className="p-8">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-2xl font-bold text-gray-900 text-center flex-1">Novo Registro - Dia {activeJournalDay}</h3>
+            <button onClick={() => setIsAddingJournalEntry(false)} className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200">
+              <i className="ri-close-line text-xl"></i>
+            </button>
+          </div>
+
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Categoria</label>
+                <select
+                  value={newJournalEntry.type}
+                  onChange={(e) => setNewJournalEntry({ ...newJournalEntry, type: e.target.value as any })}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="general">Geral</option>
+                  <option value="culinary">Gastronomia</option>
+                  <option value="wine">Vinhos</option>
+                  <option value="excursion">Passeios</option>
+                  <option value="photo">Foto Especial</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Avaliação</label>
+                <div className="flex gap-2 py-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setNewJournalEntry({ ...newJournalEntry, rating: star })}
+                      className={`text-2xl ${newJournalEntry.rating >= star ? 'text-amber-500' : 'text-gray-200'}`}
+                    >
+                      <i className={newJournalEntry.rating >= star ? "ri-star-fill" : "ri-star-line"}></i>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700">Título</label>
+              <input
+                type="text"
+                value={newJournalEntry.title}
+                onChange={(e) => setNewJournalEntry({ ...newJournalEntry, title: e.target.value })}
+                placeholder="Ex: Almoço no Restaurante X, Degustação de Vinhos..."
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700">Descrição / Notas</label>
+              <textarea
+                value={newJournalEntry.content}
+                onChange={(e) => setNewJournalEntry({ ...newJournalEntry, content: e.target.value })}
+                rows={4}
+                placeholder="Conte mais sobre essa experiência..."
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+              ></textarea>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700">URL da Imagem (Upload em breve)</label>
+              <input
+                type="text"
+                value={newJournalEntry.media_url}
+                onChange={(e) => setNewJournalEntry({ ...newJournalEntry, media_url: e.target.value })}
+                placeholder="https://..."
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            <button
+              onClick={handleSubmitJournalEntry}
+              className="w-full py-4 bg-gradient-to-r from-orange-600 to-pink-600 text-white rounded-2xl font-bold hover:shadow-lg transition-all"
+            >
+              Salvar no Diário
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderJournalContent = () => {
+    if (!selectedJournalTrip) {
+      const journalTrips = trips.filter(t => t.status !== 'planning');
+
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold text-gray-900 border-l-4 border-orange-500 pl-3">
+              Diário de Viagens
+            </h3>
+          </div>
+
+          {journalTrips.length === 0 ? (
+            <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+              <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-400">
+                <i className="ri-road-map-line text-4xl"></i>
+              </div>
+              <h4 className="text-xl font-bold text-gray-900 mb-2">Nenhuma viagem em andamento ou concluída</h4>
+              <p className="text-gray-600 max-w-sm mx-auto">
+                Inicie uma viagem para começar a registrar seus momentos inesquecíveis!
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {journalTrips.map((trip) => (
+                <div
+                  key={trip.id}
+                  onClick={() => {
+                    setSelectedJournalTrip(trip);
+                    setActiveJournalDay(1);
+                  }}
+                  className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-gray-100 cursor-pointer group"
+                >
+                  <div className="relative h-40">
+                    <img
+                      src={trip.cover_image || `https://readdy.ai/api/search-image?query=${encodeURIComponent(trip.destination)}%20travel&width=400&height=300`}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      alt={trip.title}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex flex-col justify-end p-4">
+                      <h4 className="text-white font-bold text-lg">{trip.title}</h4>
+                      <p className="text-white/80 text-xs flex items-center gap-1">
+                        <i className="ri-map-pin-line text-orange-400"></i>
+                        {trip.destination}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const dayCount = getTripDayCount(selectedJournalTrip);
+    const dayDate = getJournalDayDate(selectedJournalTrip, activeJournalDay);
+    const dayEntries = journalEntries.filter(e => e.day_number === activeJournalDay);
+
+    return (
+      <div className="space-y-6">
+        {/* Journal Header */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-8">
+            <button
+              onClick={() => setSelectedJournalTrip(null)}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-600 rounded-xl hover:bg-gray-100 transition-colors text-sm font-medium"
+            >
+              <i className="ri-arrow-left-line"></i>
+              Voltar para lista
+            </button>
+            <div className="text-center">
+              <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight">{selectedJournalTrip.title}</h3>
+              <p className="text-gray-500 text-sm font-medium">Meu Diário de Bordo</p>
+            </div>
+            <div className="w-[120px]"></div> {/* Balance for back button */}
+          </div>
+
+          {/* Day Selector */}
+          <div className="flex gap-4 overflow-x-auto pb-4 px-2 scrollbar-hide">
+            {Array.from({ length: dayCount }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveJournalDay(i + 1)}
+                className={`flex-shrink-0 w-24 h-28 rounded-[28px] flex flex-col items-center justify-center transition-all ${activeJournalDay === i + 1
+                  ? 'bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 text-white shadow-xl scale-110 z-10'
+                  : 'bg-white text-gray-400 border border-gray-100 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-500'
+                  }`}
+              >
+                <span className="text-[10px] font-bold uppercase tracking-widest mb-1 opacity-70">Dia</span>
+                <span className="text-3xl font-black leading-none">{i + 1}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Day Timeline */}
+        <div className="relative pl-12 sm:pl-16 space-y-10 min-h-[400px]">
+          {/* Timeline Vertical Line */}
+          <div className="absolute left-[23px] sm:left-[31px] top-6 bottom-6 w-1 bg-gradient-to-b from-orange-500/50 via-pink-500/50 to-purple-500/50 rounded-full"></div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h4 className="text-2xl font-black text-gray-900 capitalize">
+                {dayDate?.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </h4>
+              <div className="flex items-center gap-2 text-gray-500 text-sm">
+                <i className="ri-pulse-line text-orange-500"></i>
+                <span>{dayEntries.length} {dayEntries.length === 1 ? 'experiência registrada' : 'experiências registradas'}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsAddingJournalEntry(true)}
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-2xl font-bold hover:bg-orange-600 transition-all shadow-lg hover:shadow-orange-200"
+            >
+              <i className="ri-quill-pen-line"></i>
+              Registrar Agora
+            </button>
+          </div>
+
+          {dayEntries.length === 0 ? (
+            <div className="bg-white/50 rounded-[40px] p-16 text-center border-2 border-dashed border-gray-200">
+              <div className="w-24 h-24 bg-white rounded-3xl shadow-soft flex items-center justify-center mx-auto mb-6 text-gray-300 transform -rotate-12 group-hover:rotate-0 transition-transform">
+                <i className="ri-image-add-line text-4xl"></i>
+              </div>
+              <h5 className="text-xl font-bold text-gray-900 mb-2">Este dia ainda está em branco</h5>
+              <p className="text-gray-500 max-w-xs mx-auto">Conte sobre suas descobertas, pratos novos ou lugares incríveis que visitou hoje.</p>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {dayEntries.map((entry) => (
+                <div key={entry.id} className="relative bg-white rounded-[32px] p-6 sm:p-8 shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 group overflow-hidden">
+                  {/* Decorative Gradient Bar */}
+                  <div className={`absolute top-0 left-0 bottom-0 w-1.5 ${entry.type === 'culinary' ? 'bg-orange-500' :
+                    entry.type === 'wine' ? 'bg-purple-600' :
+                      entry.type === 'excursion' ? 'bg-blue-500' :
+                        entry.type === 'photo' ? 'bg-pink-500' : 'bg-gray-400'
+                    }`}></div>
+
+                  {/* Timeline Dot with Indicator */}
+                  <div className={`absolute -left-[44px] sm:-left-[52px] top-10 w-6 h-6 rounded-full border-4 border-white shadow-md z-10 flex items-center justify-center ${entry.type === 'culinary' ? 'bg-orange-500' :
+                    entry.type === 'wine' ? 'bg-purple-600' :
+                      entry.type === 'excursion' ? 'bg-blue-500' :
+                        entry.type === 'photo' ? 'bg-pink-500' : 'bg-gray-400'
+                    }`}>
+                    <i className={`${entry.type === 'culinary' ? 'ri-restaurant-line' :
+                      entry.type === 'wine' ? 'ri-goblet-line' :
+                        entry.type === 'excursion' ? 'ri-map-2-line' :
+                          entry.type === 'photo' ? 'ri-camera-lens-line' : 'ri-edit-line'
+                      } text-[10px] text-white`}></i>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-8">
+                    {entry.media_url && (
+                      <div className="w-full md:w-48 h-48 rounded-2xl overflow-hidden flex-shrink-0 shadow-inner">
+                        <img src={entry.media_url} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={entry.title} />
+                      </div>
+                    )}
+                    <div className="flex-1 flex flex-col">
+                      <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${entry.type === 'culinary' ? 'bg-orange-100 text-orange-600' :
+                              entry.type === 'wine' ? 'bg-purple-100 text-purple-600' :
+                                entry.type === 'excursion' ? 'bg-blue-100 text-blue-600' :
+                                  entry.type === 'photo' ? 'bg-pink-100 text-pink-600' : 'bg-gray-100 text-gray-600'
+                              }`}>
+                              {entry.type === 'culinary' ? 'Gastronomia' :
+                                entry.type === 'wine' ? 'Vinhos' :
+                                  entry.type === 'excursion' ? 'Passeio' :
+                                    entry.type === 'photo' ? 'Foto da Galeria' : 'Registro Geral'}
+                            </span>
+                          </div>
+                          <h5 className="text-xl font-bold text-gray-900 group-hover:text-orange-600 transition-colors uppercase tracking-tight">{entry.title}</h5>
+                        </div>
+                        <div className="flex items-center gap-1 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-100">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <i key={i} className={`ri-star-fill text-sm ${i < (entry.rating || 0) ? 'text-amber-500' : 'text-gray-200'}`}></i>
+                          ))}
+                        </div>
+                      </div>
+
+                      <p className="text-gray-600 leading-relaxed text-sm flex-1 italic">
+                        "{entry.content}"
+                      </p>
+
+                      <div className="flex items-center justify-between pt-6 mt-6 border-t border-gray-50">
+                        <div className="flex items-center gap-3">
+                          <UserAvatar src={entry.user?.avatar_url} name={entry.user?.full_name} className="w-8 h-8 ring-2 ring-white shadow-sm" />
+                          <div>
+                            <p className="text-[10px] font-bold text-gray-900 leading-none">{entry.user?.full_name}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">Em {new Date(entry.created_at || '').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteJournalEntry(entry.id)}
+                          className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all group-hover:opacity-100 sm:opacity-0"
+                        >
+                          <i className="ri-delete-bin-line text-lg"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Add Entry Modal remains similarly implemented */}
+        {isAddingJournalEntry && renderAddJournalEntryModal()}
+      </div>
+    );
+  };
+
   const renderServicesContent = () => (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -2382,11 +2743,23 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   alt={item.experience?.title}
                 />
-                <div className="absolute top-4 left-4">
+                <div className="absolute top-4 left-4 flex flex-col gap-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md shadow-lg border border-white/20 ${item.status === 'available' ? 'bg-green-500/80 text-white' : 'bg-gray-500/80 text-white'
                     }`}>
                     {item.status === 'available' ? 'Disponível' : 'Utilizado'}
                   </span>
+                  {item.experience?.validity_end_date && new Date(item.experience.validity_end_date) < new Date() && (
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-500/80 text-white backdrop-blur-md shadow-lg border border-white/20">
+                      Expirado
+                    </span>
+                  )}
+                </div>
+                <div className="absolute top-4 right-4">
+                  {item.quantity > 1 && (
+                    <div className="px-3 py-1 rounded-full text-xs font-bold bg-purple-600 text-white shadow-lg border border-white/20">
+                      x{item.quantity} Disponível
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="p-5">
@@ -2398,6 +2771,31 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
                   <i className="ri-map-pin-line text-purple-500"></i>
                   {item.experience?.location || 'Local a combinar'}
                 </div>
+
+                {(item.experience?.validity_start_date || item.experience?.validity_end_date || item.experience?.contact_phone || item.experience?.contact_email) && (
+                  <div className="bg-purple-50 rounded-xl p-3 mb-4 border border-purple-100 space-y-2">
+                    {(item.experience?.validity_start_date || item.experience?.validity_end_date) && (
+                      <div className="flex flex-col gap-0.5 text-purple-800 text-xs font-semibold">
+                        <span className="flex items-center gap-1.5"><i className="ri-calendar-check-line text-purple-500"></i>Período de Validade:</span>
+                        <span className="pl-5 text-gray-700 font-normal">
+                          {item.experience.validity_start_date ? new Date(item.experience.validity_start_date).toLocaleDateString('pt-BR') : 'Agora'} até {item.experience.validity_end_date ? new Date(item.experience.validity_end_date).toLocaleDateString('pt-BR') : 'Indeterminado'}
+                        </span>
+                      </div>
+                    )}
+                    {item.experience?.contact_phone && (
+                      <div className="flex items-center gap-1.5 text-gray-700 text-xs">
+                        <i className="ri-whatsapp-line text-green-500"></i>
+                        {item.experience.contact_phone}
+                      </div>
+                    )}
+                    {item.experience?.contact_email && (
+                      <div className="flex items-center gap-1.5 text-gray-700 text-xs truncate">
+                        <i className="ri-mail-line text-purple-400"></i>
+                        {item.experience.contact_email}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="pt-4 border-t border-gray-50 flex items-center justify-between">
                   <div className="text-[10px] text-gray-400 uppercase font-medium">
@@ -2413,11 +2811,18 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
                     </button>
                   ) : (
                     <button
+                      disabled={item.experience?.validity_end_date && new Date(item.experience.validity_end_date) < new Date()}
                       onClick={() => {
+                        if (item.experience?.validity_end_date && new Date(item.experience.validity_end_date) < new Date()) {
+                          alert('Este serviço expirou e não pode mais ser utilizado.');
+                          return;
+                        }
                         setActiveSubTab('trips');
                         alert('Selecione uma viagem para incluir este serviço no seu roteiro!');
                       }}
-                      className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                      className={`text-xs font-bold flex items-center gap-1 ${item.experience?.validity_end_date && new Date(item.experience.validity_end_date) < new Date()
+                        ? 'text-gray-400 cursor-not-allowed'
+                        : 'text-purple-600 hover:text-purple-700'}`}
                     >
                       <i className="ri-add-circle-line"></i>
                       Usar em Viagem
@@ -2434,91 +2839,71 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Minhas Viagens</h2>
-          <p className="text-gray-600 text-sm mt-1">Gerencie e compartilhe seus roteiros</p>
+      {/* Header Matched to Reference */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+        <div className="border-l-4 border-blue-600 pl-4">
+          <h2 className="text-3xl font-extrabold text-[#111827] tracking-tight">Minhas Viagens</h2>
+          <p className="text-gray-500 font-medium mt-1">Gerencie e compartilhe seus roteiros</p>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-2 bg-blue-50/10 p-1 rounded-[24px] border border-blue-50/30">
+          {/* Action Card: Nova Viagem */}
+          <button
+            onClick={() => setActiveSubTab(activeSubTab === 'newtrip' ? 'trips' : 'newtrip')}
+            className="flex flex-col items-center justify-center bg-white p-1 rounded-xl w-16 h-16 shadow-sm border border-gray-100 hover:shadow-md transition-all group"
+          >
+            <div className="w-7 h-7 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center mb-0.5 shadow-inner group-hover:scale-105 transition-transform">
+              <i className="ri-plane-fill text-white text-sm"></i>
+            </div>
+            <span className="text-[8px] leading-tight font-extrabold text-gray-800 text-center">Nova viagem</span>
+          </button>
+
+          {/* Action Card: Meus Serviços */}
+          <button
+            onClick={() => setActiveSubTab('services')}
+            className={`flex flex-col items-center justify-center p-1 rounded-xl w-16 h-16 border transition-all group ${activeSubTab === 'services'
+              ? 'bg-blue-50 border-blue-200 shadow-inner'
+              : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
+              }`}
+          >
+            <div className="mb-0.5 group-hover:scale-105 transition-transform">
+              <i className={`ri-service-line text-lg ${activeSubTab === 'services' ? 'text-blue-600' : 'text-[#1e293b]'}`}></i>
+            </div>
+            <span className="text-[8px] leading-tight font-extrabold text-gray-700 text-center">Meus serviços</span>
+          </button>
+
+          {/* Action Card: Meu Diário */}
+          <button
+            onClick={() => setActiveSubTab('journal')}
+            className={`flex flex-col items-center justify-center p-1 rounded-xl w-16 h-16 border transition-all group ${activeSubTab === 'journal'
+              ? 'bg-blue-50 border-blue-200 shadow-inner'
+              : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
+              }`}
+          >
+            <div className="mb-0.5 group-hover:scale-105 transition-transform">
+              <i className={`ri-book-2-fill text-lg ${activeSubTab === 'journal' ? 'text-blue-600' : 'text-[#1e293b]'}`}></i>
+            </div>
+            <span className="text-[8px] leading-tight font-extrabold text-gray-700 text-center">Meu diário</span>
+          </button>
+
+          {/* Action Card: Mapa */}
+          <button
+            onClick={() => setActiveSubTab('maps')}
+            className={`flex flex-col items-center justify-center p-1 rounded-xl w-16 h-16 border transition-all group ${activeSubTab === 'maps'
+              ? 'bg-blue-50 border-blue-200 shadow-inner'
+              : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
+              }`}
+          >
+            <div className="mb-0.5 group-hover:scale-105 transition-transform">
+              <i className={`ri-map-2-line text-lg ${activeSubTab === 'maps' ? 'text-blue-600' : 'text-[#1e293b]'}`}></i>
+            </div>
+            <span className="text-[8px] leading-tight font-extrabold text-gray-700 text-center">Mapa</span>
+          </button>
+
+
         </div>
       </div>
 
-      {/* Unified Navigation Row */}
-      <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide py-1">
-        {/* New Trip Button (Main Trigger) */}
-        <button
-          onClick={() => setActiveSubTab(activeSubTab === 'newtrip' ? 'trips' : 'newtrip')}
-          className={`flex items-center gap-2 px-6 h-12 rounded-2xl transition-all shadow-md border whitespace-nowrap group ${activeSubTab === 'newtrip'
-            ? 'bg-gradient-to-r from-orange-600 to-pink-600 text-white border-transparent scale-105'
-            : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white border-transparent hover:shadow-lg hover:scale-105'
-            }`}
-        >
-          <div className="w-6 h-6 bg-white/20 rounded-lg flex items-center justify-center group-hover:rotate-90 transition-transform">
-            <i className="ri-add-line text-lg font-bold"></i>
-          </div>
-          <span className="font-bold">Nova Viagem</span>
-        </button>
-
-        <div className="w-px h-8 bg-gray-200 mx-1 flex-shrink-0"></div>
-
-        {/* Trip Filters */}
-        {[
-          { id: 'all', icon: 'ri-map-pin-line', label: 'Todas', color: 'blue', count: trips.length },
-          { id: 'completed', icon: 'ri-checkbox-circle-line', label: 'Concluídas', color: 'green', count: trips.filter(t => t.status === 'completed').length },
-          { id: 'planning', icon: 'ri-calendar-line', label: 'Planejando', color: 'orange', count: trips.filter(t => t.status === 'planning').length },
-          { id: 'shared_filter', icon: 'ri-share-line', label: 'Compartilhadas', color: 'purple', count: trips.filter(t => t.isShared || (t.sharedWith && t.sharedWith.length > 0) || t.marketplaceConfig?.isListed).length },
-          { id: 'approvals', icon: 'ri-notification-3-line', label: 'Aprovações', color: 'yellow', count: trips.filter(t => t.pendingSuggestions?.some((s: any) => s.status === 'pending')).length },
-        ].map(filter => (
-          <button
-            key={filter.id}
-            onClick={() => {
-              setActiveSubTab('trips');
-              setFilterStatus(filter.id === 'shared_filter' ? 'shared' : filter.id as any);
-            }}
-            className={`flex items-center justify-center w-12 h-12 rounded-2xl transition-all shadow-sm border relative group ${activeSubTab === 'trips' && (filter.id === 'shared_filter' ? filterStatus === 'shared' : filterStatus === filter.id)
-              ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white border-transparent shadow-md scale-105'
-              : 'bg-white text-gray-600 border-gray-100 hover:border-orange-200 hover:bg-orange-50'
-              }`}
-            title={filter.label}
-          >
-            <i className={`${filter.icon} text-xl`}></i>
-            {filter.count > 0 && (
-              <span className={`absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold shadow-sm ${activeSubTab === 'trips' && (filter.id === 'shared_filter' ? filterStatus === 'shared' : filterStatus === filter.id)
-                ? 'bg-white text-gray-900'
-                : 'bg-gray-100 text-gray-600'
-                }`}>
-                {filter.count}
-              </span>
-            )}
-          </button>
-        ))}
-
-        {/* Separator */}
-        <div className="w-px h-8 bg-gray-200 mx-1 flex-shrink-0"></div>
-
-        {/* Other Sections (Subtabs) */}
-        {[
-          { id: 'stats', icon: 'ri-bar-chart-line', label: 'Estatísticas' },
-          { id: 'maps', icon: 'ri-map-2-line', label: 'Mapas' },
-          { id: 'goals', icon: 'ri-trophy-line', label: 'Metas' },
-          { id: 'suggestions', icon: 'ri-lightbulb-line', label: 'Sugestões' },
-          { id: 'retrospectives', icon: 'ri-movie-2-line', label: 'Retrospectivas' },
-          { id: 'services', icon: 'ri-shopping-bag-3-line', label: 'Meus Serviços' },
-        ].map(item => (
-          <button
-            key={item.id}
-            onClick={() => setActiveSubTab(activeSubTab === item.id ? 'trips' : item.id as any)}
-            className={`flex items-center justify-center w-12 h-12 rounded-2xl transition-all shadow-sm border ${activeSubTab === item.id
-              ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white border-transparent shadow-md scale-105'
-              : 'bg-white text-gray-600 border-gray-100 hover:border-orange-200 hover:bg-orange-50'
-              }`}
-            title={item.label}
-          >
-            <i className={`${item.icon} text-xl`}></i>
-          </button>
-        ))}
-      </div>
 
       {/* Content */}
       {activeSubTab === 'trips' && renderTripsContent()}
@@ -2602,11 +2987,11 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
         </div>
       )}
 
-      {activeSubTab === 'stats' && renderStatsContent()}
       {activeSubTab === 'maps' && renderMapsContent()}
       {activeSubTab === 'goals' && renderGoalsContent()}
       {activeSubTab === 'suggestions' && renderSuggestionsContent()}
       {activeSubTab === 'retrospectives' && renderRetrospectivesContent()}
+      {activeSubTab === 'journal' && renderJournalContent()}
       {activeSubTab === 'services' && renderServicesContent()}
 
       {/* Share Modal */}

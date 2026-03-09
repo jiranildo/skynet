@@ -185,6 +185,22 @@ export interface TripExpense {
   date?: string;
 }
 
+export interface TripJournalEntry {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  day_number: number;
+  type: 'culinary' | 'wine' | 'excursion' | 'photo' | 'general';
+  title: string;
+  content?: string;
+  rating?: number;
+  media_url?: string;
+  metadata?: any;
+  created_at?: string;
+  updated_at?: string;
+  user?: User; // Join result
+}
+
 export interface Message {
   id: string;
   sender_id: string;
@@ -451,6 +467,10 @@ export interface Experience {
   files_urls?: string[];
   map_data?: any;
   location?: string;
+  validity_start_date?: string;
+  validity_end_date?: string;
+  contact_email?: string;
+  contact_phone?: string;
   created_at: string;
   updated_at: string;
   seller?: {
@@ -459,6 +479,8 @@ export interface Experience {
     avatar_url: string;
     username: string;
   };
+  sales_count?: number;
+  total_revenue?: number;
 }
 
 export interface ExperienceReview {
@@ -476,6 +498,7 @@ export interface UserExperience {
   user_id: string;
   experience_id: string;
   status: 'available' | 'used';
+  quantity: number;
   created_at: string;
   experience?: Experience;
 }

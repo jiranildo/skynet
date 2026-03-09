@@ -4,7 +4,7 @@ import { Experience, ExperienceReview } from './types';
 export const getSupplierExperiences = async (supplierId: string): Promise<Experience[]> => {
     const { data, error } = await supabase
         .from('experiences')
-        .select('*')
+        .select('*, user_experiences(quantity)')
         .eq('supplier_id', supplierId)
         .order('created_at', { ascending: false });
 
@@ -12,13 +12,24 @@ export const getSupplierExperiences = async (supplierId: string): Promise<Experi
         console.error('Error fetching supplier experiences:', error);
         return [];
     }
-    return data || [];
+
+    return (data || []).map(exp => {
+        const sales = exp.user_experiences?.reduce((acc: number, curr: any) => acc + (curr.quantity || 1), 0) || 0;
+        return {
+            ...exp,
+            sales_count: sales,
+            total_revenue: sales * exp.price
+        };
+    });
 };
 
 export const getMarketplaceExperiences = async (): Promise<Experience[]> => {
+    const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
         .from('experiences')
         .select('*, seller:supplier_id(full_name, avatar_url, username)')
+        .or(`validity_start_date.lte.${today},validity_start_date.is.null`)
+        .or(`validity_end_date.gte.${today},validity_end_date.is.null`)
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -134,28 +145,77 @@ export const getUserAcquiredExperiences = async (userId: string) => {
 };
 
 export const acquireExperience = async (userId: string, experienceId: string) => {
-    const { data, error } = await supabase
+    // Check if user already has this experience available
+    const { data: existing } = await supabase
         .from('user_experiences')
-        .insert([{ user_id: userId, experience_id: experienceId, status: 'available' }])
-        .select()
+        .select('*')
+        .eq('user_id', userId)
+        .eq('experience_id', experienceId)
+        .eq('status', 'available')
         .single();
 
-    if (error) {
-        console.error('Error acquiring experience:', error);
-        return null;
+    if (existing) {
+        // Increment quantity
+        const { data, error } = await supabase
+            .from('user_experiences')
+            .update({ quantity: (existing.quantity || 1) + 1 })
+            .eq('id', existing.id)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error incrementing experience quantity:', error);
+            return null;
+        }
+        return data;
+    } else {
+        // Create new record
+        const { data, error } = await supabase
+            .from('user_experiences')
+            .insert([{ user_id: userId, experience_id: experienceId, status: 'available', quantity: 1 }])
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error acquiring experience:', error);
+            return null;
+        }
+        return data;
     }
-    return data;
 };
 
 export const useUserExperience = async (userExperienceId: string) => {
-    const { error } = await supabase
+    // Get current quantity
+    const { data: existing } = await supabase
         .from('user_experiences')
-        .update({ status: 'used' })
-        .eq('id', userExperienceId);
+        .select('quantity')
+        .eq('id', userExperienceId)
+        .single();
 
-    if (error) {
-        console.error('Error using user experience:', error);
-        return false;
+    if (!existing) return false;
+
+    const newQuantity = (existing.quantity || 1) - 1;
+
+    if (newQuantity <= 0) {
+        const { error } = await supabase
+            .from('user_experiences')
+            .update({ status: 'used', quantity: 0 })
+            .eq('id', userExperienceId);
+
+        if (error) {
+            console.error('Error marking experience as used:', error);
+            return false;
+        }
+    } else {
+        const { error } = await supabase
+            .from('user_experiences')
+            .update({ quantity: newQuantity })
+            .eq('id', userExperienceId);
+
+        if (error) {
+            console.error('Error decrementing experience quantity:', error);
+            return false;
+        }
     }
     return true;
 };
