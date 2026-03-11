@@ -10,8 +10,6 @@ export default function SignupPage() {
     const [email, setEmail] = useState('');
     const [confirmEmail, setConfirmEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'viajante' | 'admin' | 'agente' | 'fornecedor' | 'super_admin'>('viajante');
-    const [entityName, setEntityName] = useState('');
 
     // Avatar State
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -106,25 +104,6 @@ export default function SignupPage() {
                 avatarUrl = avatarPreview;
             }
 
-            // 1.5 Create Entity if applicable
-            let entityId = null;
-            if (['admin', 'agente', 'fornecedor'].includes(role) && entityName) {
-                const { data: entityData, error: entityError } = await supabase
-                    .from('entities')
-                    .insert([{
-                        name: entityName.trim(),
-                        type: role === 'fornecedor' ? 'supplier' : 'agency'
-                    }])
-                    .select()
-                    .single();
-
-                if (entityError) {
-                    console.error('Error creating entity:', entityError);
-                    throw new Error('Erro ao criar a entidade/empresa.');
-                }
-                entityId = entityData.id;
-            }
-
             // 2. Sign Up
             const { error: signUpError } = await supabase.auth.signUp({
                 email,
@@ -134,8 +113,8 @@ export default function SignupPage() {
                         full_name: fullName.trim(),
                         username: username.trim(),
                         avatar_url: avatarUrl,
-                        role: role,
-                        entity_id: entityId
+                        role: 'viajante',
+                        role_id: '00000000-0000-0000-0000-000000000004'
                     },
                 },
             });
@@ -297,58 +276,6 @@ export default function SignupPage() {
                             </div>
                             {confirmEmail && email !== confirmEmail && (
                                 <p className="text-xs text-red-500 mt-1 pl-1">Os e-mails não coincidem</p>
-                            )}
-                        </div>
-
-                        {/* Profile Type Selection */}
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    Tipo de Perfil
-                                </label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {[
-                                        { id: 'viajante', label: 'Viajante', icon: 'map-pin' },
-                                        { id: 'agente', label: 'Agente', icon: 'briefcase' },
-                                        { id: 'fornecedor', label: 'Fornecedor', icon: 'store-2' },
-                                        { id: 'admin', label: 'Administrador', icon: 'user-star' },
-                                    ].map((option) => (
-                                        <button
-                                            key={option.id}
-                                            type="button"
-                                            onClick={() => setRole(option.id as any)}
-                                            className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${role === option.id
-                                                ? 'border-purple-500 bg-purple-50 text-purple-700'
-                                                : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'
-                                                }`}
-                                        >
-                                            <i className={`ri-${option.icon}-line text-xl mb-1`}></i>
-                                            <span className="text-xs font-bold">{option.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {['admin', 'fornecedor', 'agente'].includes(role) && (
-                                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                        Nome da {role === 'fornecedor' ? 'Empresa / Fornecedor' : 'Agência / Organização'}
-                                    </label>
-                                    <div className="relative">
-                                        <i className="ri-building-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                                        <input
-                                            type="text"
-                                            value={entityName}
-                                            onChange={(e) => setEntityName(e.target.value)}
-                                            placeholder={`Ex: ${role === 'fornecedor' ? 'Grand Hotel' : 'Sara Viagens'}`}
-                                            required
-                                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 transition-all font-medium"
-                                        />
-                                    </div>
-                                    <p className="text-[10px] text-gray-400 mt-2 px-1 italic">
-                                        * No perfil {role}, você gerenciará usuários e dados vinculados a esta entidade.
-                                    </p>
-                                </div>
                             )}
                         </div>
 

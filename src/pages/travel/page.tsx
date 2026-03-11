@@ -15,6 +15,7 @@ import FavoritesTab from './components/FavoritesTab';
 import OffersTab from './components/OffersTab';
 import MarketplaceTab from './components/MarketplaceTab';
 import BlogsTab from './components/BlogsTab';
+import { useAuth } from '../../context/AuthContext';
 
 import CreateMenu from '../../components/CreateMenu';
 import CreatePostModal from '../home/components/CreatePostModal';
@@ -29,6 +30,7 @@ import CheckInModal from '../../components/CheckInModal';
 type TabType = 'search' | 'ai-search' | 'flights' | 'hotels' | 'packages' | 'cars' | 'cruises' | 'tickets' | 'transfer' | 'insurance' | 'mytrips' | 'favorites' | 'offers' | 'marketplace' | 'blogs';
 
 export default function TravelPage() {
+  const { hasPermission } = useAuth();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<TabType>('mytrips');
 
@@ -36,9 +38,14 @@ export default function TravelPage() {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
     if (tabParam && ['ai-search', 'flights', 'hotels', 'packages', 'cars', 'cruises', 'tickets', 'transfer', 'insurance', 'mytrips', 'favorites', 'offers', 'marketplace', 'blogs'].includes(tabParam)) {
+      // Permission check for sensitive tabs
+      if (tabParam === 'marketplace' && !hasPermission('can_access_marketplace')) {
+        setActiveTab('mytrips');
+        return;
+      }
       setActiveTab(tabParam as TabType);
     }
-  }, [location.search]);
+  }, [location.search, hasPermission]);
   const [showCreateTripModal, setShowCreateTripModal] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
@@ -64,13 +71,16 @@ export default function TravelPage() {
     { id: 'insurance', label: 'Seguro', icon: 'ri-shield-check-line' },
     { id: 'favorites', label: 'Favoritos', icon: 'ri-heart-line' },
     { id: 'offers', label: 'Ofertas', icon: 'ri-price-tag-3-line' },
-  ];
+  ].filter(tab => {
+    if (tab.id === 'marketplace') return hasPermission('can_access_marketplace');
+    return true;
+  });
 
   const menuItems = [
-    { icon: 'ri-article-line', label: 'Blogs', action: () => alert('Em construção.') },
-    { icon: 'ri-wallet-line', label: 'Carteira', action: () => setShowWallet(true) },
-    { icon: 'ri-trophy-line', label: 'Conquistas', action: () => setShowGamification(true) },
-  ];
+    { id: 'blog', icon: 'ri-article-line', label: 'Blogs', action: () => alert('Em construção.'), permission: 'can_manage_blog' },
+    { id: 'wallet', icon: 'ri-wallet-line', label: 'Carteira', action: () => setShowWallet(true), permission: 'can_access_wallet' },
+    { id: 'gamification', icon: 'ri-trophy-line', label: 'Conquistas', action: () => setShowGamification(true), permission: 'can_access_gamification' },
+  ].filter(item => hasPermission(item.permission));
 
   const handleCreateClick = () => {
     setShowCreateMenu(true);
@@ -109,7 +119,8 @@ export default function TravelPage() {
       case 'mytrips': return <MyTripsTab initialSubTab={mytripsSubTab} onCreateTrip={() => setShowCreateTripModal(true)} />;
       case 'favorites': return <FavoritesTab />;
       case 'offers': return <OffersTab />;
-      case 'marketplace': return <MarketplaceTab />;
+      case 'marketplace':
+        return hasPermission('can_access_marketplace') ? <MarketplaceTab /> : <MyTripsTab initialSubTab={mytripsSubTab} onCreateTrip={() => setShowCreateTripModal(true)} />;
       case 'blogs': return <BlogsTab />;
       default: return <MyTripsTab initialSubTab={mytripsSubTab} onCreateTrip={() => setShowCreateTripModal(true)} />;
     }
@@ -308,16 +319,18 @@ export default function TravelPage() {
                 ></div>
                 <div className="absolute bottom-full right-0 mb-2 w-auto bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[80] animate-slideUp">
                   <div className="flex flex-col gap-2 p-3">
-                    <button
-                      onClick={() => {
-                        setActiveTab('marketplace');
-                        setShowMenuDropdown(false);
-                      }}
-                      className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-                      title="Marketplace"
-                    >
-                      <i className="ri-store-2-fill text-white text-base"></i>
-                    </button>
+                    {hasPermission('can_access_marketplace') && (
+                      <button
+                        onClick={() => {
+                          setActiveTab('marketplace');
+                          setShowMenuDropdown(false);
+                        }}
+                        className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                        title="Marketplace"
+                      >
+                        <i className="ri-store-2-fill text-white text-base"></i>
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         alert('Em construção.');

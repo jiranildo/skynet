@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ManageUserPayload } from '../../../services/db/admin';
-import type { User } from '../../../services/db/types';
+import type { User, Role } from '../../../services/db/types';
 import { uploadFile } from '../../../services/db/posts';
 import { AlertModal } from '../../../components/AlertModal';
 import { useAuth } from '../../../context/AuthContext';
@@ -12,9 +12,10 @@ interface AdminUserModalProps {
     userToEdit?: User | null;
     currentUserRole: string;
     entities?: { id: string, name: string }[];
+    dbRoles?: Role[];
 }
 
-export default function AdminUserModal({ isOpen, onClose, onSave, userToEdit, currentUserRole, entities }: AdminUserModalProps) {
+export default function AdminUserModal({ isOpen, onClose, onSave, userToEdit, currentUserRole, entities, dbRoles }: AdminUserModalProps) {
     const { user } = useAuth();
 
     const [formData, setFormData] = useState<ManageUserPayload>({
@@ -40,6 +41,7 @@ export default function AdminUserModal({ isOpen, onClose, onSave, userToEdit, cu
                 email: '', // Don't populate email to avoid confusion since we don't have it in public table
                 password: '',
                 role: userToEdit.role || 'viajante',
+                role_id: userToEdit.role_id || '',
                 status: userToEdit.status || 'active',
                 force_password_reset: userToEdit.force_password_reset || false,
                 avatar_url: userToEdit.avatar_url || '',
@@ -52,6 +54,7 @@ export default function AdminUserModal({ isOpen, onClose, onSave, userToEdit, cu
                 email: '',
                 password: '',
                 role: 'viajante',
+                role_id: '00000000-0000-0000-0000-000000000004',
                 status: 'active',
                 force_password_reset: false,
                 avatar_url: '',
@@ -282,18 +285,32 @@ export default function AdminUserModal({ isOpen, onClose, onSave, userToEdit, cu
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                                 <label className="text-sm font-bold text-gray-700 ml-1">Perfil (Role)</label>
-                                <select
-                                    value={formData.role}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
-                                    className="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-red-500 outline-none cursor-pointer"
-                                    required
-                                >
-                                    <option value="viajante">Viajante</option>
-                                    <option value="agente">Agente</option>
-                                    <option value="fornecedor">Fornecedor</option>
-                                    {isSuperAdmin && <option value="admin">Administrador</option>}
-                                    {isSuperAdmin && <option value="super_admin">Super Admin</option>}
-                                </select>
+                                {dbRoles && dbRoles.length > 0 ? (
+                                    <select
+                                        value={formData.role_id || ''}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, role_id: e.target.value }))}
+                                        className="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-red-500 outline-none cursor-pointer"
+                                        required
+                                    >
+                                        <option value="" disabled>Selecione um perfil</option>
+                                        {dbRoles.map(role => (
+                                            <option key={role.id} value={role.id}>{role.name}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <select
+                                        value={formData.role}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
+                                        className="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-red-500 outline-none cursor-pointer"
+                                        required
+                                    >
+                                        <option value="viajante">Role Básica (Free)</option>
+                                        <option value="agente">Agente</option>
+                                        <option value="fornecedor">Fornecedor</option>
+                                        {isSuperAdmin && <option value="admin">Administrador</option>}
+                                        {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+                                    </select>
+                                )}
                             </div>
 
                             <div className="space-y-1.5">

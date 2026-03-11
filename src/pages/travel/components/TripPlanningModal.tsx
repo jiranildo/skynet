@@ -81,7 +81,7 @@ export default function TripPlanningModal({
   onApproveSuggestion,
   onRejectSuggestion
 }: TripPlanningModalProps) {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
 
   // Trip owner and explicitly invited admins always have admin rights
   const isOwnerOrInvitedAdmin = trip.permissions === 'admin' || trip.user_id === user?.id;
@@ -1522,31 +1522,35 @@ export default function TripPlanningModal({
                     Timeline
                   </h3>
                   <div className="flex gap-2 items-center">
-                    <button
-                      onClick={openResearchModal}
-                      disabled={isPerformingResearch}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm rounded-lg hover:shadow-lg hover:opacity-90 transition-all font-medium disabled:opacity-50 h-8"
-                    >
-                      {isPerformingResearch ? (
-                        <>
-                          <i className="ri-loader-4-line animate-spin"></i>
-                          <span className="hidden sm:inline">Pesquisando...</span>
-                        </>
-                      ) : (
-                        <>
-                          <i className="ri-compass-3-line"></i>
-                          <span className="hidden sm:inline">Pesquisa AI</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setIsPreferencesOpen(true)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all font-medium h-8"
-                      title="Personalizar IA"
-                    >
-                      <i className="ri-equalizer-line text-purple-600"></i>
-                      <span className="hidden sm:inline">Personalizar IA</span>
-                    </button>
+                    {hasPermission('can_ai_search') && (
+                      <button
+                        onClick={openResearchModal}
+                        disabled={isPerformingResearch}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm rounded-lg hover:shadow-lg hover:opacity-90 transition-all font-medium disabled:opacity-50 h-8"
+                      >
+                        {isPerformingResearch ? (
+                          <>
+                            <i className="ri-loader-4-line animate-spin"></i>
+                            <span className="hidden sm:inline">Pesquisando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <i className="ri-compass-3-line"></i>
+                            <span className="hidden sm:inline">Pesquisa AI</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                    {hasPermission('can_ai_personalize') && (
+                      <button
+                        onClick={() => setIsPreferencesOpen(true)}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all font-medium h-8"
+                        title="Personalizar IA"
+                      >
+                        <i className="ri-equalizer-line text-purple-600"></i>
+                        <span className="hidden sm:inline">Personalizar IA</span>
+                      </button>
+                    )}
                     <button onClick={() => scrollTimeline('left')} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
                       <i className="ri-arrow-left-s-line"></i>
                     </button>
@@ -1738,7 +1742,7 @@ export default function TripPlanningModal({
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  {isAdmin && (
+                  {isAdmin && hasPermission('can_ai_generate') && (
                     <button
                       onClick={handleGenerateDayItinerary}
                       disabled={isGeneratingItinerary}

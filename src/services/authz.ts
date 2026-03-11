@@ -42,12 +42,19 @@ export async function isUserSuperAdmin(user: User | null): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('role')
+      .select(`
+        role,
+        roles!role_id (
+          is_super_admin
+        )
+      `)
       .eq('id', user.id)
       .maybeSingle();
 
     if (error || !data) return false;
-    return String((data as any).role).toLowerCase() === 'super_admin';
+    const role = String((data as any).role).toLowerCase();
+    const roleData = (data as any).roles;
+    return role === 'super_admin' || !!roleData?.is_super_admin;
   } catch {
     return false;
   }
@@ -64,13 +71,20 @@ export async function isUserAdmin(user: User | null): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('role')
+      .select(`
+        role,
+        roles!role_id (
+          can_access_admin,
+          is_super_admin
+        )
+      `)
       .eq('id', user.id)
       .maybeSingle();
 
     if (error || !data) return false;
     const role = String((data as any).role ?? '').toLowerCase();
-    return ['super_admin', 'admin'].includes(role);
+    const roleData = (data as any).roles;
+    return ['super_admin', 'admin'].includes(role) || !!roleData?.can_access_admin || !!roleData?.is_super_admin;
   } catch {
     return false;
   }
@@ -87,14 +101,21 @@ export async function isUserAgent(user: User | null): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('role')
+      .select(`
+        role,
+        roles!role_id (
+          can_access_agent_portal,
+          is_super_admin
+        )
+      `)
       .eq('id', user.id)
       .maybeSingle();
 
     if (error || !data) return false;
 
     const role = String((data as any).role ?? '').toLowerCase();
-    return ['super_admin', 'agente', 'agent'].includes(role);
+    const roleData = (data as any).roles;
+    return ['super_admin', 'agente', 'agent'].includes(role) || !!roleData?.can_access_agent_portal || !!roleData?.is_super_admin;
   } catch {
     return false;
   }
@@ -111,14 +132,21 @@ export async function isUserSupplier(user: User | null): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('role')
+      .select(`
+        role,
+        roles!role_id (
+          can_access_services_portal,
+          is_super_admin
+        )
+      `)
       .eq('id', user.id)
       .maybeSingle();
 
     if (error || !data) return false;
 
     const role = String((data as any).role ?? '').toLowerCase();
-    return ['super_admin', 'fornecedor', 'supplier'].includes(role);
+    const roleData = (data as any).roles;
+    return ['super_admin', 'fornecedor', 'supplier'].includes(role) || !!roleData?.can_access_services_portal || !!roleData?.is_super_admin;
   } catch {
     return false;
   }

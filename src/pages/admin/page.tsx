@@ -3,15 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import MobileNav from '../home/components/MobileNav';
 import { useAuth } from '../../context/AuthContext';
-import { isUserAdmin, isUserSuperAdmin } from '../../services/authz';
 import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, type ManageUserPayload, getAdminEntities, createAdminEntity, updateAdminEntity, deleteAdminEntity, type ManageEntityPayload, getAdminMarketplaceItems, updateMarketplaceItemStatus, deleteAdminMarketplaceItem, type AdminMarketplaceItem, getAdminAnalytics } from '../../services/db/admin';
+import { rolesService } from '../../services/db/roles';
+import type { Role } from '../../services/db/types';
 import AdminUserModal from './components/AdminUserModal';
 import AdminEntityModal from './components/AdminEntityModal';
+import AdminRoleModal from './components/AdminRoleModal';
 import { AlertModal } from '../../components/AlertModal';
 import { ConfirmationModal } from '../../components/ConfirmationModal';
 import type { User as DBUser, Entity as DBEntity, Experience } from '../../services/db/types';
 
-interface MarketplaceItem extends AdminMarketplaceItem { }
+type MarketplaceItem = AdminMarketplaceItem;
 
 interface User {
   id: string;
@@ -20,7 +22,10 @@ interface User {
   username?: string;
   email: string;
   avatar: string;
+  avatar_url?: string;
   role: DBUser['role'];
+  role_id?: string;
+  role_data?: any;
   verified: boolean;
   joinedAt: string;
   stats: {
@@ -68,12 +73,13 @@ interface SystemStats {
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, hasPermission, isSuperAdmin } = useAuth();
   const [isAdminChecked, setIsAdminChecked] = useState(false);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'entities' | 'marketplace' | 'reports' | 'analytics' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'entities' | 'marketplace' | 'reports' | 'analytics' | 'settings' | 'roles'>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
   const [entities, setEntities] = useState<DBEntity[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [stats, setStats] = useState<SystemStats>({
@@ -95,6 +101,9 @@ export default function AdminPage() {
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
   const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
   const [entityToEdit, setEntityToEdit] = useState<DBEntity | null>(null);
+
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [roleToEdit, setRoleToEdit] = useState<Role | null>(null);
 
   const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '', type: 'info' as 'info' | 'success' | 'warning' | 'danger' });
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => { }, type: 'danger' as 'danger' | 'warning' | 'info' | 'success' });
@@ -126,7 +135,7 @@ export default function AdminPage() {
         return;
       }
 
-      const allowed = await isUserAdmin(user);
+      const allowed = hasPermission('can_access_admin');
       if (!active) return;
 
       setHasAdminAccess(allowed);
@@ -138,8 +147,7 @@ export default function AdminPage() {
         return;
       }
 
-      const isSuper = await isUserSuperAdmin(user);
-      setCurrentUserRole(isSuper ? 'super_admin' : 'admin');
+      setCurrentUserRole(isSuperAdmin ? 'super_admin' : 'admin');
 
       loadData();
     };
@@ -185,6 +193,9 @@ export default function AdminPage() {
         role: u.role as any,
         verified: true,
         joinedAt: u.created_at || new Date().toISOString(),
+        avatar_url: u.avatar_url,
+        role_id: u.role_id,
+        role_data: u.role_data,
         stats: {
           posts: u.posts_count || 0,
           trips: 0,
@@ -200,7 +211,7 @@ export default function AdminPage() {
       }));
       setUsers(loadedUsers);
 
-      isSuper = await isUserSuperAdmin(user as any);
+      const isSuper = isSuperAdmin;
       if (!isSuper && !entityId) {
         const currentUserDb = dbUsers.find(u => u.id === user?.id);
         if (currentUserDb) {
@@ -219,6 +230,13 @@ export default function AdminPage() {
       setMarketplaceItems(items);
     } catch (e) {
       console.error('Failed to load marketplace items:', e);
+    }
+
+    try {
+      const dbRoles = await rolesService.getAll();
+      setRoles(dbRoles);
+    } catch (e) {
+      console.error('Failed to load roles:', e);
     }
 
     const mockReports: Report[] = [
@@ -303,6 +321,59 @@ export default function AdminPage() {
     }
   };
 
+  const handleSaveEntity = async (data: ManageEntityPayload, isEdit: boolean) => {
+    try {
+      if (isEdit && entityToEdit) {
+        await updateAdminEntity(entityToEdit.id, data);
+      } else {
+        await createAdminEntity(data);
+      }
+      loadData(); // refresh list
+    } catch (error: any) {
+      throw error; // Let modal handle it
+    }
+  };
+
+  const handleDeleteEntity = async (id: string) => {
+    showConfirm('Confirmar Exclusão', 'Tem certeza que deseja excluir esta empresa? Esta ação não pode ser desfeita.', async () => {
+      try {
+        await deleteAdminEntity(id);
+        setEntities(prev => prev.filter(e => e.id !== id));
+        showAlert('Sucesso', '✅ Empresa excluída com sucesso!', 'success');
+      } catch (error: any) {
+        showAlert('Erro', error.message || 'Erro ao excluir empresa.', 'danger');
+      }
+    });
+  };
+
+  const handleSaveRole = async (data: Partial<Role>, isEdit: boolean) => {
+    try {
+      if (isEdit && roleToEdit) {
+        const updated = await rolesService.update(roleToEdit.id, data);
+        setRoles(prev => prev.map(r => r.id === updated.id ? updated : r));
+      } else {
+        const created = await rolesService.create(data as Omit<Role, 'id' | 'created_at' | 'updated_at'>);
+        setRoles(prev => [created, ...prev]);
+      }
+      showAlert('Sucesso', `✅ Perfil ${isEdit ? 'atualizado' : 'criado'} com sucesso!`, 'success');
+      setIsRoleModalOpen(false);
+    } catch (error: any) {
+      throw error; // Let modal handle it
+    }
+  };
+
+  const handleDeleteRole = async (id: string) => {
+    showConfirm('Confirmar Exclusão', 'Tem certeza que deseja excluir este perfil? Esta ação não pode ser desfeita.', async () => {
+      try {
+        await rolesService.delete(id);
+        setRoles(prev => prev.filter(r => r.id !== id));
+        showAlert('Sucesso', '✅ Perfil excluído com sucesso!', 'success');
+      } catch (error: any) {
+        showAlert('Erro', error.message || 'Erro ao excluir perfil.', 'danger');
+      }
+    });
+  };
+
   const handleMarketplaceAction = async (itemId: string, itemType: 'trip' | 'experience', action: 'approve' | 'reject' | 'remove') => {
     try {
       if (action === 'remove') {
@@ -342,7 +413,7 @@ export default function AdminPage() {
   const getRoleBadge = (role: string) => {
     const badges: Record<string, { text: string; color: string; bg: string }> = {
       user: { text: 'Usuário', color: 'text-gray-700', bg: 'bg-gray-100' },
-      viajante: { text: 'Viajante', color: 'text-gray-700', bg: 'bg-gray-100' },
+      viajante: { text: 'Role Básica (Free)', color: 'text-gray-700', bg: 'bg-gray-100' },
       business: { text: 'Business', color: 'text-purple-700', bg: 'bg-purple-100' },
       agente: { text: 'Agente', color: 'text-blue-700', bg: 'bg-blue-100' },
       fornecedor: { text: 'Fornecedor', color: 'text-orange-700', bg: 'bg-orange-100' },
@@ -419,6 +490,7 @@ export default function AdminPage() {
             {[
               { id: 'dashboard' as const, label: 'Dashboard', icon: 'ri-dashboard-line' },
               { id: 'users' as const, label: 'Usuários', icon: 'ri-user-line' },
+              { id: 'roles' as const, label: 'Perfis', icon: 'ri-shield-keyhole-line' },
               { id: 'entities' as const, label: 'Empresas', icon: 'ri-building-4-line' },
               { id: 'marketplace' as const, label: 'Marketplace', icon: 'ri-store-line' },
               { id: 'reports' as const, label: 'Denúncias', icon: 'ri-alarm-warning-line', badge: stats.pendingReports },
@@ -721,6 +793,89 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Roles Tab */}
+        {activeTab === 'roles' && (
+          <div className="space-y-4 md:space-y-6">
+            <div className="flex justify-between items-center bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 p-3 md:p-4">
+              <h2 className="text-lg font-bold text-gray-900">Perfis de Acesso (Roles)</h2>
+              <button
+                onClick={() => {
+                  setRoleToEdit(null);
+                  setIsRoleModalOpen(true);
+                }}
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all text-sm font-medium flex items-center gap-2"
+              >
+                <i className="ri-add-line"></i> Novo Perfil
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[800px]">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Nome do Perfil</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Descrição</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase">Resumo de Permissões</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-right text-xs font-semibold text-gray-600 uppercase">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {roles.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-8 text-center text-gray-500 text-sm">Nenhum perfil encontrado.</td>
+                      </tr>
+                    ) : (
+                      roles.map((role) => {
+                        const permKeys = Object.keys(role.permissions || {}).filter(k => role.permissions[k]);
+                        return (
+                          <tr key={role.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-3 md:px-6 py-3 md:py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
+                                  <i className="ri-shield-keyhole-line"></i>
+                                </div>
+                                <span className="font-bold text-gray-900 text-sm">{role.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 md:px-6 py-3 md:py-4">
+                              <span className="text-sm text-gray-500">{role.description || '-'}</span>
+                            </td>
+                            <td className="px-3 md:px-6 py-3 md:py-4 text-sm text-gray-500">
+                              {permKeys.length === 0 ? 'Nenhuma' : permKeys.length > 3 ? `${permKeys.slice(0, 3).map(k => k.replace('can_', '')).join(', ')} +${permKeys.length - 3}` : permKeys.map(k => k.replace('can_', '')).join(', ')}
+                            </td>
+                            <td className="px-3 md:px-6 py-3 md:py-4">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => {
+                                    setRoleToEdit(role);
+                                    setIsRoleModalOpen(true);
+                                  }}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Editar Perfil"
+                                >
+                                  <i className="ri-edit-line"></i>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteRole(role.id)}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Excluir Perfil"
+                                >
+                                  <i className="ri-delete-bin-line"></i>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Users Tab */}
         {activeTab === 'users' && (
           <div className="space-y-4 md:space-y-6">
@@ -923,14 +1078,7 @@ export default function AdminPage() {
                       </button>
                       {currentUserRole === 'super_admin' && (
                         <button
-                          onClick={async () => {
-                            showConfirm('Excluir Empresa', 'Tem certeza que deseja excluir esta empresa?', async () => {
-                              try {
-                                await deleteAdminEntity(entity.id);
-                                loadData();
-                              } catch (e: any) { showAlert('Erro', e.message, 'danger'); }
-                            });
-                          }}
+                          onClick={() => handleDeleteEntity(entity.id)}
                           className="p-1.5 bg-red-500/20 hover:bg-red-500/40 backdrop-blur-md text-white rounded-lg transition-all shadow-sm"
                           title="Excluir Empresa"
                         >
@@ -1195,6 +1343,7 @@ export default function AdminPage() {
           userToEdit={userToEdit as any}
           currentUserRole={currentUserRole}
           entities={entities}
+          dbRoles={roles}
         />
       )}
 
@@ -1202,16 +1351,18 @@ export default function AdminPage() {
         <AdminEntityModal
           isOpen={isEntityModalOpen}
           onClose={() => setIsEntityModalOpen(false)}
-          onSave={async (data, isEdit) => {
-            if (isEdit && entityToEdit) {
-              await updateAdminEntity(entityToEdit.id, data);
-            } else {
-              await createAdminEntity(data);
-            }
-            loadData();
-          }}
+          onSave={handleSaveEntity}
           entityToEdit={entityToEdit}
           currentUserRole={currentUserRole}
+        />
+      )}
+
+      {isRoleModalOpen && (
+        <AdminRoleModal
+          isOpen={isRoleModalOpen}
+          onClose={() => setIsRoleModalOpen(false)}
+          onSave={handleSaveRole}
+          roleToEdit={roleToEdit}
         />
       )}
 

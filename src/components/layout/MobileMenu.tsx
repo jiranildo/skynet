@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { isUserAdmin, isUserAgent, isUserSupplier } from '@/services/authz';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 
 interface MobileMenuProps {
@@ -19,49 +18,65 @@ export default function MobileMenu({
     onGamificationClick,
     onSkynetExplorerClick
 }: MobileMenuProps) {
-    const [isAdmin, setIsAdmin] = useState(false);
-    const [isAgent, setIsAgent] = useState(false);
-    const [isSupplier, setIsSupplier] = useState(false);
     const [isReordering, setIsReordering] = useState(false);
 
-    const { user } = useAuth();
+    const { user, hasPermission } = useAuth();
     const navigate = useNavigate();
 
     // Define all possible items
-    const baseItems = useMemo(() => [
-        {
-            id: 'blog',
-            icon: 'ri-article-line',
-            action: () => { navigate('/travel?tab=blogs'); onClose(); },
-            color: 'text-blue-500',
-            bg: 'bg-blue-50'
-        },
-        {
-            id: 'gamification',
-            icon: 'ri-trophy-line',
-            action: () => { onGamificationClick(); onClose(); },
-            color: 'text-yellow-600',
-            bg: 'bg-yellow-50'
-        },
-        {
-            id: 'wallet',
-            icon: 'ri-wallet-line',
-            action: () => { onWalletClick(); onClose(); },
-            color: 'text-green-600',
-            bg: 'bg-green-50'
-        },
-        {
-            id: 'skynet-explorer',
-            icon: 'ri-gamepad-line',
-            action: () => { onSkynetExplorerClick(); onClose(); },
-            color: 'text-indigo-600',
-            bg: 'bg-indigo-50'
-        },
-    ], [navigate, onClose, onGamificationClick, onWalletClick, onSkynetExplorerClick]);
+    const baseItems = useMemo(() => {
+        const items = [];
+        if (hasPermission('can_access_sara_ai')) {
+            items.push({
+                id: 'sara-ai',
+                icon: 'ri-shining-2-line',
+                action: () => { window.dispatchEvent(new CustomEvent('toggle-sara-ai')); onClose(); },
+                color: 'text-purple-500',
+                bg: 'bg-purple-50'
+            });
+        }
+        if (hasPermission('can_manage_blog')) {
+            items.push({
+                id: 'blog',
+                icon: 'ri-article-line',
+                action: () => { navigate('/travel?tab=blogs'); onClose(); },
+                color: 'text-blue-500',
+                bg: 'bg-blue-50'
+            });
+        }
+        if (hasPermission('can_access_gamification')) {
+            items.push({
+                id: 'gamification',
+                icon: 'ri-trophy-line',
+                action: () => { onGamificationClick(); onClose(); },
+                color: 'text-yellow-600',
+                bg: 'bg-yellow-50'
+            });
+        }
+        if (hasPermission('can_access_wallet')) {
+            items.push({
+                id: 'wallet',
+                icon: 'ri-wallet-line',
+                action: () => { onWalletClick(); onClose(); },
+                color: 'text-green-600',
+                bg: 'bg-green-50'
+            });
+        }
+        if (hasPermission('can_access_play_explorer')) {
+            items.push({
+                id: 'skynet-explorer',
+                icon: 'ri-gamepad-line',
+                action: () => { onSkynetExplorerClick(); onClose(); },
+                color: 'text-indigo-600',
+                bg: 'bg-indigo-50'
+            });
+        }
+        return items;
+    }, [hasPermission, navigate, onClose, onGamificationClick, onWalletClick, onSkynetExplorerClick]);
 
     const roleItems = useMemo(() => {
         const items = [];
-        if (isAgent || isAdmin) {
+        if (hasPermission('can_access_agent_portal')) {
             items.push({
                 id: 'agent',
                 icon: 'ri-briefcase-line',
@@ -70,7 +85,7 @@ export default function MobileMenu({
                 bg: 'bg-purple-50'
             });
         }
-        if (isSupplier || isAdmin) {
+        if (hasPermission('can_access_services_portal')) {
             items.push({
                 id: 'supplier',
                 icon: 'ri-store-2-line',
@@ -79,7 +94,7 @@ export default function MobileMenu({
                 bg: 'bg-orange-50'
             });
         }
-        if (isAdmin) {
+        if (hasPermission('can_access_admin')) {
             items.push({
                 id: 'admin',
                 icon: 'ri-shield-star-line',
@@ -89,17 +104,30 @@ export default function MobileMenu({
             });
         }
         return items;
-    }, [isAgent, isSupplier, isAdmin, navigate, onClose]);
+    }, [hasPermission, navigate, onClose]);
 
-    const footerItems = useMemo(() => [
-        {
-            id: 'settings',
-            icon: 'ri-user-settings-line',
-            action: () => { navigate('/settings'); onClose(); },
-            color: 'text-gray-600',
-            bg: 'bg-gray-100'
+    const footerItems = useMemo(() => {
+        const items = [];
+        if (hasPermission('can_customize_platform')) {
+            items.push({
+                id: 'customize',
+                icon: 'ri-palette-line',
+                action: () => { navigate('/settings?tab=appearance'); onClose(); },
+                color: 'text-pink-500',
+                bg: 'bg-pink-50'
+            });
         }
-    ], [navigate, onClose]);
+        if (hasPermission('can_access_my_space')) {
+            items.push({
+                id: 'settings',
+                icon: 'ri-user-settings-line',
+                action: () => { navigate('/settings'); onClose(); },
+                color: 'text-gray-600',
+                bg: 'bg-gray-100'
+            });
+        }
+        return items;
+    }, [hasPermission, navigate, onClose]);
 
     const allVisibleItems = useMemo(() => [...baseItems, ...roleItems, ...footerItems], [baseItems, roleItems, footerItems]);
 
@@ -120,24 +148,6 @@ export default function MobileMenu({
         });
         setCurrentItems(sorted);
     }, [allVisibleItems, isOpen]);
-
-    useEffect(() => {
-        const checkRoles = async () => {
-            if (user) {
-                const [adminStatus, agentStatus, supplierStatus] = await Promise.all([
-                    isUserAdmin(user),
-                    isUserAgent(user),
-                    isUserSupplier(user)
-                ]);
-                setIsAdmin(adminStatus);
-                setIsAgent(agentStatus);
-                setIsSupplier(supplierStatus);
-            }
-        };
-        if (isOpen) {
-            checkRoles();
-        }
-    }, [user, isOpen]);
 
     const handleReorder = (newItems: any[]) => {
         setCurrentItems(newItems);

@@ -4,12 +4,11 @@ import { getManagedTrips, deleteManagedTrip, calculateTripTotalSpent, calculateI
 import { Trip, User as DBUser } from '@/services/db/types';
 import { getAgents } from '@/services/db/entities';
 import { assignAgentsToTrip } from '@/services/db/trips';
-import { isUserAdmin, isUserSuperAdmin } from '@/services/authz';
 import TripPlanningModal from '../../travel/components/TripPlanningModal';
 import TripUsersModal from './TripUsersModal';
 
 export default function ManagedTrips() {
-    const { user } = useAuth();
+    const { user, hasPermission, isSuperAdmin: checkSuperAdmin, isAdmin: checkAdmin } = useAuth();
     const [trips, setTrips] = useState<Trip[]>([]);
     const [loading, setLoading] = useState(true);
     const [availableAgents, setAvailableAgents] = useState<DBUser[]>([]);
@@ -18,7 +17,7 @@ export default function ManagedTrips() {
     const [selectedTripForPlanning, setSelectedTripForPlanning] = useState<Trip | null>(null);
     const [selectedTripForUsers, setSelectedTripForUsers] = useState<Trip | null>(null);
     const [isAssigning, setIsAssigning] = useState(false);
-    const [isAdmin, setIsAdmin] = useState(false);
+    const isAdmin = checkAdmin || checkSuperAdmin || hasPermission('can_access_admin');
     const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -36,15 +35,12 @@ export default function ManagedTrips() {
                 }
             }
 
-            const [data, agentsData, adminCheck, superAdminCheck] = await Promise.all([
+            const [data, agentsData] = await Promise.all([
                 getManagedTrips(user.id),
-                getAgents(entityId),
-                isUserAdmin(user as any),
-                isUserSuperAdmin(user as any)
+                getAgents(entityId)
             ]);
             setTrips(data);
             setAvailableAgents(agentsData);
-            setIsAdmin(adminCheck || superAdminCheck);
             setLoading(false);
         }
     };

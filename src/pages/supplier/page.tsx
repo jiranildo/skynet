@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import SupplierStats from './components/SupplierStats';
-import { isUserSupplier, isUserAdmin } from '@/services/authz';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AgentInBox from '../agent/components/AgentInBox';
 import SupplierExperiences from './components/SupplierExperiences';
@@ -9,7 +8,7 @@ import SupplierExperiences from './components/SupplierExperiences';
 export type SupplierTab = 'overview' | 'messages' | 'experiences';
 
 export default function SupplierDashboard() {
-    const { user, loading } = useAuth();
+    const { user, loading, hasPermission } = useAuth();
     const [isSupplier, setIsSupplier] = useState<boolean | null>(null);
     const [searchParams, setSearchParams] = useSearchParams();
     const activeTab = (searchParams.get('tab') as SupplierTab) || 'experiences';
@@ -20,21 +19,20 @@ export default function SupplierDashboard() {
     };
 
     useEffect(() => {
-        async function checkRole() {
-            if (user) {
-                const supplierStatus = await isUserSupplier(user);
-                const adminStatus = await isUserAdmin(user);
-                setIsSupplier(supplierStatus || adminStatus);
-                if (!supplierStatus && !adminStatus) {
-                    navigate('/');
-                }
+        if (!loading) {
+            if (!user) {
+                navigate('/login');
+                return;
+            }
+
+            const allowed = hasPermission('can_access_services_portal');
+            setIsSupplier(allowed);
+
+            if (!allowed) {
+                navigate('/');
             }
         }
-        if (!loading) {
-            if (!user) navigate('/login');
-            else checkRole();
-        }
-    }, [user, loading, navigate]);
+    }, [user, loading, navigate, hasPermission]);
 
     if (loading || isSupplier === null) {
         return (

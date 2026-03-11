@@ -14,6 +14,15 @@ export interface Entity {
   };
 }
 
+export interface Role {
+  id: string;
+  name: string;
+  description?: string;
+  permissions: Record<string, boolean>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -28,7 +37,9 @@ export interface User {
   following_count?: number;
   posts_count?: number;
   privacy_setting?: 'public' | 'private' | 'friends';
-  role?: 'super_admin' | 'admin' | 'viajante' | 'agente' | 'fornecedor';
+  role?: 'super_admin' | 'admin' | 'viajante' | 'agente' | 'fornecedor'; // Legacy backward compatibility
+  role_id?: string; // New Role FK
+  role_data?: Role; // Joined Role
   entity_id?: string;
   created_at?: string;
   status?: 'active' | 'suspended' | 'banned';

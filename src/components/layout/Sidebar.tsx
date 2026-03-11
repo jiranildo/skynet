@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { ensureUserProfile, User as UserType } from '@/services/supabase';
 import { useUnreadCounts } from '@/hooks/useUnreadCounts';
-import { isUserAdmin, isUserAgent as checkIsAgent, isUserSupplier as checkIsSupplier, isUserSuperAdmin as checkIsSuperAdmin } from '@/services/authz';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 
 interface SidebarProps {
@@ -29,53 +28,91 @@ export default function Sidebar({
     isCollapsed,
     onToggleCollapse
 }: SidebarProps) {
+    const { user, signOut, themeConfig, hasPermission, isAdmin, isAgent, isSupplier, isSuperAdmin } = useAuth();
     const [userProfile, setUserProfile] = useState<UserType | null>(null);
-    const [isAdmin, setIsAdmin] = useState(false);
-    const [isAgent, setIsAgent] = useState(false);
-    const [isSupplier, setIsSupplier] = useState(false);
-    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [isReordering, setIsReordering] = useState(false);
 
     const { unreadMessages, unreadNotifications } = useUnreadCounts();
     const navigate = useNavigate();
     const location = useLocation();
-    const { user, signOut, themeConfig } = useAuth();
 
     // 1. Define all possible Menu Items
-    const baseMenuItems = useMemo(() => [
-        { id: 'home', label: 'Início', icon: 'home', path: '/' },
-        { id: 'travel', label: 'Viagens', icon: 'flight-takeoff', path: '/travel' },
-        { id: 'drinks-food', label: 'Drinks & Food', icon: 'restaurant-2', path: '/drinks-food' },
-        { id: 'cellar', label: 'Minha Adega', icon: 'goblet', path: '/cellar' },
-        { id: 'messages', label: 'Mensagens', icon: 'message-3', path: '/messages', badge: unreadMessages },
-        { id: 'settings', label: 'Meu Espaço', icon: 'settings-4', path: '/settings' },
-    ], [unreadMessages]);
+    const baseMenuItems = useMemo(() => {
+        const items: any[] = [
+            { id: 'home', label: 'Início', icon: 'home', path: '/' },
+        ];
+
+        if (hasPermission('can_access_travel')) {
+            items.push({ id: 'travel', label: 'Viagens', icon: 'flight-takeoff', path: '/travel' });
+        }
+        if (hasPermission('can_access_drinks_food')) {
+            items.push({ id: 'drinks-food', label: 'Drinks & Food', icon: 'restaurant-2', path: '/drinks-food' });
+        }
+        if (hasPermission('can_access_cellar')) {
+            items.push({ id: 'cellar', label: 'Minha Adega', icon: 'goblet', path: '/cellar' });
+        }
+        if (hasPermission('can_access_messages')) {
+            items.push({ id: 'messages', label: 'Mensagens', icon: 'message-3', path: '/messages', badge: unreadMessages });
+        }
+        if (hasPermission('can_access_sara_ai')) {
+            items.push({
+                id: 'sara-ai', label: 'SARA AI', icon: 'shining-2', path: '#ai', action: () => {
+                    // This will be handled by a global event or common state if possible
+                    // For now, let's just make it a visual entry if needed
+                    window.dispatchEvent(new CustomEvent('toggle-sara-ai'));
+                }
+            });
+        }
+
+        return items;
+    }, [unreadMessages, hasPermission]);
 
     const roleMenuItems = useMemo(() => {
         const items = [];
-        if (isAgent || isAdmin) {
+        if (hasPermission('can_access_agent_portal')) {
             items.push({ id: 'agent', label: 'Portal do Agente', icon: 'briefcase', path: '/agent' });
         }
-        if (isSupplier || isAdmin) {
+        if (hasPermission('can_access_services_portal')) {
             items.push({ id: 'supplier', label: 'Portal de Serviços', icon: 'store-2', path: '/supplier' });
         }
-        if (isAdmin) {
+        if (hasPermission('can_access_admin')) {
             items.push({ id: 'admin', label: 'Administração', icon: 'shield-star', path: '/admin' });
         }
         return items;
-    }, [isAgent, isSupplier, isAdmin]);
+    }, [hasPermission]);
 
     const allVisibleMenuItems = useMemo(() => [...baseMenuItems, ...roleMenuItems], [baseMenuItems, roleMenuItems]);
 
-    const quickActionItems = useMemo(() => [
-        { id: 'create-post', label: 'Criar Post', icon: 'quill-pen', action: onCreatePostClick },
-        { id: 'checkin', label: 'Check In-Out', icon: 'map-pin-user', action: onCheckInClick },
-        { id: 'blog', label: 'Blog de Viagens', icon: 'article', action: () => navigate('/travel?tab=blogs') },
-        { id: 'gamification', label: 'Gameficação', icon: 'trophy', action: onGamificationClick },
-        { id: 'notifications', label: 'Notificações', icon: 'notification-3', action: onNotificationsClick, badge: unreadNotifications },
-        { id: 'wallet', label: 'Carteira', icon: 'wallet', action: onWalletClick },
-        { id: 'skynet-explorer', label: 'SARA Play Explorer', icon: 'gamepad-line', action: onSkynetExplorerClick },
-    ], [onCreatePostClick, onCheckInClick, navigate, onGamificationClick, onNotificationsClick, unreadNotifications, onWalletClick, onSkynetExplorerClick]);
+    const quickActionItems = useMemo(() => {
+        const items = [];
+
+        if (hasPermission('can_post_social')) {
+            items.push({ id: 'create-post', label: 'Criar Post', icon: 'quill-pen', action: onCreatePostClick });
+        }
+        if (hasPermission('can_manage_checkins')) {
+            items.push({ id: 'checkin', label: 'Check In-Out', icon: 'map-pin-user', action: onCheckInClick });
+        }
+        if (hasPermission('can_manage_blog')) {
+            items.push({ id: 'blog', label: 'Blog de Viagens', icon: 'article', action: () => navigate('/travel?tab=blogs') });
+        }
+        if (hasPermission('can_access_gamification')) {
+            items.push({ id: 'gamification', label: 'Gameficação', icon: 'trophy', action: onGamificationClick });
+        }
+
+        items.push({ id: 'notifications', label: 'Notificações', icon: 'notification-3', action: onNotificationsClick, badge: unreadNotifications });
+
+        if (hasPermission('can_access_wallet')) {
+            items.push({ id: 'wallet', label: 'Carteira', icon: 'wallet', action: onWalletClick });
+        }
+        if (hasPermission('can_access_play_explorer')) {
+            items.push({ id: 'skynet-explorer', label: 'SARA Play Explorer', icon: 'gamepad-line', action: onSkynetExplorerClick });
+        }
+        if (hasPermission('can_customize_platform')) {
+            items.push({ id: 'customize', label: 'Meu Espaço', icon: 'palette', action: () => navigate('/settings?tab=appearance') });
+        }
+
+        return items;
+    }, [hasPermission, onCreatePostClick, onCheckInClick, navigate, onGamificationClick, onNotificationsClick, unreadNotifications, onWalletClick, onSkynetExplorerClick]);
 
     // Managed state for current order
     const [currentMenuItems, setCurrentMenuItems] = useState<any[]>([]);
@@ -131,16 +168,7 @@ export default function Sidebar({
                     const profile = await ensureUserProfile();
                     setUserProfile(profile);
 
-                    const [adminStatus, agentStatus, supplierStatus, superAdminStatus] = await Promise.all([
-                        isUserAdmin(user),
-                        checkIsAgent(user),
-                        checkIsSupplier(user),
-                        checkIsSuperAdmin(user)
-                    ]);
-                    setIsAdmin(adminStatus);
-                    setIsAgent(agentStatus);
-                    setIsSupplier(supplierStatus);
-                    setIsSuperAdmin(superAdminStatus);
+
                 } catch (error) {
                     console.error("Error loading sidebar data:", error);
                 }
@@ -209,7 +237,14 @@ export default function Sidebar({
                                     className="relative list-none"
                                 >
                                     <button
-                                        onClick={() => !isReordering && navigate(item.path)}
+                                        onClick={() => {
+                                            if (isReordering) return;
+                                            if (item.action) {
+                                                item.action();
+                                            } else {
+                                                navigate(item.path);
+                                            }
+                                        }}
                                         disabled={isReordering}
                                         title={isCollapsed ? item.label : undefined}
                                         className={`w-full flex items-center rounded-2xl transition-all duration-300 group ${isCollapsed ? 'justify-center py-3' : 'gap-4 px-4 py-3'

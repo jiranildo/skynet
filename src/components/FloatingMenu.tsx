@@ -12,6 +12,15 @@ import CheckInModal from './CheckInModal';
 import { useNavigate } from 'react-router-dom';
 
 export default function FloatingMenu() {
+  const { user: authUser, hasPermission } = useAuth();
+
+  // Custom event listener for external triggers
+  useEffect(() => {
+    const handleRemoteToggle = () => setIsOpen(prev => !prev);
+    window.addEventListener('toggle-sara-ai', handleRemoteToggle);
+    return () => window.removeEventListener('toggle-sara-ai', handleRemoteToggle);
+  }, []);
+
   const persona = useContextualPersona();
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
@@ -45,7 +54,6 @@ export default function FloatingMenu() {
   const recognitionRef = useRef<any>(null);
   const wasListeningRef = useRef(false); // To track if we just finished a voice session
 
-  const { user: authUser } = useAuth();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userTrips, setUserTrips] = useState<Trip[]>([]);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
@@ -689,6 +697,8 @@ export default function FloatingMenu() {
       setIsLoadingMore(false);
     }
   };
+
+  if (!hasPermission('can_show_floating_ai')) return null;
 
   return (
     <>

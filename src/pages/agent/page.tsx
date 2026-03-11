@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { isUserAgent, isUserAdmin } from '@/services/authz';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import CreateTripForm from '../travel/components/CreateTripForm';
 import ManagedTrips from './components/ManagedTrips';
-import FinancialPanel from './components/FinancialPanel';
 import AgentStats from './components/AgentStats';
 import AgentInBox from './components/AgentInBox';
 import InfoWidgets from './components/InfoWidgets';
@@ -12,7 +10,7 @@ import InfoWidgets from './components/InfoWidgets';
 export type AgentTab = 'overview' | 'messages' | 'creator' | 'trips';
 
 export default function AgentDashboard() {
-    const { user, loading } = useAuth();
+    const { user, loading, hasPermission } = useAuth();
     const [isAgent, setIsAgent] = useState<boolean | null>(null);
     const [searchParams, setSearchParams] = useSearchParams();
     const activeTab = (searchParams.get('tab') as AgentTab) || 'trips';
@@ -23,21 +21,20 @@ export default function AgentDashboard() {
     };
 
     useEffect(() => {
-        async function checkRole() {
-            if (user) {
-                const agentStatus = await isUserAgent(user);
-                const adminStatus = await isUserAdmin(user);
-                setIsAgent(agentStatus || adminStatus);
-                if (!agentStatus && !adminStatus) {
-                    navigate('/');
-                }
+        if (!loading) {
+            if (!user) {
+                navigate('/login');
+                return;
+            }
+
+            const allowed = hasPermission('can_access_agent_portal');
+            setIsAgent(allowed);
+
+            if (!allowed) {
+                navigate('/');
             }
         }
-        if (!loading) {
-            if (!user) navigate('/login');
-            else checkRole();
-        }
-    }, [user, loading, navigate]);
+    }, [user, loading, navigate, hasPermission]);
 
     if (loading || isAgent === null) {
         return (

@@ -55,6 +55,7 @@ export interface ManageUserPayload {
     full_name?: string;
     username?: string;
     role?: string;
+    role_id?: string;
     entity_id?: string;
     status?: string;
     created_by?: string;
@@ -220,11 +221,6 @@ export const getAdminMarketplaceItems = async (): Promise<AdminMarketplaceItem[]
 
     if (role === 'admin' && entityId) {
         // Admin usually sees items from their entity. 
-        // For trips, we check if the user belongs to the same entity.
-        // This is complex for a direct join, so we might need a subquery or filter.
-        // Simplification: fetch all if super_admin, filter if admin.
-        // But trips don't have entity_id directly, they have user_id.
-        // We might need to filter trips based on user's entity.
     }
 
     const { data: trips, error: tripError } = await tripQuery.order('created_at', { ascending: false });
@@ -245,7 +241,7 @@ export const getAdminMarketplaceItems = async (): Promise<AdminMarketplaceItem[]
         item_type: 'experience',
         category: item.category,
         location: item.location,
-        visibility: 'public' // Experiences are generally public once approved, but we can refine this if they have a visibility field
+        visibility: 'public'
     }));
 
     const normalizedTrips: AdminMarketplaceItem[] = (trips || []).map(item => ({

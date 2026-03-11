@@ -260,18 +260,7 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
       .map(m => m.wine);
   }, [matchMoment, matchFood, cellarFilteredAndSorted]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gradient-to-br from-red-600 to-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
-            <i className="ri-wine-glass-fill text-3xl text-white"></i>
-          </div>
-          <p className="text-gray-600 font-medium">Carregando adega...</p>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="space-y-8 relative">
@@ -639,8 +628,21 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
           </div>
         )}
 
+        {/* Loading State */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-20 bg-white/60 backdrop-blur-xl rounded-[32px] border border-white/50 shadow-[0_4px_24px_rgba(0,0,0,0.02)] mx-2 mt-4 text-center px-4">
+            <div className="w-20 h-20 bg-gradient-to-br from-red-600 to-rose-600 rounded-3xl flex items-center justify-center border border-white shadow-inner mb-6 animate-pulse">
+              <i className="ri-wine-glass-fill text-4xl text-white"></i>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Carregando sua adega...</h3>
+            <p className="text-gray-500 max-w-xs text-center">
+              Preparando suas taças e buscando seus rótulos favoritos.
+            </p>
+          </div>
+        )}
+
         {/* Empty State */}
-        {cellarFilteredAndSorted.length === 0 && (
+        {!loading && cellarFilteredAndSorted.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 bg-white/60 backdrop-blur-xl rounded-[32px] border border-white/50 shadow-[0_4px_24px_rgba(0,0,0,0.02)] mx-2 mt-4 text-center px-4">
             <div className="w-24 h-24 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center border border-white shadow-inner mb-6 animate-bounce-slow">
               <i className="ri-goblet-line text-5xl text-purple-400/80"></i>
