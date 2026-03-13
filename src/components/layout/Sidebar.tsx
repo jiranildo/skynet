@@ -352,7 +352,7 @@ export default function Sidebar({
                     <div className={`w-8 h-8 flex items-center justify-center rounded-lg ${isReordering ? 'bg-white/20' : 'bg-gray-50'}`}>
                         <i className={`${isReordering ? 'ri-check-line' : 'ri-equalizer-line'} text-lg`}></i>
                     </div>
-                    {!isCollapsed && <span className="text-sm font-bold">{isReordering ? 'Salvar Ordem' : 'Personalizar'}</span>}
+                    {!isCollapsed && <span className="text-sm font-bold">{isReordering ? 'Salvar Ordem' : 'Meu Espaço'}</span>}
                 </button>
             </div>
 

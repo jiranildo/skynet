@@ -7,6 +7,17 @@ export interface DestinationInfo {
         humidity: number;
         isDay: boolean; // 1 = day, 0 = night
     } | null;
+    forecast?: {
+        date: string;
+        tempMax: number;
+        tempMin: number;
+        condition: string;
+        weatherCode: number;
+    }[] | null;
+    season?: {
+        name: string; // "Inverno", "Verão", etc.
+        characteristics: string[]; // ["Frio", "Chuva", etc.]
+    } | null;
     currency: {
         code: string;
         name: string;
@@ -44,9 +55,11 @@ const POWER_INFO: Record<string, { voltage: string; frequency: string; plugs: st
     // Default fallback will be used if not found
 };
 
-export function useDestinationInfo(destination: string) {
+export function useDestinationInfo(destination: string, startDate?: string, endDate?: string) {
     const [info, setInfo] = useState<DestinationInfo>({
         weather: null,
+        forecast: null,
+        season: null,
         currency: null,
         timezone: null,
         power: null,
@@ -95,8 +108,18 @@ export function useDestinationInfo(destination: string) {
                 if (!isMounted) return;
 
                 // 2. Weather (OpenMeteo)
-                // Specs: current_weather=true
-                const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=relativehumidity_2m`);
+                // We request current weather AND daily forecast if dates are provided
+                let weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=relativehumidity_2m`;
+
+                if (startDate && endDate) {
+                    // Try to fetch daily info if we have dates
+                    weatherUrl += `&daily=weathercode,temperature_2m_max,temperature_2m_min&start_date=${startDate}&end_date=${endDate}`;
+                    // OpenMeteo allows start_date/end_date constraints
+                    // But for simplicity and to handle the 16-day limit, we'll just get the standard forecast
+                    // and filter manually or let it return the next 7 days.
+                }
+
+                const weatherRes = await fetch(weatherUrl);
                 const weatherData = await weatherRes.json();
 
                 let weather = null;
@@ -111,6 +134,25 @@ export function useDestinationInfo(destination: string) {
                         humidity,
                         isDay: weatherData.current_weather.is_day === 1
                     };
+                }
+
+                let forecast = null;
+                if (weatherData.daily) {
+                    forecast = weatherData.daily.time.map((time: string, i: number) => ({
+                        date: time,
+                        tempMax: weatherData.daily.temperature_2m_max[i],
+                        tempMin: weatherData.daily.temperature_2m_min[i],
+                        condition: getWeatherCondition(weatherData.daily.weathercode[i]),
+                        weatherCode: weatherData.daily.weathercode[i]
+                    }));
+                }
+
+                // Calculate Season and Traits
+                let season = null;
+                if (startDate) {
+                    const start = new Date(startDate);
+                    const latNum = parseFloat(lat);
+                    season = calculateSeasonAndTraits(start, latNum, weatherData);
                 }
 
                 // 3. Country Info (RestCountries)
@@ -168,6 +210,8 @@ export function useDestinationInfo(destination: string) {
                 if (isMounted) {
                     setInfo({
                         weather,
+                        forecast,
+                        season,
                         currency,
                         timezone,
                         power,
@@ -186,7 +230,7 @@ export function useDestinationInfo(destination: string) {
         fetchData();
 
         return () => { isMounted = false; };
-    }, [destination]);
+    }, [destination, startDate, endDate]);
 
     return info;
 }
@@ -226,6 +270,56 @@ function getWeatherCondition(code: number): string {
     if (code >= 80 && code <= 82) return 'Chuva forte';
     if (code >= 95 && code <= 99) return 'Tempestade';
     return 'Nublado';
+}
+
+function calculateSeasonAndTraits(date: Date, lat: number, weatherData: any) {
+    const month = date.getUTCMonth();
+    const day = date.getUTCDate();
+    const isNorth = lat >= 0;
+
+    let seasonName = '';
+
+    // Simple season check
+    const getSeasonForMonth = (m: number, d: number, north: boolean) => {
+        const val = m * 100 + d;
+        if (val >= 220 && val <= 520) return north ? 'Primavera' : 'Outono';
+        if (val >= 521 && val <= 821) return north ? 'Verão' : 'Inverno';
+        if (val >= 822 && val <= 1120) return north ? 'Outono' : 'Primavera';
+        return north ? 'Inverno' : 'Verão';
+    };
+
+    seasonName = getSeasonForMonth(month, day, isNorth);
+
+    // Characteristics
+    const traits: string[] = [];
+
+    // Temperature traits
+    const avgTemp = weatherData.current_weather?.temperature;
+    if (avgTemp !== undefined) {
+        if (avgTemp < 10) traits.push('Frio');
+        else if (avgTemp > 28) traits.push('Calor');
+        else traits.push('Moderado');
+    }
+
+    // Weather traits from daily/current
+    const codes = [];
+    if (weatherData.current_weather) codes.push(weatherData.current_weather.weathercode);
+    if (weatherData.daily?.weathercode) codes.push(...weatherData.daily.weathercode);
+
+    const uniqueCodes = Array.from(new Set(codes));
+
+    if (uniqueCodes.some(c => (c >= 51 && c <= 67) || (c >= 80 && c <= 82))) traits.push('Chuva');
+    if (uniqueCodes.some(c => c >= 95 && c <= 99)) traits.push('Tempestade');
+    if (uniqueCodes.some(c => c >= 71 && c <= 77)) traits.push('Neve');
+    if (uniqueCodes.some(c => c >= 45 && c <= 48)) traits.push('Nevoeiro');
+
+    // Add custom traits (Mocked as we don't have global earthquake/hurricane data)
+    // In a real app, we'd check a specialized API.
+
+    return {
+        name: seasonName,
+        characteristics: Array.from(new Set(traits))
+    };
 }
 
 function getMockExchangeRate(currencyCode: string): number {

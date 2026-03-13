@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import MobileNav from '../home/components/MobileNav';
 import { useAuth } from '../../context/AuthContext';
-import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, type ManageUserPayload, getAdminEntities, createAdminEntity, updateAdminEntity, deleteAdminEntity, type ManageEntityPayload, getAdminMarketplaceItems, updateMarketplaceItemStatus, deleteAdminMarketplaceItem, type AdminMarketplaceItem, getAdminAnalytics } from '../../services/db/admin';
+import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, type ManageUserPayload, getAdminEntities, createAdminEntity, updateAdminEntity, deleteAdminEntity, type ManageEntityPayload, getAdminMarketplaceItems, updateMarketplaceItemStatus, deleteAdminMarketplaceItem, type AdminMarketplaceItem, getAdminAnalytics, getSystemLogs, type SystemLog, type LogFilters } from '../../services/db/admin';
 import { rolesService } from '../../services/db/roles';
 import type { Role } from '../../services/db/types';
 import AdminUserModal from './components/AdminUserModal';
@@ -76,7 +76,7 @@ export default function AdminPage() {
   const { user, loading, signOut, hasPermission, isSuperAdmin } = useAuth();
   const [isAdminChecked, setIsAdminChecked] = useState(false);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'entities' | 'marketplace' | 'reports' | 'analytics' | 'settings' | 'roles'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'entities' | 'marketplace' | 'reports' | 'analytics' | 'access_logs' | 'roles'>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
   const [entities, setEntities] = useState<DBEntity[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -92,6 +92,9 @@ export default function AdminPage() {
     pendingReports: 0,
     pendingApprovals: 0
   });
+  const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
+  const [logFilters, setLogFilters] = useState<LogFilters>({ days: 7, sortOrder: 'desc' });
+  const [logSearch, setLogSearch] = useState('');
   // const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
@@ -263,8 +266,22 @@ export default function AdminPage() {
     ];
     setReports(mockReports);
 
+    fetchLogs();
+
     fetchAnalytics(isSuper, entityId);
   }
+
+  const fetchLogs = async () => {
+    try {
+      const logs = await getSystemLogs({
+        ...logFilters,
+        search: logSearch || undefined
+      });
+      setSystemLogs(logs);
+    } catch (e) {
+      console.error('Failed to load system logs:', e);
+    }
+  };
 
   const fetchAnalytics = async (isSuperParam: boolean, entityIdParam?: string) => {
     try {
@@ -495,7 +512,7 @@ export default function AdminPage() {
               { id: 'marketplace' as const, label: 'Marketplace', icon: 'ri-store-line' },
               { id: 'reports' as const, label: 'Denúncias', icon: 'ri-alarm-warning-line', badge: stats.pendingReports },
               { id: 'analytics' as const, label: 'Analytics', icon: 'ri-line-chart-line' },
-              { id: 'settings' as const, label: 'Config', icon: 'ri-settings-line' }
+              { id: 'access_logs' as const, label: 'Log de Acesso', icon: 'ri-history-line' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -654,7 +671,7 @@ export default function AdminPage() {
                   )}
                 </div>
                 <button
-                  onClick={() => setActiveTab('reports')}
+                  onClick={() => setActiveTab('access_logs')}
                   className="mt-6 w-full py-3 bg-gray-50 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
                 >
                   Ver Log Completo <i className="ri-arrow-right-s-line"></i>
@@ -1308,15 +1325,176 @@ export default function AdminPage() {
 
 
 
-        {/* Settings Tab */}
-        {activeTab === 'settings' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-blue-100 to-cyan-100 flex items-center justify-center">
-                <i className="ri-settings-line text-4xl text-blue-500"></i>
+        {/* Access Logs Tab */}
+        {activeTab === 'access_logs' && (
+          <div className="space-y-4 md:space-y-6">
+            <div className="flex justify-between items-center bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 p-3 md:p-4">
+              <h2 className="text-lg font-bold text-gray-900">Histórico de Acesso e Utilização</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchLogs()}
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Atualizar Logs"
+                >
+                  <i className="ri-refresh-line text-lg"></i>
+                </button>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Configurações do Sistema</h3>
-              <p className="text-gray-600">Painel de configurações em breve!</p>
+            </div>
+
+            {/* Logs Filters */}
+            <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 p-3 md:p-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+                <div className="relative col-span-1 md:col-span-2">
+                  <i className="ri-search-line absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                  <input
+                    type="text"
+                    value={logSearch}
+                    onChange={(e) => setLogSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && fetchLogs()}
+                    placeholder="Buscar no log (usuário, detalhes...)"
+                    className="w-full pl-10 md:pl-12 pr-3 md:pr-4 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Início</label>
+                  <input
+                    type="date"
+                    value={logFilters.startDate || ''}
+                    onChange={(e) => setLogFilters(prev => ({ ...prev, startDate: e.target.value, days: undefined }))}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Fim</label>
+                  <input
+                    type="date"
+                    value={logFilters.endDate || ''}
+                    onChange={(e) => setLogFilters(prev => ({ ...prev, endDate: e.target.value, days: undefined }))}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Ação</label>
+                  <select
+                    value={logFilters.action || 'all'}
+                    onChange={(e) => setLogFilters(prev => ({ ...prev, action: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  >
+                    <option value="all">Todas</option>
+                    <option value="Login">Login</option>
+                    <option value="Nova Viagem">Nova Viagem</option>
+                    <option value="Novo Roteiro">Novo Roteiro</option>
+                    <option value="Novo Usuário">Novo Usuário</option>
+                    <option value="Transação Financeira">Financeiro</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Usuário</label>
+                  <select
+                    value={logFilters.userId || 'all'}
+                    onChange={(e) => setLogFilters(prev => ({ ...prev, userId: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  >
+                    <option value="all">Todos</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>{u.name || u.username}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-end gap-2">
+                  <button
+                    onClick={() => fetchLogs()}
+                    className="flex-1 bg-red-500 text-white py-2 rounded-xl text-sm font-bold hover:bg-red-600 transition-colors"
+                  >
+                    Filtrar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLogFilters({ days: 7, sortOrder: 'desc' });
+                      setLogSearch('');
+                      // Wait for state update is not reliable, so we pass defaults
+                      getSystemLogs({ days: 7, sortOrder: 'desc' }).then(setSystemLogs);
+                    }}
+                    className="p-2 border border-gray-200 text-gray-400 rounded-xl hover:bg-gray-50 transition-colors"
+                    title="Limpar Filtros"
+                  >
+                    <i className="ri-filter-off-line"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[800px]">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th
+                        className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase w-[20%] cursor-pointer hover:bg-gray-100 transition-colors group"
+                        onClick={() => {
+                          const newOrder = logFilters.sortOrder === 'asc' ? 'desc' : 'asc';
+                          setLogFilters(prev => ({ ...prev, sortOrder: newOrder }));
+                          getSystemLogs({ ...logFilters, sortOrder: newOrder, search: logSearch || undefined }).then(setSystemLogs);
+                        }}
+                      >
+                        <div className="flex items-center gap-1">
+                          Data/Hora
+                          <i className={`ri-arrow-${logFilters.sortOrder === 'asc' ? 'up' : 'down'}-s-line text-sm ${logFilters.sortOrder ? 'text-red-500' : 'text-gray-400 opacity-0 group-hover:opacity-100'}`}></i>
+                        </div>
+                      </th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase w-[25%]">Usuário</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase w-[20%]">Ação</th>
+                      <th className="px-3 md:px-6 py-3 md:py-4 text-left text-xs font-semibold text-gray-600 uppercase w-[35%]">Detalhes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {systemLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                          <i className="ri-history-line text-4xl block mb-2 opacity-20"></i>
+                          Nenhum registro encontrado com estes filtros.
+                        </td>
+                      </tr>
+                    ) : (
+                      systemLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-3 md:px-6 py-3 md:py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-600">
+                              {new Date(log.created_at).toLocaleString('pt-BR')}
+                            </span>
+                          </td>
+                          <td className="px-3 md:px-6 py-3 md:py-4">
+                            {log.user ? (
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold text-gray-900">{log.user.full_name || log.user.username}</span>
+                                <span className="text-[10px] text-gray-400">ID: {log.user_id?.split('-')[0]}...</span>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-400 italic">Sistema / Anônimo</span>
+                            )}
+                          </td>
+                          <td className="px-3 md:px-6 py-3 md:py-4">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${log.color || 'bg-gray-50 text-gray-500'} flex-shrink-0 shadow-sm`}>
+                                <i className={log.icon || 'ri-information-line'}></i>
+                              </div>
+                              <span className="text-sm font-black text-gray-900 whitespace-nowrap">{log.action}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 md:px-6 py-3 md:py-4">
+                            <p className="text-sm text-gray-600 line-clamp-2">{log.details}</p>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

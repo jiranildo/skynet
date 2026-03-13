@@ -310,3 +310,123 @@ export const getAdminAnalytics = async (role: string, entityId?: string, days: n
     }
     return data;
 };
+
+// --- System Logs ---
+export interface SystemLog {
+    id: string;
+    user_id: string | null;
+    action: string;
+    details: string;
+    color: string;
+    icon: string;
+    created_at: string;
+    user?: {
+        full_name: string;
+        username: string;
+    };
+}
+
+export interface LogFilters {
+    days?: number;
+    startDate?: string;
+    endDate?: string;
+    action?: string;
+    search?: string;
+    userId?: string;
+    sortOrder?: 'asc' | 'desc';
+}
+
+export const getSystemLogs = async (filters: LogFilters = { days: 7 }): Promise<SystemLog[]> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return [];
+
+    let role = session.user.user_metadata?.role?.toLowerCase();
+    let entityId = session.user.user_metadata?.entity_id;
+
+    if (!role || (!entityId && role === 'admin')) {
+        const { data: userRow } = await supabase.from('users').select('role, entity_id').eq('id', session.user.id).single();
+        if (userRow) {
+            role = role || userRow.role?.toLowerCase();
+            entityId = entityId || userRow.entity_id;
+        }
+    }
+
+    if (role !== 'super_admin' && role !== 'admin') return [];
+
+    let query = supabase
+        .from('system_logs')
+        .select('*, user:user_id(full_name, username)');
+
+    // Date Logic
+    if (filters.startDate || filters.endDate) {
+        if (filters.startDate) {
+            query = query.gte('created_at', filters.startDate);
+        }
+        if (filters.endDate) {
+            // Include the full day by setting time to 23:59:59 if it's just a date
+            const end = filters.endDate.includes('T') ? filters.endDate : `${filters.endDate}T23:59:59Z`;
+            query = query.lte('created_at', end);
+        }
+    } else if (filters.days) {
+        query = query.gte('created_at', new Date(Date.now() - (filters.days * 24 * 60 * 60 * 1000)).toISOString());
+    }
+
+    // Action filter
+    if (filters.action && filters.action !== 'all') {
+        query = query.eq('action', filters.action);
+    }
+
+    // User ID filter
+    if (filters.userId && filters.userId !== 'all') {
+        query = query.eq('user_id', filters.userId);
+    }
+
+    // Search filter (searches details, action, or user name)
+    if (filters.search) {
+        // To search by user name across a join efficiently in PostgREST without a view,
+        // we can fetch matching user IDs first and include them in the query.
+        const { data: searchUsers } = await supabase
+            .from('users')
+            .select('id')
+            .or(`full_name.ilike.%${filters.search}%,username.ilike.%${filters.search}%`);
+
+        const matchingUserIds = (searchUsers || []).map(u => u.id);
+
+        let orFilter = `details.ilike.%${filters.search}%,action.ilike.%${filters.search}%`;
+        if (matchingUserIds.length > 0) {
+            orFilter += `,user_id.in.(${matchingUserIds.join(',')})`;
+        }
+
+        query = query.or(orFilter);
+    }
+
+    if (role === 'admin' && entityId) {
+        // Admin sees logs related to users of their entity
+        const { data: entityUsers } = await supabase.from('users').select('id').eq('entity_id', entityId);
+        const userIds = (entityUsers || []).map(u => u.id);
+        query = query.in('user_id', userIds);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: filters.sortOrder === 'asc' });
+
+    if (error) {
+        console.error('Error fetching system logs:', error);
+        return [];
+    }
+
+    return data as SystemLog[];
+};
+
+export const logEvent = async (action: string, details: string, color?: string, icon?: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const { error } = await supabase.from('system_logs').insert({
+        user_id: session?.user?.id,
+        action,
+        details,
+        color,
+        icon
+    });
+
+    if (error) console.error('Error recording system log:', error);
+};

@@ -207,7 +207,7 @@ export default function TripPlanningModal({
   }, [trip.itinerary]);
 
   // Real Destination Info
-  const destinationInfo = useDestinationInfo(trip.destination);
+  const destinationInfo = useDestinationInfo(trip.destination, trip.start_date, trip.end_date);
 
   // AI Generation State
   // AI Generation State
@@ -1393,20 +1393,44 @@ export default function TripPlanningModal({
               </span>
 
               {/* Weather */}
-              <span className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/20">
+              <span className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/20 whitespace-nowrap">
                 {destinationInfo.loading ? (
                   <i className="ri-loader-4-line animate-spin"></i>
                 ) : destinationInfo.weather ? (
-                  <>
-                    <i className={`ri-${destinationInfo.weather.isDay ? 'sun' : 'moon'}-line ${destinationInfo.weather.isDay ? 'text-yellow-300' : 'text-blue-300'}`}></i>
-                    {destinationInfo.weather.temp}°C
-                    <span className="mx-1 opacity-50">•</span>
-                    <i className="ri-drop-line text-blue-300"></i> {destinationInfo.weather.humidity}%
-                  </>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <i className={`ri-${destinationInfo.weather.isDay ? 'sun' : 'moon'}-line ${destinationInfo.weather.isDay ? 'text-yellow-300' : 'text-blue-300'}`}></i>
+                      <span>{destinationInfo.weather.temp}°C</span>
+                      <span className="opacity-50 text-xs">•</span>
+                      <i className="ri-drop-line text-blue-300"></i>
+                      <span className="text-xs">{destinationInfo.weather.humidity}%</span>
+                    </div>
+                    {destinationInfo.forecast && destinationInfo.forecast.length > 0 && (
+                      <div className="text-[10px] text-white/70 flex items-center gap-1 mt-0.5 border-t border-white/10 pt-0.5">
+                        <i className="ri-temp-hot-line text-[8px]"></i>
+                        <span>Previsão: {Math.min(...destinationInfo.forecast.map(f => f.tempMin))}° / {Math.max(...destinationInfo.forecast.map(f => f.tempMax))}°</span>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <span className="text-white/50">--°C</span>
                 )}
               </span>
+
+              {/* Season */}
+              {destinationInfo.season && (
+                <span className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/20 whitespace-nowrap">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <i className={`ri-${destinationInfo.season.name === 'Inverno' ? 'snowy' : destinationInfo.season.name === 'Verão' ? 'sun-cloudy' : destinationInfo.season.name === 'Primavera' ? 'temp-hot' : 'leaf'}-line text-blue-300`}></i>
+                      <span className="font-bold">{destinationInfo.season.name}</span>
+                    </div>
+                    <div className="text-[10px] text-white/70 flex items-center gap-1 mt-0.5 border-t border-white/10 pt-0.5">
+                      <span>{destinationInfo.season.characteristics.join(' • ')}</span>
+                    </div>
+                  </div>
+                </span>
+              )}
 
               {/* Time */}
               <span className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/20">

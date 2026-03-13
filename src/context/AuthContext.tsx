@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
+import { logEvent } from '../services/db/admin';
 
 interface AuthContextType {
     user: User | null;
@@ -126,6 +127,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setUser(session?.user ?? null);
             if (session?.user) {
                 loadUserData(session.user.id);
+                logEvent('Login', 'Usuário acessou o sistema', 'bg-indigo-50 text-indigo-500', 'ri-login-box-line');
             } else {
                 setThemeConfig(null);
                 setPermissions({});
