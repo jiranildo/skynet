@@ -13,6 +13,8 @@ import HeaderActions from '../../components/HeaderActions';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 import CheckInModal from '../../components/CheckInModal';
 
+import Header from '../../components/layout/Header';
+
 export default function CellarPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('my-wines');
@@ -77,66 +79,54 @@ export default function CellarPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 pb-20 md:pb-0">
-      {/* Header */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-purple-100 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14">
-            <button
-              onClick={() => navigate('/')}
-              className="hover:scale-110 transition-transform"
-            >
-              <div className="flex items-center gap-3">
-                <div>
-                  <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                    Minha Adega
-                  </h1>
-                  <p className="text-xs text-gray-500">Gerencie sua coleção de vinhos</p>
-                </div>
-              </div>
-            </button>
+      {/* Top Header Global */}
+      <Header onShowNotifications={() => setShowNotifications(true)} />
 
-            <HeaderActions
-              onShowNotifications={() => setShowNotifications(true)}
-              showMenu={true}
-              onShowMenu={() => setShowMenu(true)}
-            />
-
-            {activeTab === 'my-wines' && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg transition-all duration-300 text-sm font-medium whitespace-nowrap ml-2"
-              >
-                <i className="ri-add-line text-lg"></i>
-                Adicionar Vinho
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="bg-white/60 backdrop-blur-sm border-b border-purple-100 sticky top-14 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-1 overflow-x-auto scrollbar-hide">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 border-b-2 ${activeTab === tab.id
-                  ? 'text-purple-600 border-purple-600'
-                  : 'text-gray-500 border-transparent hover:text-purple-600'
-                  }`}
-              >
-                {tab.icon === 'custom' ? (
-                  <CellarIcon className="w-5 h-5" />
-                ) : (
-                  <i className={`${tab.icon} text-lg`}></i>
-                )}
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Cellar Title Area & Actions */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 mb-2 mt-4">
+         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+             <div className="border-l-4 border-blue-600 pl-4">
+                <h2 className="text-3xl font-extrabold text-[#111827] tracking-tight">
+                  Minha Adega
+                </h2>
+                <p className="text-gray-500 font-medium mt-1">
+                  Gerencie seus vinhos e acesse dicas do sommelier
+                </p>
+             </div>
+             
+             <div className="flex items-center gap-3 self-start md:self-auto">
+               <div className="flex items-center gap-1 bg-white p-1 rounded-xl shadow-sm border border-gray-200">
+                 {tabs.map((tab) => (
+                   <button
+                     key={tab.id}
+                     onClick={() => setActiveTab(tab.id)}
+                     title={tab.label}
+                     className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all ${
+                       activeTab === tab.id 
+                         ? 'bg-purple-50 text-purple-600 shadow-sm' 
+                         : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                     }`}
+                   >
+                     {tab.icon === 'custom' ? (
+                       <CellarIcon className="w-5 h-5" />
+                     ) : (
+                       <i className={`${tab.icon} text-xl`}></i>
+                     )}
+                   </button>
+                 ))}
+               </div>
+               
+               {activeTab === 'my-wines' && (
+                 <button
+                   onClick={() => setShowAddModal(true)}
+                   title="Adicionar Vinho"
+                   className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl shadow hover:shadow-lg transition-all"
+                 >
+                   <i className="ri-add-line text-xl"></i>
+                 </button>
+               )}
+             </div>
+         </div>
       </div>
 
       {/* Content */}

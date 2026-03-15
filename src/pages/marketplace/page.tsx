@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
-import { getMarketplaceTrips, Trip, User, getTrips, updateTrip } from '../../../services/supabase';
-import { getMarketplaceExperiences, acquireExperience, checkExperienceAcquisition, getExperienceReviews } from '../../../services/db/experiences';
-import { Experience, ExperienceReview } from '../../../services/db/types';
-import { UserAvatar } from '../../../components/UserAvatar';
-import { useGamification } from '../../../hooks/queries/useGamification';
-import { useAddTransaction } from '../../../hooks/queries/useWallet';
+import { getMarketplaceTrips, Trip, User, getTrips, updateTrip } from '@/services/supabase';
+import { getMarketplaceExperiences, acquireExperience, checkExperienceAcquisition, getExperienceReviews } from '@/services/db/experiences';
+import { Experience, ExperienceReview } from '@/services/db/types';
+import { UserAvatar } from '@/components/UserAvatar';
+import { useGamification } from '@/hooks/queries/useGamification';
+import { useAddTransaction } from '@/hooks/queries/useWallet';
+import Header from '@/components/layout/Header';
+import NotificationsPanel from '@/pages/home/components/NotificationsPanel';
+import { useUnreadCounts } from '@/hooks/useUnreadCounts';
+import { useAuth } from '@/context/AuthContext';
 
 interface MarketplaceItem {
   id: string; // Trip ID
@@ -43,7 +47,7 @@ interface MarketplaceItem {
   isPurchased?: boolean;
 }
 
-export default function MarketplaceTab() {
+export default function MarketplacePage() {
   const [items, setItems] = useState<MarketplaceItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -61,9 +65,17 @@ export default function MarketplaceTab() {
   const [showAlreadyOwnedModal, setShowAlreadyOwnedModal] = useState(false);
   const [experienceReviews, setExperienceReviews] = useState<ExperienceReview[]>([]);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  
+  // Experience Filter State
+  const [expSearchQuery, setExpSearchQuery] = useState('');
+  const [expFilterCategory, setExpFilterCategory] = useState('all');
+  const [expFilterSeller, setExpFilterSeller] = useState('all');
+  const [expSortBy, setExpSortBy] = useState<'recent' | 'price-low' | 'price-high'>('recent');
 
   // User state
   const [myTrips, setMyTrips] = useState<Trip[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const { refreshCounts } = useUnreadCounts();
 
   const { data: gamification } = useGamification();
   const addTransactionMut = useAddTransaction();
@@ -73,7 +85,7 @@ export default function MarketplaceTab() {
     loadMarketplaceItems();
 
     const loadUserAndTrips = async () => {
-      const { data: { user } } = await import('../../../services/supabase').then(m => m.supabase.auth.getUser());
+      const { data: { user } } = await import('@/services/supabase').then(m => m.supabase.auth.getUser());
       setCurrentUser(user);
       if (user) {
         fetchMyTrips(user.id);
@@ -231,7 +243,7 @@ export default function MarketplaceTab() {
     }
 
     try {
-      const { supabase } = await import('../../../services/supabase');
+      const { supabase } = await import('@/services/supabase');
 
       const { error } = await supabase.rpc('purchase_trip_with_tm', {
         p_trip_id: item.id
@@ -275,6 +287,33 @@ export default function MarketplaceTab() {
           return b.price - a.price;
         default:
           return 0;
+      }
+    });
+
+  const filteredExperiences = experiences
+    .filter(exp => {
+      // Category Filter
+      if (expFilterCategory !== 'all' && exp.category.toLowerCase() !== expFilterCategory.toLowerCase()) return false;
+      
+      // Seller Filter
+      const sellerId = exp.seller?.id || 'unknown';
+      if (expFilterSeller !== 'all' && sellerId !== expFilterSeller) return false;
+
+      // Search Query Filter
+      if (expSearchQuery && !exp.title.toLowerCase().includes(expSearchQuery.toLowerCase()) &&
+        !(exp.location || '').toLowerCase().includes(expSearchQuery.toLowerCase())) return false;
+      
+      return true;
+    })
+    .sort((a, b) => {
+      switch (expSortBy) {
+        case 'price-low':
+          return a.price - b.price;
+        case 'price-high':
+          return b.price - a.price;
+        case 'recent':
+        default:
+          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
       }
     });
 
@@ -324,71 +363,37 @@ export default function MarketplaceTab() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <i className="ri-store-2-line text-purple-600"></i>
-            Marketplace
-          </h2>
-          <p className="text-sm text-gray-500 font-light">
-            Explore roteiros, serviços e experiências da comunidade
-          </p>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="group relative flex items-center justify-center">
-            <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center cursor-help transition-colors hover:bg-blue-100">
-              <i className="ri-shopping-bag-3-line text-lg"></i>
+    <>
+      <Header onShowNotifications={() => setShowNotifications(true)} />
+      <div className="space-y-6 p-4 md:p-8 max-w-7xl mx-auto pb-32">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 mt-4">
+                <div className="border-l-4 border-blue-600 pl-4">
+                    <h2 className="text-3xl font-extrabold text-[#111827] tracking-tight">Marketplace</h2>
+                    <p className="text-gray-500 font-medium mt-1">Divulgue seus roteiros, produtos e serviços.</p>
+                </div>
+                <div className="flex items-center gap-3 self-start md:self-auto">
+                    <div className="flex items-center gap-1 bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100">
+                        <button
+                            onClick={() => setViewMode('trips')}
+                            title="Roteiros Prontos"
+                            className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
+                                viewMode === 'trips' ? 'bg-purple-50 text-purple-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                            }`}
+                        >
+                            <i className="ri-map-pin-user-fill text-2xl"></i>
+                        </button>
+                        <button
+                            onClick={() => setViewMode('experiences')}
+                            title="Serviços e Experiências"
+                            className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
+                                viewMode === 'experiences' ? 'bg-purple-50 text-purple-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                            }`}
+                        >
+                            <i className="ri-compass-3-fill text-2xl"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
-            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-              {items.length} Roteiros Disponíveis
-            </span>
-          </div>
-
-          <div className="group relative flex items-center justify-center">
-            <div className="w-9 h-9 rounded-full bg-yellow-50 text-yellow-500 flex items-center justify-center cursor-help transition-colors hover:bg-yellow-100">
-              <i className="ri-star-smile-line text-lg"></i>
-            </div>
-            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-              {featuredItems.length} em Destaque
-            </span>
-          </div>
-
-          <div className="group relative flex items-center justify-center">
-            <div className="w-9 h-9 rounded-full bg-green-50 text-green-500 flex items-center justify-center cursor-help transition-colors hover:bg-green-100">
-              <i className="ri-wallet-3-line text-lg"></i>
-            </div>
-            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-              Seu Saldo: {userBalance} TM
-            </span>
-          </div>
-
-          <div className="group relative flex items-center justify-center">
-            <div className="w-9 h-9 rounded-full bg-purple-50 text-purple-500 flex items-center justify-center cursor-help transition-colors hover:bg-purple-100">
-              <i className="ri-verified-badge-line text-lg"></i>
-            </div>
-            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-              {items.filter(i => i.seller.verified).length} Vendedores Verificados
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
-        <button
-          onClick={() => setViewMode('trips')}
-          className={`px-4 py-2 rounded-t-xl font-bold transition-all border-b-2 ${viewMode === 'trips' ? 'border-purple-600 text-purple-700 bg-purple-50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
-        >
-          Roteiros Prontos
-        </button>
-        <button
-          onClick={() => setViewMode('experiences')}
-          className={`px-4 py-2 rounded-t-xl font-bold transition-all border-b-2 ${viewMode === 'experiences' ? 'border-purple-600 text-purple-700 bg-purple-50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
-        >
-          Serviços e Experiências
-        </button>
-      </div>
 
       {viewMode === 'trips' ? (
         <>
@@ -662,15 +667,86 @@ export default function MarketplaceTab() {
             Experiências e Serviços Avulsos
           </h3>
 
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative">
+                <i className="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input
+                  type="text"
+                  value={expSearchQuery}
+                  onChange={(e) => setExpSearchQuery(e.target.value)}
+                  placeholder="Buscar serviços..."
+                  className="w-full pl-12 pr-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                />
+              </div>
+
+              <select
+                value={expFilterCategory}
+                onChange={(e) => setExpFilterCategory(e.target.value)}
+                className="px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm capitalize"
+              >
+                <option value="all">Todas Categorias</option>
+                {Array.from(new Set(experiences.map(e => e.category.toLowerCase()))).map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+
+              <select
+                value={expFilterSeller}
+                onChange={(e) => setExpFilterSeller(e.target.value)}
+                className="px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm capitalize"
+              >
+                <option value="all">Todos os Fornecedores</option>
+                {Array.from(
+                  new Map(
+                    experiences
+                      .filter(e => e.seller && e.seller.id)
+                      .map(e => [e.seller?.id, e.seller?.full_name || e.seller?.username || 'Vendedor'])
+                  )
+                ).map(([id, name]) => (
+                  <option key={id} value={id as string}>{name as string}</option>
+                ))}
+              </select>
+
+              <select
+                value={expSortBy}
+                onChange={(e) => setExpSortBy(e.target.value as any)}
+                className="px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+              >
+                <option value="recent">Mais Recentes</option>
+                <option value="price-low">Menor Preço</option>
+                <option value="price-high">Maior Preço</option>
+              </select>
+            </div>
+          </div>
+
           {experiences.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
               <i className="ri-compass-line text-4xl text-purple-300 mb-2"></i>
               <h3 className="text-lg font-bold text-gray-900">Nenhum serviço disponível</h3>
               <p className="text-gray-500">Seja o primeiro fornecedor a oferecer um serviço no Marketplace.</p>
             </div>
+          ) : filteredExperiences.length === 0 ? (
+             <div className="text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-sm mt-4">
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-purple-100 to-pink-100 flex items-center justify-center">
+                  <i className="ri-search-line text-4xl text-purple-500"></i>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Nenhum serviço encontrado</h3>
+                <p className="text-gray-600 mb-6">Tente ajustar os filtros ou buscar por outros termos</p>
+                <button 
+                  onClick={() => {
+                      setExpSearchQuery('');
+                      setExpFilterCategory('all');
+                      setExpFilterSeller('all');
+                  }}
+                  className="px-6 py-2 bg-purple-100 text-purple-700 font-bold rounded-lg hover:bg-purple-200 transition-colors"
+                >
+                    Limpar Filtros
+                </button>
+             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {experiences.map(exp => (
+              {filteredExperiences.map(exp => (
                 <div
                   key={exp.id}
                   onClick={() => { setSelectedExperience(exp); setShowExperienceModal(true); }}
@@ -897,10 +973,10 @@ export default function MarketplaceTab() {
       )}
 
       {showExperienceModal && selectedExperience && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl my-8 overflow-hidden animate-slide-up">
-            <div className="mb-0 overflow-hidden">
-              <div className="relative h-64 md:h-80">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 z-[100]">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-slide-up">
+            <div className="overflow-y-auto flex-1 no-scrollbar">
+              <div className="relative h-64 md:h-80 flex-shrink-0">
                 {[selectedExperience.cover_image, ...(selectedExperience.media_gallery || [])].map((media, idx) => (
                   <div
                     key={idx}
@@ -1138,6 +1214,14 @@ export default function MarketplaceTab() {
           </div>
         </div>
       )}
+
+      {showNotifications && (
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
+          onRefresh={refreshCounts}
+        />
+      )}
     </div>
+    </>
   );
 }

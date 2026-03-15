@@ -37,7 +37,10 @@ export function SettingsContent({ userProfile, onUpdate, onClose, isEmbedded = f
             new_followers: true,
             messages: true,
             trip_updates: true,
-            marketing: false
+            marketing: false,
+            cellar_updates: true,
+            trip_reminders_short: true,
+            trip_reminder_times: userProfile.notification_channels?.trip_reminder_times || ['5 minutos', '1 hora', '2 horas', '4 horas', '8 horas', '1 dia', '3 dias', '5 dias']
         },
         sara_enabled: userProfile.sara_enabled ?? true,
         sara_config: userProfile.sara_config || {
@@ -74,6 +77,14 @@ export function SettingsContent({ userProfile, onUpdate, onClose, isEmbedded = f
             }
         }));
         setHasChanges(true);
+    };
+
+    const handleReminderTimeToggle = (timeLabel: string) => {
+        const currentTimes = formData.notification_channels?.trip_reminder_times || [];
+        const newTimes = currentTimes.includes(timeLabel)
+            ? currentTimes.filter(t => t !== timeLabel)
+            : [...currentTimes, timeLabel];
+        handleNestedChange('notification_channels', 'trip_reminder_times', newTimes);
     };
 
     const handleSubmit = async () => {
@@ -450,6 +461,30 @@ export function SettingsContent({ userProfile, onUpdate, onClose, isEmbedded = f
                                 </div>
                             </div>
 
+                            {/* Cellar Updates */}
+                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-6">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <i className="ri-goblet-line text-red-500 text-lg"></i>
+                                    <h3 className="font-bold text-gray-900">Adega e Vinhos</h3>
+                                </div>
+                                <p className="text-xs text-gray-500 -mt-6 ml-8">Atividades do seu clube de vinhos</p>
+
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-gray-800">Atualizações da Adega</h4>
+                                            <p className="text-xs text-gray-500">Quando amigos adicionam/removem garrafas</p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleNestedChange('notification_channels', 'cellar_updates', !formData.notification_channels?.cellar_updates)}
+                                            className={`w-12 h-6 rounded-full transition-colors relative ${formData.notification_channels?.cellar_updates ? 'bg-red-500' : 'bg-gray-200'}`}
+                                        >
+                                            <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${formData.notification_channels?.cellar_updates ? 'left-6.5 translate-x-1' : 'left-0.5'}`} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Trip Updates */}
                             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-6">
                                 <div className="flex items-center gap-3 mb-2">
@@ -471,6 +506,44 @@ export function SettingsContent({ userProfile, onUpdate, onClose, isEmbedded = f
                                             <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${formData.notification_channels?.trip_updates ? 'left-6.5 translate-x-1' : 'left-0.5'}`} />
                                         </button>
                                     </div>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-gray-800">Lembretes Dinâmicos do Roteiro</h4>
+                                            <p className="text-xs text-gray-500">Avisos de 5 dias até 5 minutos de eventos</p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleNestedChange('notification_channels', 'trip_reminders_short', !formData.notification_channels?.trip_reminders_short)}
+                                            className={`w-12 h-6 rounded-full transition-colors relative ${formData.notification_channels?.trip_reminders_short ? 'bg-blue-500' : 'bg-gray-200'}`}
+                                        >
+                                            <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${formData.notification_channels?.trip_reminders_short ? 'left-6.5 translate-x-1' : 'left-0.5'}`} />
+                                        </button>
+                                    </div>
+
+                                    {/* Opções de tempo específicas ativadas apenas se a master estiver on */}
+                                    {formData.notification_channels?.trip_reminders_short && (
+                                        <div className="pl-6 pt-2 pb-4 border-l-2 border-gray-100 ml-2 space-y-3 animate-fadeIn">
+                                            <h5 className="text-xs font-bold text-gray-700">Horários de Antecedência</h5>
+                                            <div className="flex flex-wrap gap-2">
+                                                {['5 minutos', '1 hora', '2 horas', '4 horas', '8 horas', '1 dia', '3 dias', '5 dias'].map((timeLabel) => {
+                                                    const isSelected = formData.notification_channels?.trip_reminder_times?.includes(timeLabel);
+                                                    return (
+                                                        <button
+                                                            key={timeLabel}
+                                                            onClick={() => handleReminderTimeToggle(timeLabel)}
+                                                            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
+                                                                isSelected 
+                                                                ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' 
+                                                                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50'
+                                                            }`}
+                                                        >
+                                                            {isSelected && <i className="ri-check-line mr-1"></i>}
+                                                            {timeLabel}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h4 className="text-sm font-bold text-gray-800">Marketing</h4>

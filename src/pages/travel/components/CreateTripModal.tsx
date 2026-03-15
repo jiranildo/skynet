@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { createTrip } from '@/services/supabase';
+import ItineraryCatalogModal from './ItineraryCatalogModal';
+import type { ItineraryCatalog } from '@/services/db/itinerary_catalog';
+import { useEffect } from 'react';
 
 interface CreateTripModalProps {
     isOpen: boolean;
@@ -11,6 +14,8 @@ interface CreateTripModalProps {
 export default function CreateTripModal({ isOpen, onClose, onSuccess }: CreateTripModalProps) {
     const { user } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
+    const [showCatalogSelection, setShowCatalogSelection] = useState(true);
+    const [selectedCatalogItinerary, setSelectedCatalogItinerary] = useState<any>(null);
 
     // Create Trip Form State
     const [tripForm, setTripForm] = useState({
@@ -39,6 +44,34 @@ export default function CreateTripModal({ isOpen, onClose, onSuccess }: CreateTr
         { id: 'high', name: 'Luxo', range: 'Acima de R$ 8.000', color: 'text-purple-500', value: 15000 }
     ];
 
+    useEffect(() => {
+        if (isOpen) {
+            setShowCatalogSelection(true);
+            setSelectedCatalogItinerary(null);
+            setTripForm({
+                name: '',
+                destination: '',
+                startDate: '',
+                endDate: '',
+                travelers: 2,
+                tripType: 'leisure',
+                budget: 'medium',
+                description: ''
+            });
+        }
+    }, [isOpen]);
+
+    const handleSelectCatalog = (catalog: ItineraryCatalog) => {
+        setSelectedCatalogItinerary(catalog.itinerary_data);
+        setTripForm(prev => ({
+            ...prev,
+            name: catalog.title,
+            destination: catalog.destination,
+            description: catalog.description || prev.description
+        }));
+        setShowCatalogSelection(false);
+    };
+
     const handleCreateTrip = async () => {
         // Validate form
         if (!tripForm.name || !tripForm.destination || !tripForm.startDate || !tripForm.endDate) {
@@ -66,7 +99,8 @@ export default function CreateTripModal({ isOpen, onClose, onSuccess }: CreateTr
                 trip_type: tripForm.tripType as any,
                 budget: budgetValue,
                 description: tripForm.description,
-                status: 'planning'
+                status: 'planning',
+                itinerary: selectedCatalogItinerary
             });
 
             // Reset form and close modal
@@ -94,6 +128,17 @@ export default function CreateTripModal({ isOpen, onClose, onSuccess }: CreateTr
     };
 
     if (!isOpen) return null;
+
+    if (showCatalogSelection) {
+        return (
+            <ItineraryCatalogModal 
+                isOpen={isOpen} 
+                onClose={onClose} 
+                onSelectCatalog={handleSelectCatalog} 
+                onStartFromScratch={() => setShowCatalogSelection(false)} 
+            />
+        );
+    }
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">

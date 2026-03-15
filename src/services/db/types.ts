@@ -72,6 +72,9 @@ export interface User {
     messages?: boolean;
     trip_updates?: boolean;
     marketing?: boolean;
+    cellar_updates?: boolean;
+    trip_reminders_short?: boolean;
+    trip_reminder_times?: string[];
   };
   sara_enabled?: boolean;
   sara_config?: {
@@ -297,6 +300,7 @@ export interface Follower {
   id: string;
   follower_id: string;
   following_id: string;
+  status?: 'pending' | 'accepted';
   created_at: string;
 }
 

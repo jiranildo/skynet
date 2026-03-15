@@ -13,7 +13,6 @@ import InsuranceTab from './components/InsuranceTab';
 import MyTripsTab from './components/MyTripsTab';
 import FavoritesTab from './components/FavoritesTab';
 import OffersTab from './components/OffersTab';
-import MarketplaceTab from './components/MarketplaceTab';
 import BlogsTab from './components/BlogsTab';
 import { useAuth } from '../../context/AuthContext';
 
@@ -22,12 +21,11 @@ import CreatePostModal from '../home/components/CreatePostModal';
 import NotificationsPanel from '../home/components/NotificationsPanel';
 import GamificationWidget from '../../components/GamificationWidget';
 import WalletWidget from '../../components/WalletWidget';
-import HeaderActions from '../../components/HeaderActions';
 import Header from '../../components/layout/Header';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 import CheckInModal from '../../components/CheckInModal';
 
-type TabType = 'search' | 'ai-search' | 'flights' | 'hotels' | 'packages' | 'cars' | 'cruises' | 'tickets' | 'transfer' | 'insurance' | 'mytrips' | 'favorites' | 'offers' | 'marketplace' | 'blogs';
+type TabType = 'search' | 'ai-search' | 'flights' | 'hotels' | 'packages' | 'cars' | 'cruises' | 'tickets' | 'transfer' | 'insurance' | 'mytrips' | 'favorites' | 'offers' | 'blogs';
 
 export default function TravelPage() {
   const { hasPermission } = useAuth();
@@ -37,12 +35,7 @@ export default function TravelPage() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get('tab');
-    if (tabParam && ['ai-search', 'flights', 'hotels', 'packages', 'cars', 'cruises', 'tickets', 'transfer', 'insurance', 'mytrips', 'favorites', 'offers', 'marketplace', 'blogs'].includes(tabParam)) {
-      // Permission check for sensitive tabs
-      if (tabParam === 'marketplace' && !hasPermission('can_access_marketplace')) {
-        setActiveTab('mytrips');
-        return;
-      }
+    if (tabParam && ['ai-search', 'flights', 'hotels', 'packages', 'cars', 'cruises', 'tickets', 'transfer', 'insurance', 'mytrips', 'favorites', 'offers', 'blogs'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     }
   }, [location.search, hasPermission]);
@@ -60,7 +53,6 @@ export default function TravelPage() {
 
   const tabs = [
     { id: 'mytrips', label: 'Minhas Viagens', icon: 'ri-compass-3-line' },
-    { id: 'marketplace', label: 'Marketplace', icon: 'ri-store-line' },
     { id: 'flights', label: 'Voos', icon: 'ri-flight-takeoff-line' },
     { id: 'hotels', label: 'Hotéis', icon: 'ri-hotel-line' },
     { id: 'packages', label: 'Pacotes', icon: 'ri-suitcase-line' },
@@ -71,10 +63,7 @@ export default function TravelPage() {
     { id: 'insurance', label: 'Seguro', icon: 'ri-shield-check-line' },
     { id: 'favorites', label: 'Favoritos', icon: 'ri-heart-line' },
     { id: 'offers', label: 'Ofertas', icon: 'ri-price-tag-3-line' },
-  ].filter(tab => {
-    if (tab.id === 'marketplace') return hasPermission('can_access_marketplace');
-    return true;
-  });
+  ];
 
   const menuItems = [
     { id: 'blog', icon: 'ri-article-line', label: 'Blogs', action: () => alert('Em construção.'), permission: 'can_manage_blog' },
@@ -119,8 +108,6 @@ export default function TravelPage() {
       case 'mytrips': return <MyTripsTab initialSubTab={mytripsSubTab} onCreateTrip={() => setShowCreateTripModal(true)} />;
       case 'favorites': return <FavoritesTab />;
       case 'offers': return <OffersTab />;
-      case 'marketplace':
-        return hasPermission('can_access_marketplace') ? <MarketplaceTab /> : <MyTripsTab initialSubTab={mytripsSubTab} onCreateTrip={() => setShowCreateTripModal(true)} />;
       case 'blogs': return <BlogsTab />;
       default: return <MyTripsTab initialSubTab={mytripsSubTab} onCreateTrip={() => setShowCreateTripModal(true)} />;
     }
@@ -129,7 +116,7 @@ export default function TravelPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-teal-50 to-emerald-50">
       {/* Header */}
-      <Header onShowNotifications={() => setShowNotifications(!showNotifications)} />
+      <Header onShowNotifications={() => setShowNotifications(true)} />
 
       {/* Menu Lateral (Drawer) */}
       {showMenu && (
@@ -196,62 +183,10 @@ export default function TravelPage() {
         </>
       )}
 
-      {/* Tabs Carousel */}
-      <div className="sticky top-[65px] md:top-[69px] bg-white border-b border-gray-200 z-[30]">
-        <div className="overflow-x-auto scrollbar-hide">
-          <div className="flex gap-1.5 md:gap-2 px-3 md:px-4 py-2.5 md:py-3 min-w-max">
-            {tabs.map((tab) => {
-              const isActive = tab.id === 'mytrips' || tab.id === 'marketplace';
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    if (!isActive) {
-                      alert('Em construção.');
-                      return;
-                    }
-                    setActiveTab(tab.id as TabType);
-                    if (tab.id === 'mytrips') {
-                      setMytripsSubTab('trips');
-                    }
-                  }}
-                  disabled={!isActive}
-                  className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-full whitespace-nowrap transition-all text-xs md:text-sm ${activeTab === tab.id
-                    ? 'bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 text-white shadow-md'
-                    : isActive
-                      ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      : 'bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
-                    }`}
-                >
-                  <i className={`${tab.icon} text-base md:text-lg ${activeTab === tab.id
-                    ? ''
-                    : !isActive ? 'text-gray-300' :
-                      tab.id === 'search' ? 'text-orange-500' :
-                        tab.id === 'mytrips' ? 'text-teal-500' :
-                          tab.id === 'blogs' ? 'text-purple-500' :
-                            tab.id === 'marketplace' ? 'text-emerald-500' :
-                              tab.id === 'flights' ? 'text-blue-500' :
-                                tab.id === 'hotels' ? 'text-pink-500' :
-                                  tab.id === 'packages' ? 'text-purple-500' :
-                                    tab.id === 'cars' ? 'text-red-500' :
-                                      tab.id === 'cruises' ? 'text-cyan-500' :
-                                        tab.id === 'tickets' ? 'text-yellow-500' :
-                                          tab.id === 'transfer' ? 'text-green-500' :
-                                            tab.id === 'insurance' ? 'text-indigo-500' :
-                                              tab.id === 'favorites' ? 'text-rose-500' :
-                                                tab.id === 'offers' ? 'text-amber-500' : ''
-                    }`}></i>
-                  <span className="font-medium">{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
 
       {/* Content */}
       <div className="pb-32 md:pb-6">
-        <div className="px-3 sm:px-4 md:px-6 py-4 sm:py-6">
+        <div className="px-3 sm:px-4 md:px-6 py-4 sm:py-6 max-w-7xl mx-auto w-full">
           {renderTabContent()}
         </div>
       </div>
@@ -319,18 +254,6 @@ export default function TravelPage() {
                 ></div>
                 <div className="absolute bottom-full right-0 mb-2 w-auto bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[80] animate-slideUp">
                   <div className="flex flex-col gap-2 p-3">
-                    {hasPermission('can_access_marketplace') && (
-                      <button
-                        onClick={() => {
-                          setActiveTab('marketplace');
-                          setShowMenuDropdown(false);
-                        }}
-                        className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-                        title="Marketplace"
-                      >
-                        <i className="ri-store-2-fill text-white text-base"></i>
-                      </button>
-                    )}
                     <button
                       onClick={() => {
                         alert('Em construção.');

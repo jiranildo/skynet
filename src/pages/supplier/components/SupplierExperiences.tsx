@@ -4,7 +4,12 @@ import { getSupplierExperiences, deleteExperience } from '../../../services/db/e
 import { Experience } from '../../../services/db/types';
 import ExperienceModal from './ExperienceModal';
 
-export default function SupplierExperiences() {
+interface SupplierExperiencesProps {
+    isCreating?: boolean;
+    onCloseCreate?: () => void;
+}
+
+export default function SupplierExperiences({ isCreating, onCloseCreate }: SupplierExperiencesProps) {
     const { user } = useAuth();
     const [experiences, setExperiences] = useState<Experience[]>([]);
     const [loading, setLoading] = useState(true);
@@ -27,6 +32,15 @@ export default function SupplierExperiences() {
         setEditingExperience(null);
         setShowModal(true);
     };
+
+    useEffect(() => {
+        if (isCreating) {
+            handleCreate();
+            setTimeout(() => {
+                if (onCloseCreate) onCloseCreate();
+            }, 100);
+        }
+    }, [isCreating, onCloseCreate]);
 
     const handleEdit = (exp: Experience) => {
         setEditingExperience(exp);
@@ -54,24 +68,6 @@ export default function SupplierExperiences() {
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <div>
-                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                        <i className="ri-store-3-fill text-purple-500"></i>
-                        Serviços e Experiências
-                    </h2>
-                    <p className="text-sm text-gray-500">
-                        Gerencie tudo que você oferece no Marketplace para os viajantes.
-                    </p>
-                </div>
-                <button
-                    onClick={handleCreate}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-colors shadow-sm"
-                >
-                    <i className="ri-add-line"></i>
-                    Novo Serviço
-                </button>
-            </div>
 
             {experiences.length === 0 ? (
                 <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">

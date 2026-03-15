@@ -216,12 +216,12 @@ export default function MyWinesTab({ searchQuery, onAddWine }: MyWinesTabProps) 
   const suggestedWines = useMemo(() => {
     if (!matchMoment || !matchFood) return [];
 
-    let matches: { wine: CellarWine; score: number }[] = cellarFilteredAndSorted.map(w => ({ wine: w, score: 0 }));
+    const matches: { wine: CellarWine; score: number }[] = cellarFilteredAndSorted.map(w => ({ wine: w, score: 0 }));
 
     // Scoring passes
     for (let i = 0; i < matches.length; i++) {
       let score = matches[i].score;
-      let w = matches[i].wine;
+      const w = matches[i].wine;
       const t = w.type;
       const price = w.price || 0;
       const rating = w.rating || 0;

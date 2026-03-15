@@ -45,6 +45,9 @@ export default function Sidebar({
         if (hasPermission('can_access_travel')) {
             items.push({ id: 'travel', label: 'Viagens', icon: 'flight-takeoff', path: '/travel' });
         }
+        if (hasPermission('can_access_marketplace')) {
+            items.push({ id: 'marketplace', label: 'Marketplace', icon: 'store-2', path: '/marketplace' });
+        }
         if (hasPermission('can_access_drinks_food')) {
             items.push({ id: 'drinks-food', label: 'Drinks & Food', icon: 'restaurant-2', path: '/drinks-food' });
         }
@@ -352,7 +355,7 @@ export default function Sidebar({
                     <div className={`w-8 h-8 flex items-center justify-center rounded-lg ${isReordering ? 'bg-white/20' : 'bg-gray-50'}`}>
                         <i className={`${isReordering ? 'ri-check-line' : 'ri-equalizer-line'} text-lg`}></i>
                     </div>
-                    {!isCollapsed && <span className="text-sm font-bold">{isReordering ? 'Salvar Ordem' : 'Meu Espaço'}</span>}
+                    {!isCollapsed && <span className="text-sm font-bold">{isReordering ? 'Salvar Ordem' : 'Ordenar Menu'}</span>}
                 </button>
             </div>
 

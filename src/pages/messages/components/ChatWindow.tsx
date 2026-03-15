@@ -104,7 +104,7 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
         const handleNewMessage = async (msg: any) => {
             if (msg.sender_id === currentUser?.id) return; // Already handled by local state in handleSend
 
-            let chatMsg = msg as ChatMessage;
+            const chatMsg = msg as ChatMessage;
 
             // Real-time payload doesn't include joined sender details
             if (!chatMsg.sender && chatMsg.sender_id) {
@@ -424,12 +424,7 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
     return (
         <div
             ref={containerRef}
-            className="fixed md:relative flex flex-col bg-[#EFE7DD] z-[100] md:z-0 overflow-hidden"
-            style={{
-                position: window.innerWidth < 768 ? 'absolute' : (type === 'direct' ? 'fixed' : 'relative'),
-                inset: window.innerWidth < 768 ? '0' : (type === 'direct' ? '0' : 'unset'),
-                height: window.innerWidth < 768 ? '100%' : '100%'
-            }}
+            className="fixed inset-0 md:relative md:inset-auto w-full h-full flex flex-col bg-[#EFE7DD] z-[100] md:z-0 overflow-hidden"
         >
             {/* WhatsApp Header */}
             <div className="h-[60px] px-2 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between flex-shrink-0 z-20">
@@ -491,7 +486,7 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
             )}
 
             {/* Messages Area with Doodle Background */}
-            <div className="flex-1 overflow-y-auto relative scroll-smooth no-scrollbar"
+            <div className="flex-1 overflow-y-auto relative scroll-smooth custom-scrollbar"
                 style={{
                     backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")',
                     backgroundRepeat: 'repeat',
@@ -511,7 +506,7 @@ export default function ChatWindow({ chatId, type, onBack }: ChatWindowProps) {
                                 <div key={msg.id} className="contents">
                                     {showDateSeparator && (
                                         <div className="flex justify-center my-4 sticky top-2 z-20">
-                                            <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg text-[12px] text-[#54656f] shadow-sm uppercase font-medium">
+                                            <span className="bg-white/95 px-4 py-1.5 rounded-full text-[12px] text-gray-500 shadow-sm uppercase font-semibold tracking-wide">
                                                 {formatDateSeparator(msg.created_at)}
                                             </span>
                                         </div>
@@ -736,24 +731,14 @@ function MessageBubble({
                 {/* Bubble */}
                 <div
                     className={`
-                        px-2 pt-1 pb-1 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] text-[15px] leading-[20px] text-[#111b21] relative rounded-[8px]
+                        px-3 pt-2 pb-1.5 shadow-sm text-[15px] leading-[22px] text-[#111b21] relative min-w-[100px]
                         ${isMine
-                            ? 'bg-[#d9fdd3] rounded-tr-none ml-6'
-                            : 'bg-white rounded-tl-none mr-6'
+                            ? 'bg-[#dcf8c6] rounded-2xl rounded-tr-md ml-6'
+                            : 'bg-white rounded-2xl rounded-tl-md mr-6'
                         }
                     `}
                     onContextMenu={handleContextMenu}
                 >
-                    {/* Tiny Triangle SVG for bubble tail */}
-                    {isMine ? (
-                        <svg viewBox="0 0 8 13" height="13" width="8" className="absolute -right-[7px] top-0 text-[#d9fdd3] fill-current">
-                            <path d="M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z"></path>
-                        </svg>
-                    ) : (
-                        <svg viewBox="0 0 8 13" height="13" width="8" className="absolute -left-[7px] top-0 text-white fill-current">
-                            <path d="M1.533 3.568L8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z"></path>
-                        </svg>
-                    )}
 
                     {/* Sender Name in groups */}
                     {!isMine && (type === 'group' || type === 'community') && (
@@ -809,13 +794,13 @@ function MessageBubble({
                         </div>
 
                         {/* Metadata (Time & Check) - Absolute Position Bottom Right */}
-                        <div className="absolute right-0 bottom-[-2px] flex items-center gap-1 h-5 px-0.5">
-                            <span className="text-[11px] text-[#667781] leading-none mb-0.5">
+                        <div className="absolute right-0 bottom-0 flex items-center gap-1 h-5 px-1">
+                            <span className="text-[10px] text-gray-500 font-medium leading-none mb-0.5">
                                 {format(new Date(message.created_at), 'HH:mm')}
                             </span>
                             {isMine && (
-                                <span className={message.read_at ? 'text-[#53bdeb]' : 'text-[#8696a0]'}>
-                                    <svg viewBox="0 0 16 15" width="16" height="15" className="fill-current">
+                                <span className={message.read_at ? 'text-[#4ade80]' : 'text-gray-400'}>
+                                    <svg viewBox="0 0 16 15" width="16" height="13" className="fill-current">
                                         <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.283a.32.32 0 0 0 .397.04l.056-.041 6.186-7.79a.319.319 0 0 0-.067-.502l.613-.343zM4.61 7.227l-.482-.372a.365.365 0 0 0-.51.063L.266 11.238a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.283a.32.32 0 0 0 .397.04l.056-.041 3.518-3.085a.319.319 0 0 0 .022.257l.64-.176z"></path>
                                     </svg>
                                 </span>

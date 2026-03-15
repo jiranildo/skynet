@@ -244,7 +244,7 @@ export const searchAgentClients = async (queryTerm: string): Promise<{ id: strin
     // If agent has no entity, maybe they shouldn't see anyone or just fallback. Let's let them search all their travelers.
     // However, the rule states to show "users and groups registered in the platform and the agent to associate".
     // A broader query:
-    let q = supabase
+    const q = supabase
         .from('users')
         .select('id, full_name, email, avatar_url')
         .or(`full_name.ilike.%${queryTerm}%,email.ilike.%${queryTerm}%`)

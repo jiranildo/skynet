@@ -52,6 +52,58 @@ export const getNotifications = async (userId: string) => {
 };
 
 export const createNotification = async (notification: Omit<Notification, 'id' | 'created_at' | 'is_read'>) => {
+    try {
+        // 1. Fetch recipient's notification preferences
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('notification_channels')
+            .eq('id', notification.user_id)
+            .single();
+
+        if (!userError && userData?.notification_channels) {
+            const channels = userData.notification_channels as any;
+            let shouldSend = true;
+
+            switch (notification.type) {
+                case 'like':
+                    shouldSend = channels.likes !== false;
+                    break;
+                case 'comment':
+                    shouldSend = channels.comments !== false;
+                    break;
+                case 'follow':
+                case 'follow_request_accepted':
+                case 'mention':
+                    shouldSend = channels.new_followers !== false; // Mapping mention to followers setting or default
+                    break;
+                case 'message':
+                case 'invite':
+                    shouldSend = channels.messages !== false;
+                    break;
+                case 'trip':
+                case 'trip_updates':
+                    shouldSend = channels.trip_updates !== false;
+                    break;
+                case 'marketing':
+                    shouldSend = channels.marketing !== false;
+                    break;
+            }
+
+            if (!shouldSend) {
+                console.log(`[Notification] Skipped ${notification.type} due to user preferences`);
+                // Return a dummy notification to satisfy return type and prevent cascade errors
+                return {
+                    id: `skipped_${Date.now()}`,
+                    ...notification,
+                    created_at: new Date().toISOString(),
+                    is_read: true
+                } as Notification;
+            }
+        }
+    } catch (e) {
+        console.error("Error checking notification preferences:", e);
+    }
+
     const { data, error } = await supabase
         .from('notifications')
         .insert(notification)

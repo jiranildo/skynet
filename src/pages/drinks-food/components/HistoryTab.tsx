@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import AddExperienceModal from './AddExperienceModal';
 import ExperienceDetailModal from './ExperienceDetailModal';
+import EditExperienceModal from './EditExperienceModal';
 import { FoodExperience, foodExperienceService } from '../../../services/supabase';
 
 interface HistoryTabProps {
@@ -11,6 +12,7 @@ export default function HistoryTab({ lastUpdated }: HistoryTabProps) {
   const [experiences, setExperiences] = useState<FoodExperience[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedExperience, setSelectedExperience] = useState<FoodExperience | null>(null);
+  const [editingExperience, setEditingExperience] = useState<FoodExperience | null>(null);
 
   // Filters & Controls States
   const [filterType, setFilterType] = useState<'all' | 'restaurant' | 'wine' | 'dish' | 'drink'>('all');
@@ -62,6 +64,8 @@ export default function HistoryTab({ lastUpdated }: HistoryTabProps) {
 
   const handleUpdateExperience = (updated: FoodExperience) => {
     setExperiences(experiences.map(exp => exp.id === updated.id ? updated : exp));
+    if (selectedExperience?.id === updated.id) setSelectedExperience(updated);
+    setEditingExperience(null);
   };
 
   // Stats Calculation
@@ -121,7 +125,7 @@ export default function HistoryTab({ lastUpdated }: HistoryTabProps) {
   }
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6">
       {/* Stats Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <div className="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-orange-100 relative overflow-hidden">
@@ -159,66 +163,57 @@ export default function HistoryTab({ lastUpdated }: HistoryTabProps) {
       </div>
 
       {/* Controls Bar */}
-      <div className="bg-white rounded-2xl shadow-sm p-2 sticky top-[114px] md:top-[160px] z-20 mx-1">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="flex-1 relative">
-            <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+      <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="relative">
+            <i className="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
             <input
               type="text"
-              placeholder="Buscar..."
+              placeholder="Buscar experiências..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-orange-100 transition-all"
+              className="w-full pl-12 pr-4 py-2.5 bg-gray-50 border border-transparent rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all outline-none"
             />
           </div>
 
-          <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white shadow text-orange-500' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              <i className="ri-grid-fill"></i>
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white shadow text-orange-500' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              <i className="ri-list-check"></i>
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-4 overflow-x-auto scrollbar-hide pb-1">
-          <div className="flex gap-2">
-            {[
-              { id: 'all', label: 'Todos' },
-              { id: 'restaurant', label: 'Restaurantes' },
-              { id: 'wine', label: 'Vinhos' },
-              { id: 'dish', label: 'Pratos' },
-              { id: 'drink', label: 'Drinks' }
-            ].map(type => (
-              <button
-                key={type.id}
-                onClick={() => setFilterType(type.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${filterType === type.id
-                  ? 'bg-orange-500 text-white shadow-md'
-                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-                  }`}
-              >
-                {type.label}
-              </button>
-            ))}
-          </div>
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value as any)}
+            className="px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+          >
+            <option value="all">Todas as Categorias</option>
+            <option value="restaurant">Restaurantes</option>
+            <option value="wine">Vinhos</option>
+            <option value="dish">Pratos</option>
+            <option value="drink">Drinks</option>
+          </select>
 
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="bg-transparent text-xs font-medium text-gray-500 border-none focus:ring-0 pr-8 cursor-pointer hover:text-orange-500 transition-colors"
+            className="px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 text-sm"
           >
             <option value="date">Mais Recentes</option>
             <option value="rating">Melhor Avaliação</option>
             <option value="price">Maior Preço</option>
           </select>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-gray-100 pt-4">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-orange-50 text-orange-600' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'}`}
+            >
+              <i className="ri-grid-fill"></i>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-orange-50 text-orange-600' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'}`}
+            >
+              <i className="ri-list-check"></i>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -253,14 +248,14 @@ export default function HistoryTab({ lastUpdated }: HistoryTabProps) {
             <div
               key={exp.id}
               onClick={() => setSelectedExperience(exp)}
-              className={`bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all cursor-pointer group hover:-translate-y-1 ${viewMode === 'list' ? 'flex items-center' : ''
+              className={`bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all cursor-pointer group hover:-translate-y-1 ${viewMode === 'list' ? 'flex items-center' : 'flex flex-col h-full'
                 }`}
             >
-              <div className={`relative overflow-hidden ${viewMode === 'list' ? 'w-32 h-32 flex-shrink-0' : 'aspect-[4/3]'}`}>
+              <div className={`relative overflow-hidden flex-shrink-0 ${viewMode === 'list' ? 'w-24 h-24 sm:w-32 sm:h-32 m-3 rounded-xl' : 'w-full aspect-[4/3] sm:h-48 sm:aspect-auto'}`}>
                 <img
                   src={exp.image_url || `https://readdy.ai/api/search-image?query=${exp.type}-food-drink-experience&width=400&height=300&seq=${exp.type}-${exp.id}`}
                   alt={exp.name}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                 />
                 <div className="absolute top-2 right-2 flex gap-1">
                   {exp.would_return && (
@@ -281,20 +276,31 @@ export default function HistoryTab({ lastUpdated }: HistoryTabProps) {
 
               <div className="p-4 flex-1">
                 <div className="flex items-start justify-between mb-2">
-                  <div>
+                  <div className="flex-1 pr-2">
                     <span className="text-[10px] font-bold tracking-wider text-orange-500 uppercase mb-1 block">
                       {exp.type}
                     </span>
                     <h3 className="font-bold text-gray-900 leading-tight mb-1 line-clamp-1">{exp.name}</h3>
                   </div>
-                  {viewMode === 'list' && (
-                    <button
-                      onClick={(e) => handleDeleteExperience(e, exp.id!)}
-                      className="text-gray-300 hover:text-red-500 transition-colors p-1"
-                    >
-                      <i className="ri-delete-bin-line"></i>
-                    </button>
-                  )}
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                     <button
+                        onClick={(e) => {
+                           e.stopPropagation();
+                           setEditingExperience(exp);
+                        }}
+                        className="text-gray-400 hover:text-blue-500 transition-colors p-1"
+                        title="Editar"
+                     >
+                        <i className="ri-edit-line text-lg"></i>
+                     </button>
+                     <button
+                       onClick={(e) => handleDeleteExperience(e, exp.id!)}
+                       className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                       title="Excluir"
+                     >
+                       <i className="ri-delete-bin-line text-lg"></i>
+                     </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-1 mb-3">
@@ -336,6 +342,14 @@ export default function HistoryTab({ lastUpdated }: HistoryTabProps) {
         <ExperienceDetailModal
           experience={selectedExperience}
           onClose={() => setSelectedExperience(null)}
+          onUpdate={handleUpdateExperience}
+        />
+      )}
+
+      {editingExperience && (
+        <EditExperienceModal
+          experience={editingExperience}
+          onClose={() => setEditingExperience(null)}
           onUpdate={handleUpdateExperience}
         />
       )}

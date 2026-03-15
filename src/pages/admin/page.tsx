@@ -9,9 +9,16 @@ import type { Role } from '../../services/db/types';
 import AdminUserModal from './components/AdminUserModal';
 import AdminEntityModal from './components/AdminEntityModal';
 import AdminRoleModal from './components/AdminRoleModal';
+import ItineraryCatalogTab from './components/ItineraryCatalogTab';
+import AdminTripsTab from './components/AdminTripsTab';
+import AdminGamificationTab from './components/AdminGamificationTab';
+import AdminWalletTab from './components/AdminWalletTab';
 import { AlertModal } from '../../components/AlertModal';
 import { ConfirmationModal } from '../../components/ConfirmationModal';
 import type { User as DBUser, Entity as DBEntity, Experience } from '../../services/db/types';
+import HeaderActions from '../../components/HeaderActions';
+import NotificationsPanel from '../home/components/NotificationsPanel';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 
 type MarketplaceItem = AdminMarketplaceItem;
 
@@ -76,9 +83,11 @@ export default function AdminPage() {
   const { user, loading, signOut, hasPermission, isSuperAdmin } = useAuth();
   const [isAdminChecked, setIsAdminChecked] = useState(false);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'entities' | 'marketplace' | 'reports' | 'analytics' | 'access_logs' | 'roles'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'entities' | 'marketplace' | 'reports' | 'analytics' | 'itinerary_catalog' | 'access_logs' | 'roles' | 'trips' | 'gamification' | 'wallet'>('dashboard');
   const [users, setUsers] = useState<User[]>([]);
   const [entities, setEntities] = useState<DBEntity[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const { refreshCounts } = useUnreadCounts();
   const [roles, setRoles] = useState<Role[]>([]);
   const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
@@ -179,7 +188,7 @@ export default function AdminPage() {
   async function loadData() {
     console.log('[loadData] Starting loadData...');
     let loadedUsers: User[] = [];
-    let isSuper = false;
+    const isSuper = false;
     let entityId = user?.user_metadata?.entity_id;
 
     try {
@@ -476,25 +485,7 @@ export default function AdminPage() {
             </div>
 
             <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-              <button className="px-2 md:px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-all flex items-center gap-1 md:gap-2">
-                <i className="ri-notification-3-line text-base md:text-lg"></i>
-                <span className="text-xs md:text-sm font-medium hidden sm:inline">Notificações</span>
-                {stats.pendingReports > 0 && (
-                  <span className="px-1.5 md:px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                    {stats.pendingReports}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={async () => {
-                  await signOut();
-                  navigate('/admin/login');
-                }}
-                className="px-2 md:px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-1 md:gap-2"
-              >
-                <i className="ri-logout-box-r-line text-base md:text-lg"></i>
-                <span className="text-xs md:text-sm font-medium hidden sm:inline">Sair</span>
-              </button>
+              <HeaderActions onShowNotifications={() => setShowNotifications(true)} />
             </div>
           </div>
         </div>
@@ -510,8 +501,12 @@ export default function AdminPage() {
               { id: 'roles' as const, label: 'Perfis', icon: 'ri-shield-keyhole-line' },
               { id: 'entities' as const, label: 'Empresas', icon: 'ri-building-4-line' },
               { id: 'marketplace' as const, label: 'Marketplace', icon: 'ri-store-line' },
+              { id: 'trips' as const, label: 'Viagens e Experiências', icon: 'ri-flight-takeoff-line' },
+              { id: 'gamification' as const, label: 'Gameficação', icon: 'ri-trophy-line' },
+              { id: 'wallet' as const, label: 'Carteira', icon: 'ri-wallet-3-line' },
               { id: 'reports' as const, label: 'Denúncias', icon: 'ri-alarm-warning-line', badge: stats.pendingReports },
               { id: 'analytics' as const, label: 'Analytics', icon: 'ri-line-chart-line' },
+              { id: 'itinerary_catalog' as const, label: 'Catálogo de Roteiros', icon: 'ri-booklet-line' },
               { id: 'access_logs' as const, label: 'Log de Acesso', icon: 'ri-history-line' }
             ].map(tab => (
               <button
@@ -1498,6 +1493,20 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {/* Itinerary Catalog Tab */}
+        {activeTab === 'itinerary_catalog' && (
+          <ItineraryCatalogTab showAlert={showAlert} showConfirm={showConfirm} />
+        )}
+
+        {/* Trips Tab */}
+        {activeTab === 'trips' && <AdminTripsTab />}
+
+        {/* Gamification Tab */}
+        {activeTab === 'gamification' && <AdminGamificationTab />}
+
+        {/* Wallet Tab */}
+        {activeTab === 'wallet' && <AdminWalletTab />}
       </main>
 
       {/* Mobile Navigation */}
@@ -1560,6 +1569,13 @@ export default function AdminPage() {
         message={confirmConfig.message}
         type={confirmConfig.type}
       />
+
+      {showNotifications && (
+        <NotificationsPanel
+          onClose={() => setShowNotifications(false)}
+          onRefresh={refreshCounts}
+        />
+      )}
     </div>
   );
 }

@@ -91,7 +91,7 @@ export default function HomePage() {
       <Header onShowNotifications={() => setShowNotifications(!showNotifications)} />
 
       <div className="md:py-6">
-        <div className="animate-fadeIn">
+        <div className="animate-fadeIn max-w-7xl mx-auto w-full">
           {activeTab === 'feed' ? (
             <>
               <Stories />

@@ -169,10 +169,10 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
     if (item.type === 'invite') {
       const isFriendRequest = item.origin_type === 'friend';
       return (
-        <div key={item.id} className="p-4 bg-purple-50/30 hover:bg-purple-50 transition-colors">
-          <div className="flex items-start gap-3">
+        <div key={item.id} className="px-4 py-3 hover:bg-gray-50 transition-colors flex items-center justify-between">
+          <div className="flex items-center gap-3 w-full">
             <div className="relative flex-shrink-0">
-              <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-200">
+              <div className="w-11 h-11 rounded-full overflow-hidden bg-gray-200">
                 {item.avatar_url ? (
                   <img src={item.avatar_url} className="w-full h-full object-cover" />
                 ) : (
@@ -191,44 +191,24 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
                 {isFriendRequest ? 'Enviou uma solicitação de amizade.' : 'Convidou você para participar do grupo.'}
               </p>
               {processedItems[item.target_id] ? (
-                <div className={`text-sm font-semibold px-3 py-1.5 rounded-lg inline-block ${processedItems[item.target_id] === 'rejected'
-                    ? 'bg-gray-100 text-gray-500'
-                    : 'bg-purple-100 text-purple-700'
-                  }`}>
-                  {processedItems[item.target_id] === 'followed_back' && 'Solicitação aceita e seguida de volta 🤝'}
-                  {processedItems[item.target_id] === 'accepted' && 'Solicitação aceita ✅'}
-                  {processedItems[item.target_id] === 'rejected' && 'Solicitação recusada'}
+                <div className="text-sm text-gray-500 font-medium">
+                  {processedItems[item.target_id] === 'followed_back' && 'Solicitação aceita'}
+                  {processedItems[item.target_id] === 'accepted' && 'Solicitação aceita'}
+                  {processedItems[item.target_id] === 'rejected' && 'Solicitação excluída'}
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mt-2">
                   <button
                     onClick={() => handleInviteResponse(item.origin_type, item.target_id, true)}
-                    className="px-4 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow-md hover:scale-105 transition-all"
+                    className="flex-1 min-w-[100px] px-4 py-1.5 bg-blue-500 text-white text-sm font-semibold rounded-lg hover:bg-blue-600 transition-all"
                   >
-                    Aceitar
+                    Confirmar
                   </button>
                   <button
                     onClick={() => handleInviteResponse(item.origin_type, item.target_id, false)}
-                    className="px-4 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50"
+                    className="flex-1 min-w-[100px] px-4 py-1.5 bg-gray-100 text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-200"
                   >
-                    Recusar
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const { data: { user } } = await supabase.auth.getUser();
-                        if (user) {
-                          // Pass custom updated logic
-                          await handleInviteResponse(item.origin_type, item.target_id, true, true);
-                          await import('@/services/supabase').then(mod => mod.followUser(user.id, item.target_id));
-                        }
-                      } catch (e) {
-                        console.error("Error following back", e);
-                      }
-                    }}
-                    className="px-4 py-1.5 bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold rounded-lg hover:bg-purple-200 transition-colors"
-                  >
-                    Aceitar e Seguir de Volta
+                    Excluir
                   </button>
                 </div>
               )}
@@ -251,7 +231,7 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
         onClick={() => {
           if (!notif.is_read) handleMarkAsRead(notif.id);
         }}
-        className={`relative group flex gap-3 p-3 items-center hover:bg-gray-50 transition-all cursor-pointer rounded-lg mx-2 my-1 ${!notif.is_read ? 'bg-blue-50/30' : ''}`}
+        className={`relative group flex gap-3 px-4 py-2.5 items-center hover:bg-gray-50 transition-all cursor-pointer`}
       >
         {/* Avatar / Icon */}
         <div className="flex-shrink-0 relative">
@@ -263,11 +243,11 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
               <i className={`${iconInfo} text-lg`}></i>
             </div>
           ) : (
-            <div className="w-11 h-11 rounded-full p-[2px] bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 relative">
+            <div className="w-11 h-11 relative">
               <img
                 src={notif.related_user?.avatar_url || `https://ui-avatars.com/api/?name=${notif.related_user?.username || 'User'}&background=random`}
                 alt={notif.related_user?.username}
-                className="w-full h-full object-cover rounded-full border-2 border-white"
+                className="w-full h-full object-cover rounded-full"
               />
               {/* Type Badge */}
               <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-sm border border-gray-100">
@@ -282,8 +262,8 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-gray-900 leading-snug">
+        <div className="flex-1 min-w-0 pr-4">
+          <p className="text-[14px] text-gray-900 leading-snug">
             {isSystem ? (
               <span className="font-semibold">{notif.title}</span>
             ) : (
@@ -291,7 +271,7 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
             )}
             <span className="text-gray-900 font-normal ml-1">
               {isSystem ? (
-                <span className="text-gray-600 block text-xs mt-0.5 font-normal">{notif.message}</span>
+                <span className="text-gray-600 block text-[13px] mt-0.5 font-normal">{notif.message}</span>
               ) : (
                 <>
                   {notif.type === 'like' && 'curtiu seu post.'}
@@ -301,8 +281,8 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
                 </>
               )}
             </span>
-            <span className="text-gray-400 text-xs ml-1.5 font-normal whitespace-nowrap">
-              {formatDistanceToNow(createdDate, { locale: ptBR, addSuffix: false }).replace('cerca de ', '')}
+            <span className="text-gray-500 text-[13px] ml-1.5 font-normal whitespace-nowrap">
+              {getShortTime(createdDate)}
             </span>
           </p>
         </div>
@@ -334,27 +314,46 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
 
         {/* Read Indicator */}
         {!notif.is_read && (
-          <div className="absolute right-3 top-3 w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
         )}
       </div>
     );
   };
 
-  // Group notifications by date
+  const getShortTime = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffWeeks = Math.floor(diffDays / 7);
+
+    if (diffMins < 60) return `${diffMins || 1}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays < 7) return `${diffDays}d`;
+    return `${diffWeeks}w`;
+  };
+
+  // Group notifications by date (and filter requests)
   const groupedNotifications = items.reduce((groups, item) => {
+    if (item.type === 'invite') {
+      if (!groups['Solicitações de seguir']) groups['Solicitações de seguir'] = [];
+      groups['Solicitações de seguir'].push(item);
+      return groups;
+    }
+
     const date = new Date(item.created_at);
     let key = 'Anteriores';
 
-    if (isToday(date)) key = 'Hoje';
-    else if (isYesterday(date)) key = 'Ontem';
-    else if (isThisWeek(date)) key = 'Esta semana';
+    if (isThisWeek(date)) key = 'Esta Semana';
+    else if (date.getMonth() === new Date().getMonth() && date.getFullYear() === new Date().getFullYear()) key = 'Este Mês';
 
     if (!groups[key]) groups[key] = [];
     groups[key].push(item);
     return groups;
   }, {} as Record<string, typeof items>);
 
-  const groupOrder = ['Hoje', 'Ontem', 'Esta semana', 'Anteriores'];
+  const groupOrder = ['Solicitações de seguir', 'Esta Semana', 'Este Mês', 'Anteriores'];
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16" onClick={onClose}>
@@ -369,7 +368,7 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
               <button onClick={onClose} className="md:hidden -ml-2 p-2">
                 <i className="ri-arrow-left-line text-2xl text-gray-900"></i>
               </button>
-              <h2 className="text-xl font-bold text-gray-900">Atividade</h2>
+              <h2 className="text-xl font-bold text-gray-900">Notificações</h2>
             </div>
             {items.length > 0 && (
               <button
@@ -498,15 +497,15 @@ export default function NotificationsPanel({ onClose, onRefresh }: Notifications
               <p className="text-gray-500 text-sm text-center mt-1">Quando alguém curtir ou comentar, você verá aqui.</p>
             </div>
           ) : (
-            <div className="pb-4">
+            <div className="pb-4 pt-1">
               {groupOrder.map(group => {
                 const groupItems = groupedNotifications[group];
                 if (!groupItems || groupItems.length === 0) return null;
 
                 return (
                   <div key={group}>
-                    <h3 className="px-4 py-3 text-sm font-bold text-gray-900 border-b border-gray-50 bg-white sticky top-0">{group}</h3>
-                    <div className="divide-y divide-gray-50">
+                    <h3 className="px-4 py-3 text-base font-bold text-gray-900 bg-white">{group}</h3>
+                    <div className="flex flex-col">
                       {groupItems.map(item => renderNotificationItem(item))}
                     </div>
                   </div>

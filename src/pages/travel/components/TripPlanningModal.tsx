@@ -1016,7 +1016,7 @@ export default function TripPlanningModal({
     if (newActivity.location) {
       try {
         // Try searching with destination context first
-        let query = `${newActivity.location}, ${trip.destination}`;
+        const query = `${newActivity.location}, ${trip.destination}`;
         let response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
         let data = await response.json();
 

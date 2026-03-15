@@ -77,7 +77,7 @@ export default function AdminUserModal({ isOpen, onClose, onSave, userToEdit, cu
         }
 
         setIsSaving(true);
-        let finalData = { ...formData };
+        const finalData = { ...formData };
         // Clean up entity_id if it's empty to prevent sending empty string instead of null
         if (!finalData.entity_id) {
             delete finalData.entity_id;

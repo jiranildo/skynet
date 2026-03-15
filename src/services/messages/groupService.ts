@@ -87,7 +87,7 @@ export const createCommunity = async (name: string, description: string, imageFi
     if (!user) throw new Error('Usuário não autenticado');
 
     let avatar_url = null;
-    let cover_image = null;
+    const cover_image = null;
 
     if (imageFile) {
         const fileExt = imageFile.name.split('.').pop();

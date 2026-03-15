@@ -369,6 +369,25 @@ export const unfollowUser = async (followerId: string, followingId: string) => {
     if (error) throw error;
 };
 
+export const checkIsFollowing = async (followerId: string, followingId: string) => {
+    const { data, error } = await supabase
+        .from('followers')
+        .select('id, status')
+        .eq('follower_id', followerId)
+        .eq('following_id', followingId)
+        .maybeSingle();
+
+    if (error) {
+        console.error('Error checking follow status:', error);
+        return false;
+    }
+    
+    // We can consider 'pending' or 'accepted' as "following" in terms of UI state if we want to show "Requested", 
+    // but typically we just return whether the record exists or specifically if it's accepted.
+    // Let's return the full data so the UI can decide.
+    return data;
+};
+
 export const getFollowers = async (userId: string) => {
     const { data, error } = await supabase
         .from('followers')

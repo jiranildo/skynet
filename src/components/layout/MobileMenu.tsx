@@ -35,6 +35,15 @@ export default function MobileMenu({
                 bg: 'bg-purple-50'
             });
         }
+        if (hasPermission('can_access_marketplace')) {
+            items.push({
+                id: 'marketplace',
+                icon: 'ri-store-2-fill',
+                action: () => { navigate('/marketplace'); onClose(); },
+                color: 'text-emerald-500',
+                bg: 'bg-emerald-50'
+            });
+        }
         if (hasPermission('can_manage_blog')) {
             items.push({
                 id: 'blog',

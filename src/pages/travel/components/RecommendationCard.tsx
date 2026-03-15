@@ -479,7 +479,7 @@ export function RecommendationCard({ data, onSelect, onView, onSave, onAddToItin
                     {/* Primary Time Info: Visit Duration OR Open Hours */}
                     {(() => {
                         // Priority: VisitDuration > OpenHours > Duration (only if flight)
-                        let rawText = data.visitDuration || data.openHours;
+                        const rawText = data.visitDuration || data.openHours;
 
                         if (!rawText) {
                             // Generic fallback or just null

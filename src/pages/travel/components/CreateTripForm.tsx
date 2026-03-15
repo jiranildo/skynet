@@ -4,6 +4,8 @@ import { useAuth } from '../../../context/AuthContext';
 import { createTrip, updateTrip, getAgencies, getAgents } from '../../../services/supabase';
 import type { Entity, User as DBUser } from '../../../services/db/types';
 import { useEffect } from 'react';
+import ItineraryCatalogModal from './ItineraryCatalogModal';
+import type { ItineraryCatalog } from '../../../services/db/itinerary_catalog';
 
 interface CreateTripFormProps {
     onCancel: () => void;
@@ -30,6 +32,9 @@ const budgetOptions = [
 
 export default function CreateTripForm({ onCancel, onSuccess, initialData }: CreateTripFormProps) {
     const { user } = useAuth();
+    
+    const [showCatalogSelection, setShowCatalogSelection] = useState(!initialData);
+    const [selectedCatalogItinerary, setSelectedCatalogItinerary] = useState<any>(null);
 
     // Helper to map numeric budget to string ID
     const getBudgetLevel = (val?: number) => {
@@ -61,6 +66,25 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
     const [agencies, setAgencies] = useState<Entity[]>([]);
     const [agents, setAgents] = useState<DBUser[]>([]);
     const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
+
+    const handleSelectCatalog = (catalog: ItineraryCatalog) => {
+        setSelectedCatalogItinerary(catalog.itinerary_data);
+        
+        const start = new Date();
+        const end = new Date(start);
+        end.setDate(end.getDate() + (catalog.duration_days || 1) - 1);
+        
+        setTripForm(prev => ({
+            ...prev,
+            name: catalog.title,
+            destination: catalog.destination,
+            description: catalog.description || prev.description,
+            coverImage: catalog.image_url || prev.coverImage,
+            startDate: start.toISOString().split('T')[0],
+            endDate: end.toISOString().split('T')[0]
+        }));
+        setShowCatalogSelection(false);
+    };
 
     const userRole = user?.user_metadata?.role || user?.app_metadata?.role;
     const isAgentUser = userRole === 'agente' || userRole === 'admin';
@@ -217,7 +241,7 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
                 await updateTrip(initialData.id, tripData);
             } else {
                 // Create new trip
-                await createTrip(tripData);
+                await createTrip({ ...tripData, itinerary: selectedCatalogItinerary });
                 alert('Viagem criada com sucesso! 🎉');
             }
             onSuccess();
@@ -226,6 +250,17 @@ export default function CreateTripForm({ onCancel, onSuccess, initialData }: Cre
             alert('Erro ao salvar viagem. Tente novamente.');
         }
     };
+
+    if (showCatalogSelection) {
+        return (
+            <ItineraryCatalogModal 
+                isOpen={true} 
+                onClose={onCancel} 
+                onSelectCatalog={handleSelectCatalog} 
+                onStartFromScratch={() => setShowCatalogSelection(false)} 
+            />
+        );
+    }
 
     return (
         <div className="animate-fadeIn">

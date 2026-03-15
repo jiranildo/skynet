@@ -9,9 +9,13 @@ import InfoWidgets from './components/InfoWidgets';
 
 export type AgentTab = 'overview' | 'messages' | 'creator' | 'trips';
 
+import Header from '../../components/layout/Header';
+import NotificationsPanel from '../home/components/NotificationsPanel';
+
 export default function AgentDashboard() {
     const { user, loading, hasPermission } = useAuth();
     const [isAgent, setIsAgent] = useState<boolean | null>(null);
+    const [showNotifications, setShowNotifications] = useState(false);
     const [searchParams, setSearchParams] = useSearchParams();
     const activeTab = (searchParams.get('tab') as AgentTab) || 'trips';
     const navigate = useNavigate();
@@ -47,47 +51,63 @@ export default function AgentDashboard() {
     if (!isAgent) return null;
 
     return (
-        <div className="p-6 md:p-8 max-w-7xl mx-auto pb-32">
-            <header className="mb-8">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900">Painel do Agente</h1>
-                        <p className="text-gray-500 font-medium">Bem-vindo de volta! Gerencie e monetize suas experiências.</p>
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+            <Header onShowNotifications={() => setShowNotifications(!showNotifications)} />
+            {showNotifications && (
+                <NotificationsPanel onClose={() => setShowNotifications(false)} />
+            )}
+            
+            <div className="p-6 md:p-8 max-w-7xl mx-auto w-full pb-32 flex-1">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 mt-4">
+                    <div className="border-l-4 border-blue-600 pl-4">
+                        <h2 className="text-3xl font-extrabold text-[#111827] tracking-tight">Painel do Agente</h2>
+                        <p className="text-gray-500 font-medium mt-1">Gerencie e monetize suas experiências.</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    
+                    <div className="flex items-center gap-3 self-start md:self-auto">
+                        <div className="flex items-center gap-1 bg-white p-1 rounded-xl shadow-sm border border-gray-100">
+                            <button
+                                onClick={() => setActiveTab('trips')}
+                                title="Experiências"
+                                className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all ${
+                                    activeTab === 'trips' ? 'bg-orange-50 text-orange-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                                }`}
+                            >
+                                <i className="ri-suitcase-2-line text-xl"></i>
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('overview')}
+                                title="Dashboard"
+                                className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all ${
+                                    activeTab === 'overview' ? 'bg-orange-50 text-orange-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                                }`}
+                            >
+                                <i className="ri-dashboard-line text-xl"></i>
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('messages')}
+                                title="Mensagens"
+                                className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all ${
+                                    activeTab === 'messages' ? 'bg-orange-50 text-orange-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                                }`}
+                            >
+                                <i className="ri-message-3-line text-xl"></i>
+                            </button>
+                        </div>
+
                         <button
                             onClick={() => setActiveTab('creator')}
-                            className="bg-gradient-to-r from-orange-500 to-pink-500 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-orange-100 hover:scale-105 transition-all"
+                            title="Criar Experiência"
+                            className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl shadow hover:shadow-lg transition-all"
                         >
                             <i className="ri-add-line text-xl"></i>
-                            Criar Experiência
                         </button>
                     </div>
                 </div>
 
-                {/* Tabs & Widgets */}
-                <div className="mt-8 flex flex-col gap-4">
-                    <div className="flex items-center gap-2 bg-white p-1 rounded-2xl shadow-sm border border-gray-100 w-fit overflow-x-auto max-w-full no-scrollbar">
-                        <button
-                            onClick={() => setActiveTab('trips')}
-                            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'trips' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
-                        >
-                            Experiências
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('overview')}
-                            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'overview' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
-                        >
-                            Dashboard
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('messages')}
-                            className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${activeTab === 'messages' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
-                        >
-                            Mensagens
-                        </button>
-                    </div>
-
+                <header className="mb-4">
+                {/* Widgets */}
+                <div className="flex flex-col gap-4">
                     <div className="w-full overflow-x-auto no-scrollbar pb-2">
                         <InfoWidgets />
                     </div>
@@ -107,6 +127,7 @@ export default function AgentDashboard() {
                 )}
                 {activeTab === 'trips' && <ManagedTrips />}
             </main>
+        </div>
         </div>
     );
 }

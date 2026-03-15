@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { getManagedTrips, deleteManagedTrip, calculateTripTotalSpent, calculateItineraryProgress } from '@/services/db/agent';
 import { Trip, User as DBUser } from '@/services/db/types';
@@ -9,6 +10,7 @@ import TripUsersModal from './TripUsersModal';
 
 export default function ManagedTrips() {
     const { user, hasPermission, isSuperAdmin: checkSuperAdmin, isAdmin: checkAdmin } = useAuth();
+    const navigate = useNavigate();
     const [trips, setTrips] = useState<Trip[]>([]);
     const [loading, setLoading] = useState(true);
     const [availableAgents, setAvailableAgents] = useState<DBUser[]>([]);
@@ -79,6 +81,25 @@ export default function ManagedTrips() {
             alert('Erro ao atribuir agentes.');
         } finally {
             setIsAssigning(false);
+        }
+    };
+
+    const handleDeleteTrip = async (tripId: string, tripTitle: string) => {
+        if (window.confirm(`Tem certeza que deseja excluir permanentemente a experiência "${tripTitle}"?`)) {
+            setLoading(true);
+            try {
+                const success = await deleteManagedTrip(tripId);
+                if (success) {
+                    setTrips(prev => prev.filter(t => t.id !== tripId));
+                } else {
+                    alert('Erro ao excluir experiência. Tente novamente mais tarde.');
+                }
+            } catch (error) {
+                console.error("Erro deletando trip", error);
+                alert('Ocorreu um erro ao excluir a experiência.');
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
@@ -224,6 +245,24 @@ export default function ManagedTrips() {
                                                 <button onClick={() => window.location.href = `/agent?tab=finance`} className="w-8 h-8 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors" title="Financeiro"><i className="ri-funds-box-line"></i></button>
                                                 {isAdmin && (<button onClick={() => openAssignModal(trip)} className="w-8 h-8 flex items-center justify-center bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors" title="Atribuir"><i className="ri-user-add-line"></i></button>)}
                                                 <button onClick={() => setSelectedTripForUsers(trip)} className="w-8 h-8 flex items-center justify-center bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors" title="Clientes"><i className="ri-group-line"></i></button>
+                                                {trip.user_id === user?.id && (
+                                                    <>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); navigate(`/trip/${trip.id}`); }} 
+                                                            className="w-8 h-8 flex items-center justify-center bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors" 
+                                                            title="Editar Experiência"
+                                                        >
+                                                            <i className="ri-pencil-line"></i>
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleDeleteTrip(trip.id, trip.title); }} 
+                                                            className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors" 
+                                                            title="Excluir Experiência"
+                                                        >
+                                                            <i className="ri-delete-bin-line"></i>
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -295,6 +334,24 @@ export default function ManagedTrips() {
                                                 <button onClick={() => window.location.href = `/agent?tab=finance`} className="p-2 hover:bg-emerald-50 rounded-xl transition-all"><i className="ri-funds-box-line text-gray-400 hover:text-emerald-600"></i></button>
                                                 {isAdmin && (<button onClick={() => openAssignModal(trip)} className="p-2 hover:bg-blue-50 rounded-xl transition-all"><i className="ri-user-add-line text-gray-400 hover:text-blue-600"></i></button>)}
                                                 <button onClick={() => setSelectedTripForUsers(trip)} className="p-2 hover:bg-purple-50 rounded-xl transition-all"><i className="ri-group-line text-gray-400 hover:text-purple-600"></i></button>
+                                                {trip.user_id === user?.id && (
+                                                    <>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); navigate(`/trip/${trip.id}`); }} 
+                                                            className="p-2 hover:bg-orange-50 rounded-xl transition-all" 
+                                                            title="Editar Experiência"
+                                                        >
+                                                            <i className="ri-pencil-line text-gray-400 hover:text-orange-600"></i>
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleDeleteTrip(trip.id, trip.title); }} 
+                                                            className="p-2 hover:bg-red-50 rounded-xl transition-all" 
+                                                            title="Excluir Experiência"
+                                                        >
+                                                            <i className="ri-delete-bin-line text-gray-400 hover:text-red-600"></i>
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import PageHeader from '../../components/layout/PageHeader';
 import { useAuth } from '../../context/AuthContext';
 import CreateMenu from '../../components/CreateMenu';
 import CreatePostModal from '../home/components/CreatePostModal';
@@ -353,25 +354,8 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50">
-      {/* Header */}
-      <header className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-40">
-        <div className="px-3 sm:px-4 md:px-6 py-3">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => window.REACT_APP_NAVIGATE('/')}
-              className="hover:scale-110 transition-transform"
-            >
-              <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 bg-clip-text text-transparent">
-                SARA Travel
-              </h1>
-              <p className="text-[10px] text-gray-600 -mt-1">where travels come true</p>
-            </button>
-            <HeaderActions
-              onShowNotifications={() => setShowNotifications(!showNotifications)}
-            />
-          </div>
-        </div>
-      </header>
+      {/* Header Padronizado Globalmente */}
+      <PageHeader title={isOwnProfile ? 'Meu Perfil' : `Perfil de @${currentProfile.username}`} hideBack={!window.history.length} />
 
       {/* Menu Lateral (Drawer) - Removed */}{/*
       {showMenu && isOwnProfile && (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
-import { supabase, deletePost, updatePost, likePost, unlikePost, savedPostService, getComments, createComment, updateComment, deleteComment } from '@/services/supabase';
+import { supabase, deletePost, updatePost, likePost, unlikePost, savedPostService, getComments, createComment, updateComment, deleteComment, checkIsFollowing, followUser, unfollowUser } from '@/services/supabase';
 import { useAuth } from '@/context/AuthContext';
 
 interface PostProps {
@@ -22,6 +22,7 @@ export default function Post({ post, onEdit }: PostProps) {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<any | null>(null);
+  const [followStatus, setFollowStatus] = useState<'none' | 'pending' | 'accepted' | 'loading'>('loading');
   const { user } = useAuth();
 
   const media = (post.media_urls && post.media_urls.length > 0)
@@ -72,12 +73,46 @@ export default function Post({ post, onEdit }: PostProps) {
 
   useEffect(() => {
     const checkOwner = async () => {
-      if (user && user.id === post.userId) {
-        setIsOwner(true);
+      if (user) {
+         if (user.id === post.userId) {
+           setIsOwner(true);
+         } else {
+           setFollowStatus('loading');
+           const data = await checkIsFollowing(user.id, post.userId);
+           if (data && data.status) {
+             setFollowStatus(data.status);
+           } else {
+             setFollowStatus('none');
+           }
+         }
       }
     };
     checkOwner();
   }, [user, post.userId]);
+
+  const handleToggleFollow = async () => {
+    if (!user) return;
+    
+    try {
+      setFollowStatus('loading');
+      if (followStatus === 'accepted' || followStatus === 'pending') {
+         await unfollowUser(user.id, post.userId);
+         setFollowStatus('none');
+      } else {
+         const data = await followUser(user.id, post.userId);
+         if (data && data.status) {
+            setFollowStatus(data.status);
+         } else {
+            setFollowStatus('pending'); // Fallback optimista, supondo que criará pendente
+         }
+      }
+    } catch (error) {
+       console.error("Error toggling follow:", error);
+       showAlert('Erro', 'Tivemos um problema ao seguir o usuário.', 'danger');
+       const data = await checkIsFollowing(user.id, post.userId);
+       setFollowStatus(data && data.status ? data.status : 'none');
+    }
+  };
 
   const commentInputRef = useRef<HTMLInputElement>(null);
 
@@ -313,9 +348,19 @@ export default function Post({ post, onEdit }: PostProps) {
                   </button>
                 </>
               ) : (
-                <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                  <i className="ri-flag-line"></i> Denunciar
-                </button>
+                <>
+                  <button 
+                    onClick={() => { handleToggleFollow(); setShowOptions(false); }}
+                    disabled={followStatus === 'loading'}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <i className={followStatus === 'loading' ? 'ri-loader-4-line animate-spin' : followStatus === 'accepted' ? 'ri-user-unfollow-line' : followStatus === 'pending' ? 'ri-time-line' : 'ri-user-add-line'}></i> 
+                    {followStatus === 'loading' ? 'Processando...' : followStatus === 'accepted' ? 'Deixar de seguir' : followStatus === 'pending' ? 'Solicitado' : 'Seguir'}
+                  </button>
+                  <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                    <i className="ri-flag-line"></i> Denunciar
+                  </button>
+                </>
               )}
             </div>
           )}

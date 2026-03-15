@@ -4,7 +4,7 @@ import ChatWindow from './components/ChatWindow';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useUnreadCounts } from '@/hooks/useUnreadCounts';
-import HeaderActions from '../../components/HeaderActions';
+import Header from '../../components/layout/Header';
 import NotificationsPanel from '../home/components/NotificationsPanel';
 import GamificationWidget from '../../components/GamificationWidget';
 import WalletWidget from '../../components/WalletWidget';
@@ -71,64 +71,48 @@ export default function MessagesPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (!user) return null;
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col pt-[57px] md:pt-0">
-      {/* Header - Mobile Only */}
-      <header className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-40">
-        <div className="px-3 sm:px-4 md:px-6 py-3">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => navigate('/')}
-              className="hover:scale-110 transition-transform"
-            >
-              <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 bg-clip-text text-transparent">
-                SARA Travel
-              </h1>
-              <p className="text-[10px] text-gray-600 -mt-1">where travels come true</p>
-            </button>
-            <HeaderActions
-              onShowNotifications={() => setShowNotifications(!showNotifications)}
+    return (
+    <div className="h-[100dvh] bg-gray-50 flex flex-col overflow-hidden">
+      <Header onShowNotifications={() => setShowNotifications(!showNotifications)} />
+
+      <div className="flex-1 max-w-7xl mx-auto w-full p-0 md:p-4 lg:p-6 md:pb-6 flex flex-col overflow-hidden mt-0">
+        <div className="bg-white md:rounded-3xl shadow-sm md:shadow-xl w-full flex-1 overflow-hidden flex flex-col md:flex-row border-gray-100 md:border">
+
+            {/* Sidebar: Visible on Desktop, or when no chat selected on mobile */}
+            <div className={`
+                w-full md:w-80 lg:w-96 bg-white md:bg-gray-50/50 border-r border-gray-100 flex flex-col h-full overflow-hidden
+                ${selectedChat ? 'hidden md:flex' : 'flex'}
+            `}>
+            <MessagesSidebar
+                currentUser={user}
+                selectedChatId={selectedChat}
+                onSelectChat={handleSelectChat}
             />
-          </div>
-        </div>
-      </header>
-
-      <div className="flex-1 flex overflow-hidden h-[calc(100vh-130px)] md:h-screen">
-
-        {/* Sidebar: Visible on Desktop, or when no chat selected on mobile */}
-        <div className={`
-            w-full md:w-80 lg:w-96 bg-white border-r border-gray-200 flex flex-col
-            ${selectedChat ? 'hidden md:flex' : 'flex'}
-        `}>
-          <MessagesSidebar
-            currentUser={user}
-            selectedChatId={selectedChat}
-            onSelectChat={handleSelectChat}
-          />
-        </div>
-
-        {/* Chat Window: Visible on Desktop, or when chat IS selected on mobile */}
-        <div className={`
-            flex-1 bg-white flex flex-col
-            ${!selectedChat ? 'hidden md:flex' : 'flex'}
-        `}>
-          {selectedChat ? (
-            <ChatWindow
-              chatId={selectedChat}
-              type={selectedChatType}
-              onBack={() => setSelectedChat(null)}
-            />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
-              <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <i className="ri-message-3-line text-4xl text-gray-300"></i>
-              </div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">Suas Mensagens</h3>
-              <p>Selecione uma conversa ou inicie uma nova para começar a falar.</p>
             </div>
-          )}
-        </div>
 
+            {/* Chat Window: Visible on Desktop, or when chat IS selected on mobile */}
+            <div className={`
+                flex-1 bg-white flex flex-col h-full overflow-hidden transition-opacity duration-300
+                ${!selectedChat ? 'hidden md:flex' : 'flex'}
+            `}>
+            {selectedChat ? (
+                <ChatWindow
+                chatId={selectedChat}
+                type={selectedChatType}
+                onBack={() => setSelectedChat(null)}
+                />
+            ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center h-full">
+                <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <i className="ri-message-3-line text-4xl text-gray-300"></i>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-700 mb-2">Suas Mensagens</h3>
+                <p>Selecione uma conversa ou inicie uma nova para começar a falar.</p>
+                </div>
+            )}
+            </div>
+
+        </div>
       </div>
 
       {!selectedChat && (

@@ -9,7 +9,7 @@ import GamificationWidget from '@/components/GamificationWidget';
 import DocumentsContent from '../profile/components/DocumentsContent';
 import TravelContent from '../profile/components/TravelContent';
 import HealthContent from '../profile/components/HealthContent';
-import HeaderActions from '@/components/HeaderActions';
+import Header from '@/components/layout/Header';
 import { useUnreadCounts } from '@/hooks/useUnreadCounts';
 import CreateMenu from '@/components/CreateMenu';
 import CheckInModal from '@/components/CheckInModal';
@@ -211,28 +211,10 @@ export default function SettingsPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
-            {/* Header - Mobile Only */}
-            <header className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-40">
-                <div className="px-3 sm:px-4 md:px-6 py-3">
-                    <div className="flex items-center justify-between">
-                        <button
-                            onClick={() => window.REACT_APP_NAVIGATE('/')}
-                            className="hover:scale-110 transition-transform"
-                        >
-                            <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 bg-clip-text text-transparent">
-                                SARA Travel
-                            </h1>
-                            <p className="text-[10px] text-gray-600 -mt-1">where travels come true</p>
-                        </button>
-                        <HeaderActions
-                            onShowNotifications={() => setShowNotifications(!showNotifications)}
-                        />
-                    </div>
-                </div>
-            </header>
+            <Header onShowNotifications={() => setShowNotifications(!showNotifications)} />
 
-            <div className="flex-1 max-w-7xl mx-auto w-full p-0 md:p-6 lg:p-8 pt-[57px] md:pt-6 lg:pt-8">
-                <div className="bg-white md:rounded-3xl shadow-sm md:shadow-xl w-full min-h-screen md:min-h-[85vh] overflow-hidden flex flex-col md:flex-row border-gray-100 md:border">
+            <div className="flex-1 max-w-7xl mx-auto w-full p-0 md:p-6 lg:p-8">
+                <div className="bg-white md:rounded-3xl shadow-sm md:shadow-xl w-full min-h-[calc(100vh-60px)] md:min-h-[85vh] overflow-hidden flex flex-col md:flex-row border-gray-100 md:border">
 
                     {/* Sidebar (Desktop) */}
                     <div className={`

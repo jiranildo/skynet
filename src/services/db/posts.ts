@@ -91,8 +91,8 @@ export const getFeedPosts = async (limit = 20, offset = 0, targetUserId?: string
 
     // If there's no logged-in user, we can't check isLiked/isSaved properly, defaults to false
     // Or we can do a secondary query if we have a user
-    let likedPostIds = new Set<string>();
-    let savedPostIds = new Set<string>();
+    const likedPostIds = new Set<string>();
+    const savedPostIds = new Set<string>();
 
     if (currentUser) {
         const { data: likes } = await supabase
@@ -219,6 +219,33 @@ export const createPost = async (post: Omit<Post, 'id' | 'created_at' | 'updated
         .single();
 
     if (error) throw error;
+
+    if (user) {
+        try {
+            const { data: followers } = await supabase
+                .from('followers')
+                .select('follower_id')
+                .eq('following_id', user.id)
+                .eq('status', 'accepted');
+            
+            if (followers && followers.length > 0) {
+                const { createNotification } = await import('./notifications');
+                for (const f of followers) {
+                    await createNotification({
+                        user_id: f.follower_id,
+                        type: 'system',
+                        title: 'Nova publicação',
+                        message: 'Adicionou uma nova publicação.',
+                        related_user_id: user.id,
+                        related_post_id: data.id
+                    }).catch(e => console.error(e));
+                }
+            }
+        } catch (e) {
+            console.error('Error notifying followers of new post:', e);
+        }
+    }
+
     return data as Post;
 };
 
@@ -254,6 +281,24 @@ export const likePost = async (postId: string, userId: string) => {
         .single();
 
     if (error) throw error;
+
+    try {
+        const { data: postData } = await supabase.from('posts').select('user_id').eq('id', postId).single();
+        if (postData && postData.user_id !== userId) {
+            const { createNotification } = await import('./notifications');
+            await createNotification({
+                user_id: postData.user_id,
+                type: 'like',
+                title: 'Nova curtida',
+                message: 'Curtiu sua publicação.',
+                related_user_id: userId,
+                related_post_id: postId
+            });
+        }
+    } catch (e) {
+        console.error("Error creating like notification:", e);
+    }
+
     return data as Like;
 };
 
@@ -303,7 +348,7 @@ export const createComment = async (comment: Omit<Comment, 'id' | 'created_at'>)
     try {
         const { data: postData } = await supabase
             .from('posts')
-            .select('comments_count')
+            .select('comments_count, user_id')
             .eq('id', comment.post_id)
             .single();
 
@@ -312,9 +357,21 @@ export const createComment = async (comment: Omit<Comment, 'id' | 'created_at'>)
                 .from('posts')
                 .update({ comments_count: (postData.comments_count || 0) + 1 })
                 .eq('id', comment.post_id);
+                
+            if (postData.user_id !== comment.user_id) {
+                const { createNotification } = await import('./notifications');
+                await createNotification({
+                    user_id: postData.user_id,
+                    type: 'comment',
+                    title: 'Novo comentário',
+                    message: 'Comentou na sua publicação.',
+                    related_user_id: comment.user_id,
+                    related_post_id: comment.post_id
+                });
+            }
         }
     } catch (err) {
-        console.error('Error incrementing comment count:', err);
+        console.error('Error incrementing comment count or notifying:', err);
     }
 
     return data as Comment;

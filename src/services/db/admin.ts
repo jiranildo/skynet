@@ -211,7 +211,7 @@ export const getAdminMarketplaceItems = async (): Promise<AdminMarketplaceItem[]
     const { data: experiences, error: expError } = await expQuery.order('created_at', { ascending: false });
 
     // 2. Fetch Trips (All shared or marketplace related trips)
-    let tripQuery = supabase
+    const tripQuery = supabase
         .from('trips')
         .select(`
             *,

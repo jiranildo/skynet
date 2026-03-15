@@ -97,6 +97,29 @@ export const cellarService = {
             console.error('Error creating wine:', JSON.stringify(error, null, 2));
             throw error;
         }
+
+        try {
+            const { data: followers } = await supabase.from('followers').select('follower_id').eq('following_id', user.id).eq('status', 'accepted');
+            if (followers && followers.length > 0) {
+                const followerIds = followers.map(f => f.follower_id);
+                const { data: userConfigs } = await supabase.from('users').select('id, notification_channels').in('id', followerIds);
+
+                const { createNotification } = await import('./notifications');
+                for (const f of followers) {
+                    const uf = userConfigs?.find(c => c.id === f.follower_id);
+                    if (uf?.notification_channels && uf.notification_channels.cellar_updates === false) continue;
+                    
+                    await createNotification({
+                        user_id: f.follower_id,
+                        type: 'system',
+                        title: 'Nova garrafa na Adega',
+                        message: `Adicionou ${data.quantity} un de ${data.name} na Adega.`,
+                        related_user_id: user.id
+                    }).catch(e => console.error(e));
+                }
+            }
+        } catch (e) { console.error('Notify Error:', e); }
+
         return data as CellarWine;
     },
 
@@ -140,12 +163,38 @@ export const cellarService = {
             return;
         }
 
+        const { data: currentWine } = await supabase.from('cellar_wines').select('name').eq('id', id).single();
+
         const { error } = await supabase
             .from('cellar_wines')
             .delete()
             .eq('id', id);
 
         if (error) throw error;
+
+        if (currentWine) {
+             try {
+                const { data: followers } = await supabase.from('followers').select('follower_id').eq('following_id', user.id).eq('status', 'accepted');
+                if (followers && followers.length > 0) {
+                    const followerIds = followers.map(f => f.follower_id);
+                    const { data: userConfigs } = await supabase.from('users').select('id, notification_channels').in('id', followerIds);
+    
+                    const { createNotification } = await import('./notifications');
+                    for (const f of followers) {
+                        const uf = userConfigs?.find(c => c.id === f.follower_id);
+                        if (uf?.notification_channels && uf.notification_channels.cellar_updates === false) continue;
+
+                        await createNotification({
+                            user_id: f.follower_id,
+                            type: 'system',
+                            title: 'Adega Atualizada',
+                            message: `Removeu o vinho ${currentWine.name} da sua Adega.`,
+                            related_user_id: user.id
+                        }).catch(e => console.error(e));
+                    }
+                }
+            } catch (e) { console.error('Notify Error:', e); }
+        }
     },
 
     async updateQuantity(id: string, quantity: number): Promise<CellarWine> {
@@ -166,6 +215,8 @@ export const cellarService = {
             return wines[index];
         }
 
+        const { data: currentWine } = await supabase.from('cellar_wines').select('name, quantity').eq('id', id).single();
+
         const { data, error } = await supabase
             .from('cellar_wines')
             .update({ quantity, updated_at: new Date().toISOString() })
@@ -174,6 +225,33 @@ export const cellarService = {
             .single();
 
         if (error) throw error;
+
+        if (currentWine && currentWine.quantity !== quantity) {
+            try {
+                const { data: followers } = await supabase.from('followers').select('follower_id').eq('following_id', user.id).eq('status', 'accepted');
+                if (followers && followers.length > 0) {
+                    const followerIds = followers.map(f => f.follower_id);
+                    const { data: userConfigs } = await supabase.from('users').select('id, notification_channels').in('id', followerIds);
+
+                    const { createNotification } = await import('./notifications');
+                    const diff = quantity - currentWine.quantity;
+                    const actionMsg = diff > 0 ? `Adicionou +${diff}` : `Consumiu ${Math.abs(diff)}`;
+                    for (const f of followers) {
+                        const uf = userConfigs?.find(c => c.id === f.follower_id);
+                        if (uf?.notification_channels && uf.notification_channels.cellar_updates === false) continue;
+
+                        await createNotification({
+                            user_id: f.follower_id,
+                            type: 'system',
+                            title: 'Atualização na Adega',
+                            message: `${actionMsg} un de ${data.name} na Adega.`,
+                            related_user_id: user.id
+                        }).catch(e => console.error(e));
+                    }
+                }
+            } catch (e) { console.error('Notify Error:', e); }
+        }
+
         return data as CellarWine;
     },
 

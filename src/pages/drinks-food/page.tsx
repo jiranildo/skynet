@@ -14,6 +14,8 @@ import { useAuth } from '../../context/AuthContext';
 
 type TabType = 'suggestions' | 'history' | 'goals' | 'stats';
 
+import Header from '../../components/layout/Header';
+
 export default function DrinksFoodPage() {
   const [activeTab, setActiveTab] = useState<TabType>('history');
   const [showMenu, setShowMenu] = useState(false);
@@ -68,36 +70,9 @@ export default function DrinksFoodPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-red-50">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-40">
-        <div className="px-3 sm:px-4 md:px-6 py-3">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => window.REACT_APP_NAVIGATE('/')}
-              className="hover:scale-110 transition-transform"
-            >
-              <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-amber-600 via-orange-500 to-red-500 bg-clip-text text-transparent">
-                Drinks & Food
-              </h1>
-            </button>
-            <div className="flex items-center gap-2">
-              <HeaderActions
-                onShowNotifications={() => setShowNotifications(true)}
-                showMenu={true}
-                onShowMenu={() => setShowMenu(true)}
-              />
-              <button
-                onClick={() => setShowAddExperience(true)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-lg hover:shadow-lg transition-all duration-300 text-sm font-medium whitespace-nowrap"
-              >
-                <i className="ri-add-line text-lg"></i>
-                Nova Experiência
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gray-50 pb-20 md:pb-6">
+      {/* Top Header Global */}
+      <Header onShowNotifications={() => setShowNotifications(true)} />
 
       {/* Menu Lateral (Drawer) */}
       {showMenu && (
@@ -164,36 +139,56 @@ export default function DrinksFoodPage() {
         </>
       )}
 
-      {/* Tabs */}
-      <div className="fixed top-[57px] md:top-[73px] left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-30">
-        <div className="flex overflow-x-auto scrollbar-hide">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 min-w-[80px] sm:min-w-[100px] flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-3 transition-all whitespace-nowrap relative ${activeTab === tab.id
-                ? 'text-amber-600 bg-amber-50/50'
-                : 'text-gray-600 hover:text-amber-600 hover:bg-amber-50/30'
-                }`}
-            >
-              <i className={`${tab.icon} text-lg sm:text-xl`}></i>
-              <span className="text-xs sm:text-sm font-medium">{tab.label}</span>
-              {activeTab === tab.id && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-600 via-orange-500 to-red-500"></div>
-              )}
-            </button>
-          ))}
+      {/* Main Container - Inline Style */}
+      <div className="space-y-6 p-4 md:p-8 max-w-7xl mx-auto">
+        
+        {/* MarketPlace-style header & controls */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 py-2 mb-2">
+           <div className="border-l-4 border-blue-600 pl-4">
+             <h2 className="text-3xl font-extrabold text-[#111827] tracking-tight">
+               Coleção Gastronômica
+             </h2>
+             <p className="text-gray-500 font-medium mt-1">
+               Sua jornada através de sabores, vinhos e restaurantes
+             </p>
+           </div>
+           
+           <div className="flex items-center gap-3 self-start md:self-auto">
+             <div className="flex items-center gap-1 bg-white p-1 rounded-xl shadow-sm border border-gray-200">
+               {tabs.map((tab) => (
+                 <button
+                   key={tab.id}
+                   onClick={() => setActiveTab(tab.id)}
+                   title={tab.label}
+                   className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all ${
+                     activeTab === tab.id 
+                       ? 'bg-orange-50 text-orange-600 shadow-sm' 
+                       : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                   }`}
+                 >
+                   <i className={`${tab.icon} text-xl`}></i>
+                 </button>
+               ))}
+             </div>
+             
+             <button
+               onClick={() => setShowAddExperience(true)}
+               title="Nova Experiência"
+               className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl shadow hover:shadow-lg transition-all"
+             >
+               <i className="ri-add-line text-xl"></i>
+             </button>
+           </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="pt-[114px] md:pt-[130px] pb-32 md:pb-6">
-        <div className="px-3 sm:px-4 md:px-6">
+        {/* Tab Content Rendering */}
+        <div className="pt-2">
           {activeTab === 'suggestions' && <SuggestionsTab />}
           {activeTab === 'history' && <HistoryTab lastUpdated={experienceTimestamp} />}
           {activeTab === 'goals' && <GoalsTab />}
           {activeTab === 'stats' && <StatsTab />}
         </div>
+
       </div>
 
       {/* Mobile Navigation */}
@@ -209,7 +204,7 @@ export default function DrinksFoodPage() {
 
           <button
             onClick={handleExploreClick}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-2 text-gray-600"
+            className={`flex flex-col items-center gap-0.5 sm:gap-1 p-2 ${activeTab === 'history' ? 'text-orange-600' : 'text-gray-600'}`}
           >
             <i className="ri-compass-line text-xl sm:text-2xl"></i>
             <span className="text-[9px] sm:text-[10px] font-medium">Explorar</span>
@@ -217,10 +212,10 @@ export default function DrinksFoodPage() {
 
           <button
             onClick={handleCreateClick}
-            className="flex flex-col items-center gap-0.5 sm:gap-1 p-1 sm:p-2 group"
+            className="flex flex-col items-center gap-0.5 sm:gap-1 p-1 sm:p-2 group -mt-4 relative"
           >
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-pink-200 group-hover:scale-110 transition-transform">
-              <i className="ri-add-line text-xl sm:text-2xl text-white"></i>
+            <div className="w-12 h-12 bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 rounded-full flex items-center justify-center shadow-[0_8px_16px_-4px_rgba(236,72,153,0.5)] border-4 border-white group-hover:scale-105 transition-transform">
+              <i className="ri-add-line text-2xl text-white"></i>
             </div>
             <span className="text-[9px] sm:text-[10px] font-medium text-gray-600">Criar</span>
           </button>

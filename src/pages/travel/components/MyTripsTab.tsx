@@ -2273,85 +2273,221 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
     </div>
   );
 
-  const renderRetrospectivesContent = () => (
-    <div className="space-y-4">
-      {/* Generate New Retrospective */}
-      <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-xl sm:rounded-2xl p-6 text-white">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center flex-shrink-0">
-            <i className="ri-robot-2-line text-2xl"></i>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold mb-2">Gerar Retrospectiva com IA</h3>
-            <p className="text-white/90 text-sm mb-4">
-              Nossa IA analisa suas viagens e cria uma retrospectiva personalizada com estatísticas, highlights e momentos especiais!
+  const renderRetrospectivesContent = () => {
+    if (!selectedTrip && !selectedRetrospective) {
+      // Step 1: Select a trip to generate a retrospective
+      const completedTrips = trips.filter(t => t.status === 'completed' || t.status === 'confirmed' || t.status === 'planning');
+      
+      return (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-2xl p-6 text-white text-center">
+            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
+              <i className="ri-robot-2-line text-3xl"></i>
+            </div>
+            <h3 className="text-2xl font-bold mb-2">Retrospectiva Inteligente</h3>
+            <p className="text-white/90 text-sm max-w-md mx-auto">
+              Selecione uma viagem e nossa IA analisará seu roteiro, fotos e anotações para criar um resumo inesquecível da sua experiência.
             </p>
-            <button
-              onClick={() => generateRetrospective(2024)}
-              disabled={isGenerating}
-              className="px-6 py-3 bg-white text-purple-600 rounded-xl font-semibold hover:shadow-lg transition-all whitespace-nowrap flex items-center gap-2"
-            >
-              {isGenerating ? (
-                <>
-                  <i className="ri-loader-4-line animate-spin"></i>
-                  Gerando...
-                </>
-              ) : (
-                <>
-                  <i className="ri-magic-line"></i>
-                  Gerar Retrospectiva 2024
-                </>
-              )}
-            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {completedTrips.length === 0 ? (
+              <div className="col-span-full py-12 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                <i className="ri-flight-takeoff-line text-4xl text-gray-400 mb-3"></i>
+                <h4 className="font-bold text-gray-700">Nenhuma viagem disponível</h4>
+                <p className="text-sm text-gray-500">Você precisará completar uma viagem antes de gerar uma retrospectiva.</p>
+              </div>
+            ) : (
+              completedTrips.map(trip => (
+                <div 
+                  key={trip.id}
+                  onClick={() => setSelectedTrip(trip)}
+                  className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all border border-gray-100 cursor-pointer group"
+                >
+                  <div className="h-40 relative">
+                    <img src={trip.cover_image || `https://readdy.ai/api/search-image?query=${trip.destination}&width=400&height=300`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                    <div className="absolute bottom-3 left-3 right-3 text-white">
+                      <h4 className="font-bold text-lg leading-tight truncate">{trip.title}</h4>
+                      <p className="text-xs opacity-90"><i className="ri-map-pin-line"></i> {trip.destination}</p>
+                    </div>
+                  </div>
+                  <div className="p-4 flex items-center justify-between">
+                    <span className="text-xs text-gray-500 font-medium bg-gray-50 px-2 py-1 rounded-md">
+                      {formatDate(trip.start_date)}
+                    </span>
+                    <button className="text-purple-600 font-bold text-sm hover:text-purple-700 pointer-events-none group-hover:translate-x-1 transition-transform">
+                      Gerar <i className="ri-arrow-right-line align-middle"></i>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          
+          {retrospectives.length > 0 && (
+            <div className="mt-12">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 border-l-4 border-purple-500 pl-3">Retrospectivas Salvas</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {retrospectives.map((retro) => (
+                  <div
+                    key={retro.id}
+                    onClick={() => setSelectedRetrospective(retro)}
+                    className="bg-white rounded-2xl overflow-hidden border border-gray-200 hover:shadow-md transition-all cursor-pointer group flex h-32"
+                  >
+                    <div className="w-32 h-full flex-shrink-0 relative overflow-hidden">
+                      <img src={retro.coverImage} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                    </div>
+                    <div className="p-4 flex flex-col justify-center flex-1">
+                      <h4 className="font-bold text-gray-900 truncate">{retro.title}</h4>
+                      <p className="text-xs text-gray-500 mb-2">{retro.year} • {retro.stats.countries} Países</p>
+                      <button className="text-left text-xs font-bold text-purple-600 hover:text-purple-700 mt-auto">
+                        Ver detalhes
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (selectedTrip && !selectedRetrospective && !isGenerating) {
+      // Step 2: Confirmation and AI Options before generating
+      return (
+        <div className="max-w-2xl mx-auto space-y-6">
+          <button onClick={() => setSelectedTrip(null)} className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors">
+            <i className="ri-arrow-left-line"></i> Voltar
+          </button>
+          
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 text-center">
+             <div className="w-24 h-24 mx-auto mb-4 rounded-xl overflow-hidden shadow-md">
+                <img src={selectedTrip.cover_image || `https://readdy.ai/api/search-image?query=${selectedTrip.destination}&width=200&height=200`} className="w-full h-full object-cover" />
+             </div>
+             <h3 className="text-2xl font-bold text-gray-900 mb-1">{selectedTrip.title}</h3>
+             <p className="text-gray-500 mb-6">{selectedTrip.destination} • {formatDate(selectedTrip.start_date)}</p>
+             
+             <div className="bg-purple-50 rounded-xl p-4 text-left space-y-3 mb-6">
+                <h4 className="font-bold text-purple-900 text-sm flex items-center gap-2">
+                  <i className="ri-brain-line"></i> A IA analisará:
+                </h4>
+                <ul className="text-xs text-purple-800 space-y-2 ml-1">
+                  <li className="flex items-center gap-2"><i className="ri-check-line text-purple-500"></i> Seu roteiro (locais e restaurantes)</li>
+                  <li className="flex items-center gap-2"><i className="ri-check-line text-purple-500"></i> Suas fotos salvas no diário</li>
+                  <li className="flex items-center gap-2"><i className="ri-check-line text-purple-500"></i> Avaliações e anotações ({journalEntries.length} itens)</li>
+                </ul>
+             </div>
+
+             <button
+               onClick={() => generateRetrospective(new Date(selectedTrip.end_date).getFullYear())}
+               className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-2 mx-auto"
+             >
+               <i className="ri-magic-line text-xl"></i>
+               Iniciar Geração da Retrospectiva
+             </button>
           </div>
         </div>
-      </div>
+      );
+    }
+    
+    if (isGenerating) {
+       return (
+         <div className="py-20 text-center flex flex-col items-center justify-center">
+             <div className="w-20 h-20 relative mb-6">
+                <div className="absolute inset-0 bg-purple-500 rounded-full animate-ping opacity-20"></div>
+                <div className="absolute inset-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-xl">
+                   <i className="ri-robot-2-line text-3xl text-white animate-pulse"></i>
+                </div>
+             </div>
+             <h3 className="text-2xl font-bold text-gray-900 mb-2">A IA está trabalhando...</h3>
+             <p className="text-gray-500 max-w-sm mx-auto animate-pulse">
+                Analisando fotos, lendo seu roteiro e compilando os melhores momentos. Isso pode levar alguns segundos.
+             </p>
+         </div>
+       )
+    }
 
-      {/* Retrospectives List */}
-      <div className="space-y-4">
-        {retrospectives.map((retro) => (
-          <div
-            key={retro.id}
-            onClick={() => setSelectedRetrospective(retro)}
-            className="bg-white rounded-xl sm:rounded-2xl overflow-hidden border border-gray-200 hover:shadow-xl transition-all cursor-pointer group"
-          >
-            <div className="relative w-full h-64 sm:h-80">
-              <img
-                src={retro.coverImage}
-                alt={retro.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedTrip(null);
-                  setShowTripDetail(false);
-                }}
-                className="absolute top-4 right-4 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors"
-              >
-                <i className="ri-close-line text-2xl"></i>
-              </button>
-
-              <div className="absolute bottom-6 left-6 right-6 text-white">
-                <h1 className="text-3xl sm:text-4xl font-bold mb-4">
-                  {retro.title}
-                </h1>
+    if (selectedRetrospective) {
+      // Step 3: View the generated retrospective
+      return (
+        <div className="space-y-6">
+           <button onClick={() => { setSelectedRetrospective(null); setSelectedTrip(null); }} className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors">
+            <i className="ri-arrow-left-line"></i> Voltar
+          </button>
+          
+          <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+            <div className="relative h-64 sm:h-80">
+              <img src={selectedRetrospective.coverImage} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+              <div className="absolute bottom-6 left-6 right-6">
+                <div className="inline-block px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-xs font-bold mb-3 border border-white/30">
+                  <i className="ri-calendar-event-fill mr-1"></i> Resumo {selectedRetrospective.year}
+                </div>
+                <h2 className="text-3xl sm:text-4xl font-bold text-white mb-2">{selectedRetrospective.title}</h2>
               </div>
             </div>
 
             <div className="p-6">
-              <button className="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                <i className="ri-share-line text-xl"></i>
-                Compartilhar Retrospectiva
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                <div className="bg-gray-50 p-4 rounded-xl text-center">
+                  <i className="ri-map-pin-user-fill text-2xl text-purple-500 mb-1"></i>
+                  <div className="text-2xl font-black text-gray-900">{selectedRetrospective.stats.cities}</div>
+                  <div className="text-[10px] font-bold text-gray-500 uppercase">Cidades</div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-xl text-center">
+                  <i className="ri-camera-lens-fill text-2xl text-pink-500 mb-1"></i>
+                  <div className="text-2xl font-black text-gray-900">124</div>
+                  <div className="text-[10px] font-bold text-gray-500 uppercase">Fotos Analisadas</div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-xl text-center">
+                  <i className="ri-goblet-fill text-2xl text-red-500 mb-1"></i>
+                  <div className="text-2xl font-black text-gray-900">8</div>
+                  <div className="text-[10px] font-bold text-gray-500 uppercase">Vinhos/Drinks</div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-xl text-center">
+                  <i className="ri-restaurant-fill text-2xl text-orange-500 mb-1"></i>
+                  <div className="text-2xl font-black text-gray-900">12</div>
+                  <div className="text-[10px] font-bold text-gray-500 uppercase">Restaurantes</div>
+                </div>
+              </div>
+
+              <h3 className="text-xl font-bold text-gray-900 mb-4 border-l-4 border-purple-500 pl-3">Destaques da Viagem</h3>
+              <div className="space-y-4 mb-8">
+                {selectedRetrospective.highlights.slice(0, 3).map((highlight, idx) => (
+                  <div key={idx} className="flex gap-4 p-4 bg-purple-50/50 rounded-xl border border-purple-100">
+                    <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold flex-shrink-0">
+                      {idx + 1}
+                    </div>
+                    <p className="text-gray-700 font-medium self-center">{highlight}</p>
+                  </div>
+                ))}
+              </div>
+
+              <h3 className="text-xl font-bold text-gray-900 mb-4 border-l-4 border-pink-500 pl-3">Top Momentos (Vídeo Gerado)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                {selectedRetrospective.topMoments.map((moment, idx) => (
+                   <div key={idx} className="rounded-xl overflow-hidden border border-gray-100 group cursor-pointer relative">
+                      <img src={moment.image} className="w-full h-40 object-cover group-hover:scale-105 transition-transform" />
+                      <div className="absolute inset-0 bg-black/40 flex flex-col justify-end p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <h5 className="text-white font-bold text-sm leading-tight">{moment.title}</h5>
+                         <p className="text-white/80 text-[10px] mt-1 line-clamp-2">{moment.description}</p>
+                      </div>
+                   </div>
+                ))}
+              </div>
+
+              <button className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-2">
+                 <i className="ri-share-forward-line text-xl"></i>
+                 Compartilhar Vídeo Resumo
               </button>
             </div>
           </div>
-        ))}
-      </div>
-    </div>
-  );
+        </div>
+      );
+    }
+  };
 
   const handleDeleteJournalEntry = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este registro?')) return;
@@ -2846,61 +2982,61 @@ export default function MyTripsTab({ onCreateTrip, initialSubTab }: { onCreateTr
           <p className="text-gray-500 font-medium mt-1">Gerencie e compartilhe seus roteiros</p>
         </div>
 
-        <div className="flex items-center gap-2 bg-blue-50/10 p-1 rounded-[24px] border border-blue-50/30">
-          {/* Action Card: Nova Viagem */}
+        <div className="flex items-center gap-3 self-start md:self-auto">
+          <div className="flex items-center gap-1 bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100">
+            <button
+              onClick={() => setActiveSubTab('trips')}
+              title="Minhas Viagens"
+              className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
+                activeSubTab === 'trips' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              }`}
+            >
+               <i className={`text-2xl ${activeSubTab === 'trips' ? 'ri-suitcase-3-fill' : 'ri-suitcase-3-line'}`}></i>
+            </button>
+            <button
+              onClick={() => setActiveSubTab('services')}
+              title="Meus Serviços"
+              className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
+                activeSubTab === 'services' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              }`}
+            >
+               <i className={`text-2xl ${activeSubTab === 'services' ? 'ri-service-fill' : 'ri-service-line'}`}></i>
+            </button>
+            <button
+              onClick={() => setActiveSubTab('journal')}
+              title="Meu Diário"
+              className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
+                activeSubTab === 'journal' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              }`}
+            >
+               <i className={`text-2xl ${activeSubTab === 'journal' ? 'ri-book-2-fill' : 'ri-book-2-line'}`}></i>
+            </button>
+            <button
+              onClick={() => setActiveSubTab('maps')}
+              title="Mapa"
+              className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
+                activeSubTab === 'maps' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              }`}
+            >
+               <i className={`text-2xl ${activeSubTab === 'maps' ? 'ri-map-2-fill' : 'ri-map-2-line'}`}></i>
+            </button>
+            <button
+              onClick={() => { setActiveSubTab('retrospectives'); setSelectedRetrospective(null); setSelectedTrip(null); }}
+              title="Retrospectiva"
+              className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
+                activeSubTab === 'retrospectives' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              }`}
+            >
+               <i className={`text-2xl ${activeSubTab === 'retrospectives' ? 'ri-magic-fill' : 'ri-magic-line'}`}></i>
+            </button>
+          </div>
           <button
             onClick={() => setActiveSubTab(activeSubTab === 'newtrip' ? 'trips' : 'newtrip')}
-            className="flex flex-col items-center justify-center bg-white p-1 rounded-xl w-16 h-16 shadow-sm border border-gray-100 hover:shadow-md transition-all group"
+            title="Nova Viagem"
+            className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow hover:shadow-lg transition-all"
           >
-            <div className="w-7 h-7 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center mb-0.5 shadow-inner group-hover:scale-105 transition-transform">
-              <i className="ri-plane-fill text-white text-sm"></i>
-            </div>
-            <span className="text-[8px] leading-tight font-extrabold text-gray-800 text-center">Nova viagem</span>
+            <i className="ri-add-line text-xl"></i>
           </button>
-
-          {/* Action Card: Meus Serviços */}
-          <button
-            onClick={() => setActiveSubTab('services')}
-            className={`flex flex-col items-center justify-center p-1 rounded-xl w-16 h-16 border transition-all group ${activeSubTab === 'services'
-              ? 'bg-blue-50 border-blue-200 shadow-inner'
-              : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
-              }`}
-          >
-            <div className="mb-0.5 group-hover:scale-105 transition-transform">
-              <i className={`ri-service-line text-lg ${activeSubTab === 'services' ? 'text-blue-600' : 'text-[#1e293b]'}`}></i>
-            </div>
-            <span className="text-[8px] leading-tight font-extrabold text-gray-700 text-center">Meus serviços</span>
-          </button>
-
-          {/* Action Card: Meu Diário */}
-          <button
-            onClick={() => setActiveSubTab('journal')}
-            className={`flex flex-col items-center justify-center p-1 rounded-xl w-16 h-16 border transition-all group ${activeSubTab === 'journal'
-              ? 'bg-blue-50 border-blue-200 shadow-inner'
-              : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
-              }`}
-          >
-            <div className="mb-0.5 group-hover:scale-105 transition-transform">
-              <i className={`ri-book-2-fill text-lg ${activeSubTab === 'journal' ? 'text-blue-600' : 'text-[#1e293b]'}`}></i>
-            </div>
-            <span className="text-[8px] leading-tight font-extrabold text-gray-700 text-center">Meu diário</span>
-          </button>
-
-          {/* Action Card: Mapa */}
-          <button
-            onClick={() => setActiveSubTab('maps')}
-            className={`flex flex-col items-center justify-center p-1 rounded-xl w-16 h-16 border transition-all group ${activeSubTab === 'maps'
-              ? 'bg-blue-50 border-blue-200 shadow-inner'
-              : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
-              }`}
-          >
-            <div className="mb-0.5 group-hover:scale-105 transition-transform">
-              <i className={`ri-map-2-line text-lg ${activeSubTab === 'maps' ? 'text-blue-600' : 'text-[#1e293b]'}`}></i>
-            </div>
-            <span className="text-[8px] leading-tight font-extrabold text-gray-700 text-center">Mapa</span>
-          </button>
-
-
         </div>
       </div>
 

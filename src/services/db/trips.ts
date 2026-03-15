@@ -73,7 +73,7 @@ export const getMarketplaceTrips = async () => {
     // 1. Get Followed Users AND Member Trips (if logged in)
     let followedUserIds: string[] = [];
     let memberTripIds: string[] = [];
-    let listedTripIds: string[] = [];
+    const listedTripIds: string[] = [];
 
     if (currentUserId) {
         const { data: following } = await supabase
@@ -207,6 +207,34 @@ export const createMarketplaceListing = async (listing: {
         .single();
 
     if (error) throw error;
+
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const { data: followers } = await supabase
+                .from('followers')
+                .select('follower_id')
+                .eq('following_id', user.id)
+                .eq('status', 'accepted');
+            
+            if (followers && followers.length > 0) {
+                const { createNotification } = await import('./notifications');
+                for (const f of followers) {
+                    await createNotification({
+                        user_id: f.follower_id,
+                        type: 'marketing',
+                        title: 'Nova Oferta',
+                        message: `Disponibilizou ${listing.title} no marketplace.`,
+                        related_user_id: user.id,
+                        related_trip_id: listing.trip_id
+                    }).catch(e => console.error(e));
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error notifying marketplace creation:', e);
+    }
+
     return data;
 };
 
@@ -270,6 +298,25 @@ export const createTrip = async (trip: Omit<Trip, 'id' | 'created_at' | 'updated
 
     if (error) throw error;
 
+    if (sharedWith && sharedWith.length > 0) {
+        try {
+            const { createNotification } = await import('./notifications');
+            for (const sharedUser of sharedWith) {
+                if (sharedUser.id === user.id) continue;
+                await createNotification({
+                    user_id: sharedUser.id,
+                    type: 'trip',
+                    title: 'Novo Roteiro',
+                    message: `Adicionou você no roteiro ${data.destination}.`,
+                    related_user_id: user.id,
+                    related_trip_id: data.id
+                }).catch(e => console.error(e));
+            }
+        } catch (e) {
+            console.error("Error creating trip share notifications", e);
+        }
+    }
+
     return {
         ...data,
         sharedWith: data.metadata?.sharedWith,
@@ -292,7 +339,7 @@ export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
         ...rest
     } = updates;
 
-    let payload: any = { ...rest, updated_at: new Date().toISOString() };
+    const payload: any = { ...rest, updated_at: new Date().toISOString() };
 
     if (responsible_agent_id !== undefined) payload.responsible_agent_id = responsible_agent_id;
     if (responsible_agency_id !== undefined) payload.responsible_agency_id = responsible_agency_id;
@@ -329,6 +376,29 @@ export const updateTrip = async (tripId: string, updates: Partial<Trip>) => {
         .single();
 
     if (error) throw error;
+
+    try {
+        const currentSharedWith = payload.metadata?.sharedWith || existingMeta?.sharedWith;
+        if (currentSharedWith && currentSharedWith.length > 0) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { createNotification } = await import('./notifications');
+                for (const sharedUser of currentSharedWith) {
+                    if (sharedUser.id === user.id) continue;
+                    await createNotification({
+                        user_id: sharedUser.id,
+                        type: 'trip_updates',
+                        title: 'Roteiro Atualizado',
+                        message: `O roteiro ${data.destination} teve atualizações.`,
+                        related_user_id: user.id,
+                        related_trip_id: data.id
+                    }).catch(e => console.error(e));
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Error notifying trip update:", e);
+    }
 
     return {
         ...data,

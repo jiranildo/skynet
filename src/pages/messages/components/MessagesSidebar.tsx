@@ -268,7 +268,7 @@ export default function MessagesSidebar({ currentUser, selectedChatId, onSelectC
             unread: c.unread_count || 0
         })) : [];
 
-        let items = [...dms, ...grps, ...comms];
+        const items = [...dms, ...grps, ...comms];
 
         // Sort by time
         return items.sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime());
